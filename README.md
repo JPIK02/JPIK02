@@ -1,5 +1,5 @@
 - 👋 Hi, I’m @JPIK02
-- 👀 I’m interested in test §
+- 👀 I’m interested in technology and sports
 - 🌱 I’m currently learning ...
 - 💞️ I’m looking to collaborate on ...ye
 - 📫 How to reach me ...
