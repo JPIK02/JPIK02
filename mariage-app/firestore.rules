@@ -1,0 +1,19 @@
+rules_version = '2';
+// Seuls Claire et Julien peuvent lire et écrire. Les agents (GitHub Actions) passent par
+// le SDK Admin avec un compte de service : ils ne sont pas soumis à ces règles.
+// ⚠️ Garder cette liste identique à VITE_ALLOWED_EMAILS dans .env
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isCouple() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'julienpicquet@gmail.com',
+          'duquesne.claire@yahoo.fr'
+        ];
+    }
+    match /{document=**} {
+      allow read, write: if isCouple();
+    }
+  }
+}

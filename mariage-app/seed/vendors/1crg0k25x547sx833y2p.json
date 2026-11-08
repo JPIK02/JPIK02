@@ -1,0 +1,89 @@
+{
+  "acompte": null,
+  "acomptePaye": false,
+  "cat": "Lieu",
+  "contact": "",
+  "createdAt": 1794160857593,
+  "dateAcompte": "",
+  "dateSolde": "",
+  "fit": {
+    "avis": {
+      "nombre": 3,
+      "note": 5,
+      "resume": "Seuls 3 avis trouvés (1001salles, 5/5, tous du 22 mai 2025), émanant d'un photographe, d'un partenaire et d'un avis très court ; ils saluent la lumière, la taille et le professionnalisme de l'équipe. Aucun avis client indépendant ni négatif trouvé ; Facebook non consultable.",
+      "sources": [
+        {
+          "titre": "1001 Salles – Orangerie de la Baie",
+          "url": "https://www.1001salles.com/mariage/43799-orangerie-de-la-baie.aspx"
+        },
+        {
+          "titre": "Evenementiel pour tous – Orangerie de la Baie",
+          "url": "https://www.evenementielpourtous.com/orangerie-de-la-baie-140729"
+        },
+        {
+          "titre": "Arnaud Laurent – mariage à l'Orangerie de la Baie",
+          "url": "https://www.arnaudlaurent.fr/blog-mariage/photographe-mariage-lille-touquet-orangerie-baie/"
+        },
+        {
+          "titre": "Les Crâneuses – mariage coloré à l'Orangerie de la Baie",
+          "url": "https://www.les-craneuses.fr/mariage-colore-a-lorangerie-de-la-baie-le-touquet/"
+        }
+      ]
+    },
+    "confiance": "faible",
+    "criteres": [
+      {
+        "label": "Adéquation au brief et à la vision",
+        "note": 50,
+        "pourquoi": "Brief lieu et vision vides : note neutre. Cadre bord de mer moderne (salle de 400 m² vitrée, terrasse), différent des domaines avec parc et chambres étudiés en parallèle."
+      },
+      {
+        "label": "Réputation et avis",
+        "note": 50,
+        "pourquoi": "Seulement 3 avis 5/5 sur 1001salles, tous du même jour et venant de prestataires ou partenaires ; aucun avis client indépendant trouvé (pas de fiche Mariages.net ni d'avis Google lus)."
+      },
+      {
+        "label": "Prix face au budget",
+        "note": 60,
+        "pourquoi": "Location affichée à partir de 3 000 à 3 600 € selon evenementielpourtous (valeurs incohérentes), devis sur demande ailleurs. Aucun budget renseigné pour comparer ; moins cher que Couturelle (4 850 €) et Petit Manoir (6 500 €), mais périmètre différent."
+      },
+      {
+        "label": "Logistique et contraintes",
+        "note": 65,
+        "pourquoi": "80 à 250 assis, 350 debout, parking privatif gratuit, accès PMR, office traiteur équipé. Pas d'hébergement sur place (Grand Hôtel à 850 m, Hippotel à moins de 1 km). Politique traiteur et horaires de fin de soirée inconnus."
+      }
+    ],
+    "forces": [
+      "Salle de 400 m² avec baies vitrées sur la baie de Canche, terrasse pour le cocktail",
+      "Capacité large : 80 à 250 personnes assises, jusqu'à 350 debout",
+      "Parking privatif gratuit, accès PMR, mobilier inclus",
+      "Office traiteur complet (chambres froides, cuisson, plonge)",
+      "Hôtels à moins d'1 km (Grand Hôtel, Hippotel)"
+    ],
+    "questions": [
+      "Le traiteur est-il libre ? Droit de bouchon ou droit d'entrée ?",
+      "Tarif 2028 exact et ce qu'il inclut (durée, mobilier, nettoyage, montage la veille, retour du dimanche) ?",
+      "Heure de fin de soirée et contraintes de bruit / limiteur de son ?",
+      "Une cérémonie laïque est-elle possible sur place, et quel repli en cas de pluie ou de vent ?",
+      "Tarifs négociés pour les invités au Grand Hôtel ou à l'Hippotel ?",
+      "Pouvez-vous nous mettre en contact avec des couples mariés récemment chez vous ?"
+    ],
+    "score": 54,
+    "updatedAt": 1794160929387,
+    "verdict": "Lieu lumineux face à la baie de Canche, grande capacité, mais impossible à juger sans brief, avec peu d'avis indépendants et sans hébergement sur place.",
+    "vigilance": [
+      "Identification à confirmer : la fiche « L'orangerie le Touquet » a été rapprochée de l'Orangerie de la Baie (boulevard de la Canche, Parc équestre) ; une fiche la situe près de Boulogne-sur-Mer",
+      "Pas d'hébergement sur place : invités à loger à l'hôtel, coût et logistique en plus",
+      "Avis très peu nombreux et non indépendants : réputation non établie",
+      "Traiteur libre ou imposé : non trouvé, à clarifier avant tout",
+      "Prix incohérents en ligne (3 000 € vs 3 600 €), périmètre de la location inconnu",
+      "Cérémonie en extérieur exposée au vent et à la météo du littoral : prévoir un repli"
+    ]
+  },
+  "name": "L’orangerie le Touquet",
+  "note": "",
+  "prix": null,
+  "soldePaye": false,
+  "status": "repere",
+  "tel": ""
+}

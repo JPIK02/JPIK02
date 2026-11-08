@@ -1,0 +1,51 @@
+name: Mise en ligne de l'app
+
+# Chaque modification de mariage-app/ poussée sur main remet l'app en ligne
+# (Firebase Hosting + règles Firestore). Lançable aussi à la main depuis l'onglet Actions.
+on:
+  push:
+    branches: [main, claude/cool-cori-ipe48i]
+    paths:
+      - "mariage-app/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mariage-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+      - run: npm run build
+      - name: Clé du compte de service
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "::error::Secret FIREBASE_SERVICE_ACCOUNT manquant (Settings > Secrets and variables > Actions)"; exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+      - name: Déploiement Firebase
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx --yes firebase-tools@15.34.1 deploy --only hosting,firestore:rules --project mariageapp-a2ffe --non-interactive
+      - name: Import des données de l'ancienne app (seulement si la base est vide)
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          (cd agents && npm ci --no-audit --no-fund)
+          node scripts/import-seed.js --if-empty
+      - name: Adresse de l'app
+        run: echo "App en ligne sur https://mariageapp-a2ffe.web.app" >> "$GITHUB_STEP_SUMMARY"

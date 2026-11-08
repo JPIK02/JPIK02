@@ -1,0 +1,22 @@
+{
+  "completude": 0,
+  "divergences": [],
+  "priorites": [
+    {
+      "cat": "lieu",
+      "phrase": "Seule catégorie active : 4 lieux en cours d'étude, visites à programmer. Importance non renseignée."
+    }
+  ],
+  "questionsOuvertes": [
+    "Date (ou saison) et ville cible du mariage ?",
+    "Nombre d'invités visé (assis au dîner) ?",
+    "Budget total et budget dédié au lieu ?",
+    "Ambiance recherchée : champêtre / domaine, bord de mer, château, chic ?",
+    "Hébergement des invités sur place indispensable ou hôtels à proximité acceptables ?",
+    "Traiteur libre exigé, ou un traiteur imposé est-il acceptable ?",
+    "Cérémonie laïque sur place souhaitée ? Avec repli en cas de pluie ?",
+    "Format week-end (retour du dimanche) ou soirée unique ?"
+  ],
+  "resume": "Le questionnaire n'est pas encore rempli et les réglages (date, lieu, ville, budget, nombre d'invités) sont vides : impossible de décrire l'ambiance ou le format voulus. Les seuls indices viennent des échanges en cours : un mariage en 2028 dans les Hauts-de-France, avec une recherche de lieu de type domaine ou orangerie avec parc (Au Petit Manoir à Socx, Château de Couturelle, Clos Barthélemy à Éterpigny, une orangerie au Touquet). Le lieu est donc la priorité du moment, et le choix conditionnera traiteur (imposé ou libre) et hébergement. Remplir le brief permettra des notes de fit fiables.",
+  "updatedAt": 1794160929387
+}
