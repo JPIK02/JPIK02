@@ -1,0 +1,19 @@
+{
+  "name": "mariage-agents",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "run": "node run.js",
+    "mail": "node run.js mail",
+    "analyse": "node run.js analyse",
+    "test": "node --test test/*.test.js",
+    "gmail-token": "node ../scripts/get-gmail-token.js",
+    "seed": "node ../scripts/import-seed.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.6.0",
+    "firebase-admin": "^12.7.0",
+    "googleapis": "^144.0.0"
+  }
+}
