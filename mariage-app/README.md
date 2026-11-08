@@ -12,27 +12,29 @@ Le plus simple : ouvrir ce dossier dans **Claude Code** et lui demander « aide-
 1. https://console.firebase.google.com → **Ajouter un projet** (ex. `mariage-claire-julien`), sans Analytics.
 2. **Firestore Database** → Créer → mode production → région `europe-west9 (Paris)`.
 3. **Authentication** → Commencer → activer **Google** et **E-mail/Mot de passe** avec l'option **Lien envoyé par e-mail (connexion sans mot de passe)**.
-4. **Paramètres du projet** → Vos applications → **Web** (`</>`) → copier `apiKey`, `authDomain`, `projectId`, `appId` dans un fichier `.env` (modèle : `.env.example`).
-5. Vérifier la liste des deux adresses autorisées dans `firestore.rules` et `VITE_ALLOWED_EMAILS` (Claire se connecte avec l'adresse qu'elle utilisera, Google ou lien par e-mail).
-6. En local :
-   ```bash
-   cd mariage-app
-   npm install
-   npm install -g firebase-tools
-   firebase login
-   cp .firebaserc.example .firebaserc   # mettre l'ID du projet
-   npm run deploy
-   ```
-   L'app est en ligne sur `https://<projet>.web.app`. Sur iPhone : Safari → Partager → **Sur l'écran d'accueil**.
+4. ✅ La configuration web du projet `mariageapp-a2ffe` est déjà dans `.env.production` (valeurs publiques, pas des secrets).
+5. Les deux adresses autorisées sont dans `firestore.rules` et `VITE_ALLOWED_EMAILS` (garder les deux identiques).
+6. **Mise en ligne automatique, sans rien installer** :
+   1. Console Firebase → ⚙️ Paramètres → **Comptes de service** → **Générer une nouvelle clé privée** → un fichier `.json` se télécharge.
+   2. Ouvrir ce fichier (sur iPhone : app Fichiers → Téléchargements), **tout sélectionner, copier**.
+   3. GitHub → dépôt `JPIK02/JPIK02` → **Settings** → **Secrets and variables** → **Actions** → **New repository secret** : nom `FIREBASE_SERVICE_ACCOUNT`, valeur = le contenu copié.
+   4. Onglet **Actions** → « Mise en ligne de l'app » → relancer (**Re-run jobs**) ou **Run workflow**.
+   5. L'app est en ligne sur **https://mariageapp-a2ffe.web.app**. Sur iPhone : Safari → Partager → **Sur l'écran d'accueil**.
+
+   Ensuite, chaque modification poussée remet l'app en ligne toute seule. En cas d'erreur « permission denied » : https://console.cloud.google.com/iam-admin/iam?project=mariageapp-a2ffe → crayon sur le compte `firebase-adminsdk-…` → ajouter le rôle **Administrateur Firebase**.
+
+   (Alternative depuis un ordinateur : `cd mariage-app && npm install && npx firebase-tools login && npm run deploy`.)
 
 ### 2. Reprendre les données de l'ancienne app
 Le dossier `seed/` contient l'export de l'app claude.ai (52 tâches, 17 postes de budget, déroulé du jour J, prestataire analysé, 4 propositions).
-1. Console Firebase → Paramètres → **Comptes de service** → Générer une clé privée → `service-account.json` (jamais dans git).
-2. ```bash
-   cd mariage-app/agents && npm install && cd ..
-   FIREBASE_SERVICE_ACCOUNT="$(cat service-account.json)" node scripts/import-seed.js --dry   # essai
-   FIREBASE_SERVICE_ACCOUNT="$(cat service-account.json)" node scripts/import-seed.js
-   ```
+✅ **Automatique** : la première mise en ligne (étape 1.6) importe ces données si la base est vide. Les mises en ligne suivantes n'y touchent plus.
+
+À la main depuis un ordinateur, si besoin :
+```bash
+cd mariage-app/agents && npm install && cd ..
+FIREBASE_SERVICE_ACCOUNT="$(cat service-account.json)" node scripts/import-seed.js --dry   # essai
+FIREBASE_SERVICE_ACCOUNT="$(cat service-account.json)" node scripts/import-seed.js
+```
 
 ### 3. Accès Gmail en lecture seule
 1. https://console.cloud.google.com → choisir le **même projet** que Firebase → **API et services** → activer **Gmail API**.
