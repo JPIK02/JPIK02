@@ -7,4 +7,3 @@ dist/
 service-account*.json
 agents/.env
 .firebase/
-seed/

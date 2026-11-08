@@ -1,0 +1,15 @@
+{
+  "createdAt": 1794160000003,
+  "from": "Assistant (d'après les 3 réponses de lieux)",
+  "messageId": "1a1bc340472cb464",
+  "payload": {
+    "owner": "deux",
+    "phase": "m12",
+    "title": "Programmer les visites des 3 lieux (Petit Manoir, Couturelle, Clos Barthélemy)"
+  },
+  "receivedAt": "2026-11-08",
+  "status": "new",
+  "subject": "Visites de lieux à programmer",
+  "summary": "Les trois lieux proposent une visite : Au Petit Manoir (visites le dimanche), Clos Barthélemy et Château de Couturelle.",
+  "type": "task"
+}

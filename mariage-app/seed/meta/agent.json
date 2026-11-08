@@ -1,0 +1,15 @@
+{
+  "consignes": "",
+  "frequence": "chaque jour",
+  "lastRun": "2026-11-08",
+  "mailbox": "mariageclaireetjulien2028@gmail.com",
+  "status": "actif",
+  "types": {
+    "payment": true,
+    "quote": true,
+    "rdv": true,
+    "rsvp": true,
+    "task": true,
+    "vendor": true
+  }
+}

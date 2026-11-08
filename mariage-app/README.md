@@ -26,7 +26,7 @@ Le plus simple : ouvrir ce dossier dans **Claude Code** et lui demander « aide-
    L'app est en ligne sur `https://<projet>.web.app`. Sur iPhone : Safari → Partager → **Sur l'écran d'accueil**.
 
 ### 2. Reprendre les données de l'ancienne app
-Le dossier `seed/` contient l'export de l'app claude.ai (52 tâches, 17 postes de budget, déroulé du jour J, prestataire analysé, 4 propositions). **Il n'est pas dans le dépôt** (données personnelles, dépôt public) : copie-le depuis l'archive `mariage-app.zip` dans `mariage-app/seed/` sur ton ordinateur. Il est ignoré par git.
+Le dossier `seed/` contient l'export de l'app claude.ai (52 tâches, 17 postes de budget, déroulé du jour J, prestataire analysé, 4 propositions).
 1. Console Firebase → Paramètres → **Comptes de service** → Générer une clé privée → `service-account.json` (jamais dans git).
 2. ```bash
    cd mariage-app/agents && npm install && cd ..
@@ -69,5 +69,5 @@ firestore.rules         qui peut lire/écrire (vous deux seulement)
 agents/                 agents IA (Node) + prompts + tests
 ../.github/workflows/   planification horaire des agents (à la racine du dépôt)
 scripts/                import des données, jeton Gmail
-seed/                   export de l'ancienne app (local uniquement, hors git)
+seed/                   export de l'ancienne app
 ```
