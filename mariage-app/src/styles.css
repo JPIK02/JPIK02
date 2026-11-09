@@ -788,3 +788,23 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .insp-grid figcaption span{color:var(--muted)}
 .insp-grid .link{align-self:flex-start;font-size:13px;color:var(--muted);background:none;border:0;cursor:pointer;padding:2px 0}
 .insp-grid .link.armed{color:var(--bad);font-weight:700}
+
+/* Zone de saisie du coach : texte sur toute la largeur, outils et envoi en dessous */
+.chat-in{display:block}
+.cmp{border:1px solid var(--line-strong);border-radius:22px;background:var(--bg);padding:6px 6px 4px}
+.cmp:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.chat-in .cmp textarea{display:block;width:100%;border:0;border-radius:0;background:transparent;padding:6px 10px;min-height:36px;max-height:180px;outline:none}
+.chat-in .cmp textarea:focus-visible{outline:none}
+.cmp-bar{display:flex;align-items:center;gap:6px}
+.cmp-bar .ch-ic,.chat-in .cmp-bar .ch-ic{width:38px;height:38px;border-color:transparent;background:transparent}
+.cmp-bar .ch-ic.rec{background:var(--bad);color:#fff}
+.cmp-send{margin-left:auto;flex:none;width:38px;height:38px;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);display:grid;place-items:center;cursor:pointer;padding:0}
+.cmp-send svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.cmp-send:disabled{opacity:.45;cursor:default}
+.cmp-send:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+/* vignettes des photos jointes, dans la zone de saisie */
+#chat-att .atts{flex-direction:row;flex-wrap:wrap;gap:8px;margin:2px 4px 4px}
+#chat-att .atts .att{position:relative;display:block;padding:0;margin:0;background:none;width:56px;height:56px}
+#chat-att .att img,#chat-att .att .att-pdf{width:56px;height:56px;border-radius:10px;object-fit:cover}
+#chat-att .att-x{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:2px solid var(--bg);background:var(--ink);color:var(--bg);font-size:15px;line-height:1;display:grid;place-items:center;cursor:pointer;padding:0}
+#chat-att .att-more{width:56px;height:56px;border-radius:10px;border:1.5px dashed var(--line-strong);background:none;color:var(--muted,var(--ink));font-size:24px;padding:0;align-self:auto}
