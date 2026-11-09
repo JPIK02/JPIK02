@@ -748,13 +748,14 @@ function inspGallery(c){
 const BRIEF_LABEL={lieu:"Lieu",traiteur:"Traiteur",photo:"Photographe",video:"Vidéaste",musique:"Musique",fleurs:"Fleurs et déco",tenues:"Tenues",alliances:"Alliances",beaute:"Coiffure et maquillage",papeterie:"Papeterie",transport:"Transport",ceremonie:"Cérémonie",hebergement:"Hébergement",enfants:"Enfants"};
 function briefsState(){
   const b=S.briefs||{},now=Date.now();
-  const running=(S.locks.briefs||0)>now||((b.requestedAt||0)>(b.updatedAt||0)&&now-(b.requestedAt||0)<20*60000);
+  const failed=b.status==="erreur"&&(b.failedAt||0)>=(b.requestedAt||0);
+  const running=!failed&&((S.locks.briefs||0)>now||((b.requestedAt||0)>Math.max(b.updatedAt||0,b.failedAt||0)&&now-(b.requestedAt||0)<20*60000));
   const ready=!!(b.filRouge&&b.categories&&Object.keys(b.categories).length);
   const lastAnswer=Math.max(0,...S.brief.map(x=>+x.updatedAt||0),...S.inspirations.map(x=>+x.createdAt||0));
-  return {b,running,ready,stale:ready&&lastAnswer>(b.updatedAt||0)};
+  return {b,running,ready,failed,stale:ready&&lastAnswer>(b.updatedAt||0)};
 }
 function briefsPanel(c){
-  const {b,running,ready,stale}=briefsState(),dis=S.canWrite&&!running?"":"disabled";
+  const {b,running,ready,stale,failed}=briefsState(),dis=S.canWrite&&!running?"":"disabled";
   const one=ready&&b.categories[c];
   const when=b.updatedAt?new Date(b.updatedAt).toLocaleDateString("fr-FR",{day:"numeric",month:"long"}):"";
   return `<div class="briefs-p"><div class="panel-h"><h3>Briefs pour les prestataires</h3>${ready?`<span class="chip ${stale?"warn":"ok"}">${stale?"À mettre à jour":"Prêts"}</span>`:""}</div>
@@ -762,6 +763,7 @@ function briefsPanel(c){
       :ready?`${esc(b.filRouge.titre||"")}${b.filRouge.titre?" · ":""}rédigés le ${esc(when)}.${stale?" Vos réponses ou vos inspirations ont changé depuis.":""} Le même fil rouge ouvre chaque brief : tous vos prestataires partent de la même vision.`
       :"Le coach compile vos réponses et vos inspirations en un fil rouge commun (ambiance, palette, matières, ce que vous ne voulez pas), puis en un brief par prestataire, avec les questions à leur poser. À envoyer en PDF avant chaque échange."}</p>
     <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
+      ${failed?`<p class="brief-err">La rédaction a échoué : ${esc(/credit balance/i.test(b.lastError||"")?"le crédit Claude est épuisé (à recharger sur console.anthropic.com).":b.lastError||"erreur inconnue.")} Vous pouvez réessayer.</p>`:""}
       ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
 }
 const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
@@ -1587,7 +1589,7 @@ document.addEventListener("click",async e=>{
     if(!c){openChat("brief");return}
     S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
-  if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
+  if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;t.disabled=true;t.textContent="Rédaction en cours…";if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
   if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
     document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Budget total"><h3>Budget total</h3>
       <form class="form" id="budget-total-form"><div class="field"><label for="search-b-total">Budget total du mariage (€)</label><input type="number" inputmode="numeric" min="0" step="100" id="search-b-total" name="budgetTotal" value="${tot||""}"></div>

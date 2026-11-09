@@ -44,7 +44,8 @@ export async function runForOutput({ system, user, output, feature = "synthese",
   }];
 
   for (let turn = 0; turn < 8; turn++) {
-    const res = await api().beta.messages.create({
+    // En flux (stream) : le SDK refuse les longues réponses (briefs, 32 000 tokens) sans flux
+    const res = await api().beta.messages.stream({
       model,
       max_tokens: maxTokens,
       system,
@@ -56,7 +57,7 @@ export async function runForOutput({ system, user, output, feature = "synthese",
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       messages,
-    });
+    }).finalMessage();
     await recordUsage(getDb(), FieldValue.increment, feature, res);
     if (res.stop_reason === "refusal")
       throw new Error(`Claude a refusé la requête (${res.stop_details?.category || "sans catégorie"})`);

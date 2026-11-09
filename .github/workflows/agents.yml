@@ -6,7 +6,7 @@ on:
       agent:
         description: "Forcer un agent (vide = selon le planning)"
         type: choice
-        options: ["", "mail", "analyse", "hebdo"]
+        options: ["", "mail", "analyse", "hebdo", "briefs", "pinterest"]
         default: ""
 
 concurrency:

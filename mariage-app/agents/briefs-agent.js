@@ -85,7 +85,7 @@ export async function runBriefs({ log = console.log } = {}) {
   }
   await getDb().doc("meta/briefs").set({
     filRouge: { titre: String(fr.titre || "").trim(), ambiance: String(fr.ambiance || "").trim(), motsCles: clean(fr.motsCles), palette: clean(fr.palette), matieres: clean(fr.matieres), experience: clean(fr.experience), aEviter: clean(fr.aEviter) },
-    categories, updatedAt: Date.now(), status: "prêts",
+    categories, updatedAt: Date.now(), status: "prêts", lastError: null,
   }, { merge: true });
   log(`[briefs] ${Object.keys(categories).length} briefs rédigés.`);
   await notify({ title: "Vos briefs prestataires sont prêts", body: fr.titre || "Fil rouge et briefs par catégorie, à télécharger en PDF.", url: "/#envies", tag: "briefs" }, { log });

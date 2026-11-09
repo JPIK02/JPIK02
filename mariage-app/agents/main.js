@@ -64,7 +64,7 @@ export async function runAll({ forced } = {}) {
   // Briefs prestataires : sur demande depuis l'app (meta/briefs.requestedAt)
   if (!forced || forced === "briefs") {
     try { if (forced === "briefs" || briefsDue(await getMeta("briefs"))) { console.log("[briefs] → rédaction"); await withLock("briefs", 15 * 60 * 1000, () => runBriefs()); } }
-    catch (e) { failed = true; console.error("[briefs] échec :", e); await getDb().doc("meta/briefs").set({ status: "erreur", updatedAt: Date.now() }, { merge: true }).catch(() => {}); }
+    catch (e) { failed = true; console.error("[briefs] échec :", e); await getDb().doc("meta/briefs").set({ status: "erreur", lastError: String(e?.error?.error?.message || e.message || e).slice(0, 300), failedAt: Date.now() }, { merge: true }).catch(() => {}); }
   }
   return failed;
 }
