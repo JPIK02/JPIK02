@@ -1057,15 +1057,18 @@ function boot(){
     const email=String(user.email||"").toLowerCase();
     if(!ALLOWED.includes(email)){S.mode="locked";S.canWrite=false;render();return}
     S.canWrite=true;S.linkSent=null;S.db=db;S.mode="live";render();
+    // includeMetadataChanges : sans lui, Firestore ne prévient pas quand le serveur confirme que la copie
+    // locale est déjà à jour (rien n'a changé) ; on croyait alors la base injoignable (faux bandeau).
+    const LIVE={includeMetadataChanges:true};
     const need=["settings","agent",...COLS];
     const timer=setTimeout(()=>{if(need.some(k=>!S.got.has(k))){S.stale=true;render()}},10000);
     const mark=(k,snap)=>{if(!snap.metadata.fromCache){S.got.add(k);if(need.every(x=>S.got.has(x))){clearTimeout(timer);S.stale=false}}};
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<700){raf=setTimeout(run,250);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
-    const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
+    const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
     meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");
     COLS.forEach(c=>{
-      unsubs.push(db.collection(c).onSnapshot(s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));
+      unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));
     });
   });
 }
