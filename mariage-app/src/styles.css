@@ -751,3 +751,5 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .pick-row:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 .coach-home .ch-hi span b{display:inline;font-family:inherit;font-size:inherit;font-weight:700;line-height:inherit;color:var(--ink)}
 .coach-home .ch-hi span{display:block}
+.pdf-acts{display:flex;flex-direction:column;gap:10px}
+.pdf-acts .btn{width:100%;justify-content:center;text-align:center;text-decoration:none}

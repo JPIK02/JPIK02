@@ -9,7 +9,8 @@ service cloud.firestore {
         && request.auth.token.email_verified == true
         && request.auth.token.email.lower() in [
           'julienpicquet@gmail.com',
-          'duquesne.claire@yahoo.fr'
+          'duquesne.claire@yahoo.fr',
+          'claiire.duquesne59@gmail.com'
         ];
     }
     match /{document=**} {

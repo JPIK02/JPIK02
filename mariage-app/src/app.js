@@ -130,7 +130,7 @@ function alerts(){
 }
 const alertRow=a=>`<button class="alert ${a.lvl}" ${a.fiche?`data-fiche="${a.fiche}"`:a.edit?`data-edit="rdv" data-id="${a.edit}"`:`data-go="${a.go}"`}><span class="adot" aria-hidden="true"></span><span class="atx"><b>${esc(a.t)}</b><span>${esc(a.s)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
 /* ---------- Le coach à l'accueil : réponses rapides en un toucher ---------- */
-const PRENOMS={"julienpicquet@gmail.com":"Julien","duquesne.claire@yahoo.fr":"Claire"};
+const PRENOMS={"julienpicquet@gmail.com":"Julien","duquesne.claire@yahoo.fr":"Claire","claiire.duquesne59@gmail.com":"Claire"};
 const prenom=()=>PRENOMS[String(S.user&&S.user.email||"").toLowerCase()]||"";
 const SPARK='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg>';
 function qrFor(a){
@@ -904,22 +904,33 @@ function vReglages(){
 }
 
 /* ---------- Documents PDF (impression du navigateur : « Enregistrer en PDF » ou partager) ---------- */
-function printDoc(title,html){
-  let box=document.getElementById("print");
-  if(!box){box=document.createElement("div");box.id="print";document.body.appendChild(box)}
-  box.innerHTML=`<article class="pdoc">${html}<footer class="pfoot">Généré le ${esc(new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}))} depuis l'app du mariage de Claire &amp; Julien</footer></article>`;
-  const old=document.title;document.title=title;document.body.classList.add("printing");
-  const done=()=>{document.body.classList.remove("printing");document.title=old;window.removeEventListener("afterprint",done)};
-  window.addEventListener("afterprint",done);
-  setTimeout(()=>window.print(),50);
+// Fabrique un vrai PDF (module chargé à la demande) puis propose de le partager / l'enregistrer.
+async function makePdf(name,spec){
+  toast("Préparation du PDF…");
+  try{
+    const {buildPdf}=await import("./pdf.js");
+    const st=S.settings,d=wDate();
+    const blob=buildPdf(Object.assign({title:"Claire & Julien",subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
+      footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis l'app du mariage de Claire & Julien`},spec));
+    showPdf(new File([blob],name,{type:"application/pdf"}));
+  }catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
 }
-const pHead=sub=>{const d=wDate(),st=S.settings;return `<header class="phead"><div class="pkick">Le mariage de</div><h1>Claire &amp; Julien</h1>
-  <div class="psub">${[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).map(esc).join(" · ")}</div>${sub?`<div class="ptitle">${esc(sub)}</div>`:""}</header>`};
+function showPdf(file){
+  S.pdfFile=file;const url=URL.createObjectURL(file);
+  const canShare=!!(navigator.canShare&&navigator.canShare({files:[file]}));
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="PDF prêt"><h3>PDF prêt</h3>
+    <p class="plan-when" style="margin:-6px 0 16px">${esc(file.name)} · ${Math.max(1,Math.round(file.size/1024))} Ko</p>
+    <div class="pdf-acts">${canShare?`<button class="btn primary" data-act="pdfshare">Partager ou enregistrer</button>`:""}
+      <a class="btn ${canShare?"":"primary"}" href="${url}" download="${esc(file.name)}" target="_blank" rel="noopener">Ouvrir le PDF</a></div>
+    <p class="plan-when" style="margin:14px 0 0">${canShare?"« Partager » permet de l'envoyer (Messages, WhatsApp, mail) ou de l'enregistrer dans Fichiers.":"Le PDF s'ouvre dans un nouvel onglet : utilisez ensuite le bouton de partage pour l'enregistrer."}</p></div></div>`;
+}
+const dayKeyPdf=r=>dayKey(r.time);
 function pdfJourJ(){
   const rows=scheduleRows(),vs=S.vendors.filter(v=>v.status==="reserve");
-  printDoc("Jour J – Claire & Julien",pHead("Déroulé du jour J")+
-    `<table class="ptab"><thead><tr><th style="width:62px">Heure</th><th>Moment</th><th>Lieu</th><th>Qui</th></tr></thead><tbody>${rows.map(r=>`<tr><td class="num"><b>${esc(r.time||"—")}</b></td><td><b>${esc(r.title)}</b>${r.note?`<div class="pnote">${esc(r.note)}</div>`:""}</td><td>${esc(r.lieu||"")}</td><td>${esc(r.qui||"")}</td></tr>`).join("")}</tbody></table>`+
-    (vs.length?`<h2>Prestataires</h2><table class="ptab"><thead><tr><th>Prestataire</th><th>Catégorie</th><th>Contact</th></tr></thead><tbody>${vs.map(v=>`<tr><td><b>${esc(v.name)}</b></td><td>${esc(v.cat||"")}</td><td>${esc([v.contact,v.tel].filter(Boolean).join(" · "))}</td></tr>`).join("")}</tbody></table>`:""));
+  makePdf("Jour J - Claire et Julien.pdf",{docTitle:"Déroulé du jour J",blocks:[
+    {table:{head:["Heure","Moment","Lieu","Qui"],widths:[18,null,40,38],boldFirst:true,body:rows.map(r=>[r.time||"—",r.title+(r.note?"\n"+r.note:""),r.lieu||"",r.qui||""])}},
+    ...(vs.length?[{h2:"Prestataires"},{table:{head:["Prestataire","Catégorie","Contact"],boldFirst:true,body:vs.map(v=>[v.name,v.cat||"",[v.contact,v.tel].filter(Boolean).join(" · ")])}}]:[]),
+  ]});
 }
 function pdfReport(){
   const st=S.settings,d=wDate(),tot=num(st.budgetTotal),pr=S.profil||{};
@@ -929,21 +940,25 @@ function pdfReport(){
   const g=S.guests,yes=g.filter(x=>x.rsvp==="oui").length,no=g.filter(x=>x.rsvp==="non").length;
   const groups=[...new Set(g.map(x=>x.group||"Sans groupe"))].map(k=>[k,g.filter(x=>(x.group||"Sans groupe")===k).length]).sort((a,b)=>b[1]-a[1]);
   const cats=VCATS.filter(c=>S.vendors.some(v=>v.cat===c));
-  const al=alerts();
-  const rdv=S.rdv.filter(r=>r.date&&pd(r.date)>=today()).sort((a,b)=>a.date.localeCompare(b.date));
+  const al=alerts(),rdv=S.rdv.filter(r=>r.date&&pd(r.date)>=today()).sort((a,b)=>a.date.localeCompare(b.date));
   const n=d?days(today(),d):null;
-  const kpi=(l,v,s)=>`<div class="pk"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:""}</div>`;
-  printDoc("Rapport d'organisation – Claire & Julien",pHead("Rapport d'organisation · "+fmtD(today()))+
-    `<div class="pkpis">${kpi("Jour J",n!=null?`J-${n}`:"—",d?fmtD(d):"date à fixer")}${kpi("Préparation",`${done}/${S.tasks.length}`,late.length?`${late.length} en retard`:"rien en retard")}${kpi("Budget",tot?eur(tot):"—",`${eur(prevu)} prévus · ${eur(engage)} engagés`)}${kpi("Invités",`${g.length}`,`${yes} présents · ${g.length-yes-no} en attente`)}</div>`+
-    (pr.resume?`<h2>La synthèse du coach</h2><p>${esc(pr.resume)}</p>${Array.isArray(pr.priorites)&&pr.priorites.length?`<ul>${pr.priorites.slice(0,6).map(x=>`<li>${esc(x.phrase||"")}</li>`).join("")}</ul>`:""}${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3>Points à aligner entre vous</h3><ul>${pr.divergences.map(x=>`<li><b>${esc(x.sujet||"")}</b>${x.conseil?" : "+esc(x.conseil):""}</li>`).join("")}</ul>`:""}`:"")+
-    (al.length?`<h2>À regarder</h2><ul class="palerts">${al.map(a=>`<li class="${a.lvl}"><b>${esc(a.t)}</b> — ${esc(a.s)}</li>`).join("")}</ul>`:"")+
-    `<h2>Prochaines tâches</h2><table class="ptab"><thead><tr><th>Tâche</th><th style="width:96px">Échéance</th><th style="width:80px">Qui</th></tr></thead><tbody>${next.map(t=>{const du=taskDue(t);return `<tr class="${isLate(t)?"late":""}"><td>${esc(t.title)}${t.status==="doing"?" <i>(en cours)</i>":""}</td><td>${du?esc(fmtD(du)):"—"}</td><td>${esc(OWNERS[t.owner||"deux"])}</td></tr>`}).join("")}</tbody></table>`+
-    `<h2>Budget</h2><table class="ptab"><thead><tr><th>Poste</th><th class="r">Prévu</th><th class="r">Engagé</th><th class="r">Payé</th></tr></thead><tbody>${S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)).map(b=>`<tr><td>${esc(b.label)}</td><td class="r">${b.prevu?eur(b.prevu):"—"}</td><td class="r">${b.engage?eur(b.engage):"—"}</td><td class="r">${b.paye?eur(b.paye):"—"}</td></tr>`).join("")}</tbody>
-      <tfoot><tr><td>Total${tot?` (budget ${eur(tot)}, marge ${eur(tot-Math.max(prevu,engage))})`:""}</td><td class="r">${eur(prevu)}</td><td class="r">${eur(engage)}</td><td class="r">${eur(paye)}</td></tr></tfoot></table>`+
-    `<h2>Prestataires</h2>${cats.map(c=>`<h3>${esc(c)}</h3><table class="ptab"><tbody>${S.vendors.filter(v=>v.cat===c).sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1)).map(v=>{const f=v.fit||{};return `<tr class="${v.status==="ecarte"?"muted":""}"><td style="width:34%"><b>${esc(v.name)}</b><div class="pnote">${esc(VSTAT[v.status]||"")}${v.prix?" · "+eur(v.prix):""}</div></td><td style="width:58px" class="r">${f.score!=null?`<b>${Math.round(f.score)}</b>/100`:"—"}</td><td>${f.verdict?esc(f.verdict):'<span class="pnote">Pas encore analysé</span>'}${f.vigilance&&f.vigilance.length?`<div class="pnote">Vigilance : ${esc(f.vigilance.slice(0,2).join(" ; "))}</div>`:""}</td></tr>`}).join("")}</tbody></table>`).join("")}`+
-    (rdv.length?`<h2>Rendez-vous à venir</h2><ul>${rdv.map(r=>`<li><b>${esc(fmtD(pd(r.date)))}${r.time?" "+esc(r.time):""}</b> — ${esc(r.title)}${r.lieu?" ("+esc(r.lieu)+")":""}</li>`).join("")}</ul>`:"")+
-    `<h2>Invités</h2><p>${g.length} invités dont ${g.filter(x=>x.enfant).length} enfants · ${yes} présents, ${no} absents, ${g.length-yes-no} en attente · ${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length} au dîner.</p><p class="pnote">Par groupe : ${groups.map(([k,v])=>`${esc(k)} ${v}`).join(" · ")}${g.some(x=>x.regime)?`<br>Régimes : ${g.filter(x=>x.regime).map(x=>esc(x.name+" ("+x.regime+")")).join(", ")}`:""}</p>`+
-    `<h2>Nos envies</h2><p class="pnote">Rempli à ${Math.round(allProg()*100)} % · ${QCATS.map(c=>{const p=catProg(c.k);return `${esc(c.label)} ${p.n}/${p.t}`}).join(" · ")}</p>`);
+  const blocks=[
+    {kpis:[["Jour J",n!=null?`J-${n}`:"—",d?fmtD(d):"date à fixer"],["Préparation",`${done}/${S.tasks.length}`,late.length?`${late.length} en retard`:"rien en retard"],["Budget",tot?eur(tot):"—",`${eur(prevu)} prévus · ${eur(engage)} engagés`],["Invités",String(g.length),`${yes} présents · ${g.length-yes-no} en attente`]]},
+  ];
+  if(pr.resume){blocks.push({h2:"La synthèse du coach"},{p:pr.resume});if(Array.isArray(pr.priorites)&&pr.priorites.length)blocks.push({ul:pr.priorites.slice(0,6).map(x=>x.phrase||"")});
+    if(Array.isArray(pr.divergences)&&pr.divergences.length)blocks.push({h3:"Points à aligner entre vous"},{ul:pr.divergences.map(x=>(x.sujet||"")+(x.conseil?" : "+x.conseil:""))})}
+  if(al.length)blocks.push({h2:"À regarder"},{alerts:al.map(a=>[a.lvl,a.t,a.s])});
+  blocks.push({h2:"Prochaines tâches"},{table:{head:["Tâche","Échéance","Qui"],widths:[null,28,24],body:next.map(t=>{const du=taskDue(t);return [t.title+(t.status==="doing"?" (en cours)":"")+(isLate(t)?" — en retard":""),du?fmtD(du):"—",OWNERS[t.owner||"deux"]]})}});
+  blocks.push({h2:"Budget"},{table:{head:["Poste","Prévu","Engagé","Payé"],widths:[null,26,26,26],right:[1,2,3],body:S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)).map(b=>[b.label,b.prevu?eur(b.prevu):"—",b.engage?eur(b.engage):"—",b.paye?eur(b.paye):"—"]),
+    foot:[`Total${tot?` (budget ${eur(tot)}, marge ${eur(tot-Math.max(prevu,engage))})`:""}`,eur(prevu),eur(engage),eur(paye)]}});
+  blocks.push({h2:"Prestataires"});
+  cats.forEach(c=>{blocks.push({h3:c},{table:{head:["Prestataire","Note","Avis du coach"],widths:[52,16,null],boldFirst:true,body:S.vendors.filter(v=>v.cat===c).sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1)).map(v=>{const f=v.fit||{};
+    return [v.name+"\n"+[VSTAT[v.status]||"",v.prix?eur(v.prix):""].filter(Boolean).join(" · "),f.score!=null?`${Math.round(f.score)}/100`:"—",(f.verdict||"Pas encore analysé")+(f.vigilance&&f.vigilance.length?"\nVigilance : "+f.vigilance.slice(0,2).join(" ; "):"")]})}})});
+  if(rdv.length)blocks.push({h2:"Rendez-vous à venir"},{ul:rdv.map(r=>`${fmtD(pd(r.date))}${r.time?" "+r.time:""} — ${r.title}${r.lieu?" ("+r.lieu+")":""}`)});
+  blocks.push({h2:"Invités"},{p:`${g.length} invités dont ${g.filter(x=>x.enfant).length} enfants · ${yes} présents, ${no} absents, ${g.length-yes-no} en attente · ${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length} au dîner.`},
+    {note:"Par groupe : "+groups.map(([k,v])=>`${k} ${v}`).join(" · ")+(g.some(x=>x.regime)?"\nRégimes : "+g.filter(x=>x.regime).map(x=>x.name+" ("+x.regime+")").join(", "):"")});
+  blocks.push({h2:"Nos envies"},{note:`Rempli à ${Math.round(allProg()*100)} % · `+QCATS.map(c=>{const p=catProg(c.k);return `${c.label} ${p.n}/${p.t}`}).join(" · ")});
+  makePdf(`Rapport - Claire et Julien - ${isoD(today())}.pdf`,{docTitle:"Rapport d'organisation · "+fmtD(today()),blocks});
 }
 
 /* ---------- Assistant IA intégré ---------- */
@@ -1340,6 +1355,7 @@ document.addEventListener("click",async e=>{
   if(a==="chatattx"){S.chat.att=null;renderAtt();return}
   if(a==="chatmic"){toggleMic(t);return}
   if(a==="mailcopy"){const m=mailOf((S.chat.messages[+t.dataset.i]||{}).text);if(!m)return;const txt=`Objet : ${m.subject}\n\n${m.body}`;try{await navigator.clipboard.writeText(txt);toast("Mail copié")}catch(e){toast("Copie impossible : sélectionnez le texte")}return}
+  if(a==="pdfshare"){try{await navigator.share({files:[S.pdfFile],title:S.pdfFile.name})}catch(e){if(e&&e.name!=="AbortError")toast("Partage impossible : utilisez « Ouvrir le PDF »")}return}
   if(a==="pdfjourj"){pdfJourJ();return}
   if(a==="pdfreport"){pdfReport();return}
   if(a==="chat"){openChat(t.dataset.m||null);return}

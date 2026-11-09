@@ -40,7 +40,7 @@ jobs:
         run: |
           {
             echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
-            echo "ALLOWED_EMAILS=julienpicquet@gmail.com,duquesne.claire@yahoo.fr"
+            echo "ALLOWED_EMAILS=julienpicquet@gmail.com,duquesne.claire@yahoo.fr,claiire.duquesne59@gmail.com"
             if [ -n "$ANTHROPIC_MODEL" ]; then echo "ANTHROPIC_MODEL=$ANTHROPIC_MODEL"; fi
           } > .env
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"

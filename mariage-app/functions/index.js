@@ -16,7 +16,7 @@ setGlobalOptions({ region: "europe-west1", maxInstances: 3 });
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const ALLOWED = String(process.env.ALLOWED_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-const PRENOMS = { "julienpicquet@gmail.com": "Julien", "duquesne.claire@yahoo.fr": "Claire" };
+const PRENOMS = { "julienpicquet@gmail.com": "Julien", "duquesne.claire@yahoo.fr": "Claire", "claiire.duquesne59@gmail.com": "Claire" };
 const DAILY_LIMIT = 150;   // messages par jour, à vous deux (garde-fou de coût)
 const HISTORY = 16;        // derniers messages repris comme contexte
 let client;
