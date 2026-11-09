@@ -8,6 +8,9 @@ on:
       hours:
         description: "Remonter sur combien d'heures"
         default: "24"
+      all:
+        description: "Tous les messages (pas seulement les erreurs) : oui/non"
+        default: "non"
   push:
     branches: [claude/cool-cori-ipe48i]
     paths: [".github/workflows/logs.yml"]
@@ -24,10 +27,11 @@ jobs:
       - name: Erreurs des fonctions
         env:
           HOURS: ${{ inputs.hours || '24' }}
+          ALL: ${{ inputs.all || 'non' }}
         run: |
           SINCE=$(date -u -d "-${HOURS} hours" +%Y-%m-%dT%H:%M:%SZ)
           gcloud logging read \
-            "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=(\"assistant\" OR \"runagent\" OR \"agents\") AND severity>=WARNING AND timestamp>=\"$SINCE\"" \
-            --limit 40 --order desc \
+            "resource.type=\"cloud_run_revision\" AND resource.labels.service_name=(\"assistant\" OR \"runagent\" OR \"agents\") $([ "$ALL" = "oui" ] || echo 'AND severity>=WARNING') AND timestamp>=\"$SINCE\"" \
+            --limit 120 --order desc \
             --format 'value(timestamp, resource.labels.service_name, severity, textPayload, jsonPayload.message, httpRequest.status)' \
             | cut -c1-1500
