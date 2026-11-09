@@ -1,6 +1,7 @@
 // Assistant IA intégré à l'app : fonction appelable par Claire et Julien uniquement.
 // La clé Claude reste côté serveur (variable d'environnement écrite au déploiement depuis les secrets GitHub).
 import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
@@ -16,7 +17,7 @@ setGlobalOptions({ region: "europe-west1", maxInstances: 3 });
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
 const ALLOWED = String(process.env.ALLOWED_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-const PRENOMS = { "julienpicquet@gmail.com": "Julien", "duquesne.claire@yahoo.fr": "Claire" };
+const PRENOMS = { "julienpicquet@gmail.com": "Julien", "duquesne.claire@yahoo.fr": "Claire", "claiire.duquesne59@gmail.com": "Claire" };
 const DAILY_LIMIT = 150;   // messages par jour, à vous deux (garde-fou de coût)
 const HISTORY = 16;        // derniers messages repris comme contexte
 let client;
@@ -57,3 +58,14 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   await chatRef.set({ messages: history, mode, updatedAt: Date.now() });
   return { text, actions };
 });
+
+// Agents (mails, analyse, synthèse, point du lundi, relances) : réveil par Google Cloud Scheduler toutes les 10 minutes.
+// Chaque agent décide lui-même s'il a du travail (planning, demande depuis l'app) : la plupart des passages ne font rien.
+// Le code des agents est copié de ../agents au déploiement (voir functions.yml).
+export const agents = onSchedule(
+  { schedule: "every 10 minutes", timeZone: "Europe/Paris", timeoutSeconds: 1800, memory: "1GiB", maxInstances: 1, retryCount: 0 },
+  async () => {
+    const { runAll } = await import("./agents/main.js");
+    const failed = await runAll({});
+    if (failed) console.error("[agents] au moins un agent a échoué (voir les lignes ci-dessus)");
+  });

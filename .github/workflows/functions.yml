@@ -9,6 +9,7 @@ on:
     paths:
       - "mariage-app/functions/**"
       - "mariage-app/src/questions.js"
+      - "mariage-app/agents/**"
       - ".github/workflows/functions.yml"
   workflow_dispatch:
 
@@ -29,19 +30,30 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --no-audit --no-fund
-      - name: Questionnaire partagé avec l'app
-        run: cp ../src/questions.js questions.js
+      - name: Questionnaire et agents partagés
+        run: |
+          cp ../src/questions.js questions.js
+          mkdir -p agents && cp ../agents/*.js agents/ && cp -r ../agents/lib ../agents/prompts agents/
       - run: npm test
       - name: Configuration de la fonction
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          GMAIL_CLIENT_ID: ${{ secrets.GMAIL_CLIENT_ID }}
+          GMAIL_CLIENT_SECRET: ${{ secrets.GMAIL_CLIENT_SECRET }}
+          GMAIL_REFRESH_TOKEN: ${{ secrets.GMAIL_REFRESH_TOKEN }}
+          COUPLE_EMAILS: ${{ vars.COUPLE_EMAILS }}
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: |
           {
             echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
-            echo "ALLOWED_EMAILS=julienpicquet@gmail.com,duquesne.claire@yahoo.fr"
+            echo "ALLOWED_EMAILS=julienpicquet@gmail.com,duquesne.claire@yahoo.fr,claiire.duquesne59@gmail.com"
             if [ -n "$ANTHROPIC_MODEL" ]; then echo "ANTHROPIC_MODEL=$ANTHROPIC_MODEL"; fi
+            echo "GMAIL_CLIENT_ID=$GMAIL_CLIENT_ID"
+            echo "GMAIL_CLIENT_SECRET=$GMAIL_CLIENT_SECRET"
+            echo "GMAIL_REFRESH_TOKEN=$GMAIL_REFRESH_TOKEN"
+            echo "GMAIL_ADDRESS=mariageclaireetjulien2028@gmail.com"
+            echo "COUPLE_EMAILS=$(printf '%s' "$COUPLE_EMAILS" | tr -d '\r\n')"
           } > .env
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
       - name: Déploiement
