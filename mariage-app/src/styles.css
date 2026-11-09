@@ -4,8 +4,8 @@ body{margin:0;padding:0}
 img{max-width:100%}
 [hidden]:not([hidden=until-found i]){display:none!important}
 
-/* Direction : clair et chaleureux. La lisibilité d'abord : texte 16 px en Source Sans 3, casse normale partout, contrastes francs,
-   statuts en couleur pleine. L'élégance tient à quelques signatures : bandeau prune, noms et titres en Newsreader, touches dorées. */
+/* Direction : clair, moderne et chaleureux. La lisibilité d'abord : texte 16 px en Inter, casse normale partout, contrastes francs,
+   statuts en couleur pleine. Quelques signatures : bandeau prune, titres en Inter gras serré, touches dorées. */
 :root{
   --bg:#F5F3F6; --surface:#FFFFFF; --surface-2:#F0ECF2; --ink:#1F1A24; --muted:#5D5665; --line:#E4DFE8; --line-strong:#CFC7D6;
   --accent:#5A2A4F; --accent-soft:#F2E8F0; --on-accent:#FFFFFF; --gold:#8F6A2E; --gold-soft:#FBF3E4;
@@ -13,8 +13,8 @@ img{max-width:100%}
   --claire:#8A3474; --claire-soft:#F7E9F3; --julien:#1F6273; --julien-soft:#E3F1F4;
   --ok:#2D6E4E; --ok-soft:#E3F2E9; --warn:#8A5A0C; --warn-soft:#FCEFD6; --bad:#A23434; --bad-soft:#FBE6E6;
   --shadow:0 18px 50px rgba(40,18,45,.22); --shadow-s:0 1px 2px rgba(40,18,45,.05),0 2px 8px rgba(40,18,45,.04);
-  --f-display:"Newsreader","Iowan Old Style","Palatino Linotype",Georgia,serif;
-  --f-body:"Source Sans 3","Source Sans Pro","Segoe UI",system-ui,-apple-system,sans-serif;
+  --f-display:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   --r:12px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
@@ -46,7 +46,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .hero-in{padding-block:30px 24px}
 .hero-top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px 40px}
 .eyebrow{font-size:14px;color:var(--hero-gold);font-weight:600}
-.names{font-family:var(--f-display);font-style:italic;font-weight:500;font-size:clamp(40px,7vw,68px);line-height:1.02;margin:4px 0 0;letter-spacing:-.01em}
+.names{font-family:var(--f-display);font-style:normal;font-weight:700;font-size:clamp(40px,7vw,68px);line-height:1.02;margin:4px 0 0;letter-spacing:-.01em}
 .names .amp{color:var(--hero-gold);padding:0 .08em}
 .hero-sub{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
 .hero-sub>*{background:rgba(255,255,255,.12);border-radius:999px;padding:5px 12px;font-size:14.5px;color:var(--hero-fg)}
@@ -636,7 +636,7 @@ body.noauth .fab,body.modal-open .fab{display:none}
 .cmp-ask{width:100%;margin-bottom:6px}
 
 /* ---------- Accueil : le coach ---------- */
-body.on-home .fab{display:none}
+body.on-home .hero{display:none}
 .coach-home{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 16px 14px;box-shadow:var(--shadow-s)}
 .ch-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .ch-head b{display:block;font-family:var(--f-display);font-size:24px;font-weight:600;line-height:1.15}
@@ -684,3 +684,70 @@ body.on-home .fab{display:none}
 .links-row .link{font-size:14.5px;color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0}
 .toast.has-act{display:flex;align-items:center;gap:14px}
 .toast.has-act button{background:none;border:0;color:var(--gold);font-weight:800;font-size:15px;cursor:pointer;padding:4px 0}
+
+/* ---------- Police Inter : réglages fins ---------- */
+body{font-feature-settings:"cv11","ss01";letter-spacing:-.005em}
+h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
+.vh h2{font-weight:700}
+.panel-h h3,.modal h3{font-weight:700}
+
+/* ---------- Accueil simplifié ---------- */
+.coach-home{padding:18px 16px 16px}
+.ch-head{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.ch-photo{flex:none;position:relative;width:64px;height:64px;border-radius:50%;border:0;padding:0;cursor:pointer;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;overflow:visible}
+.ch-photo img{width:100%;height:100%;object-fit:cover;border-radius:50%;box-shadow:0 0 0 3px var(--surface),0 0 0 4px var(--line)}
+.ch-photo span{font-weight:800;font-size:18px;letter-spacing:-.02em}
+.ch-photo i{position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--on-accent);font-style:normal;font-weight:800;display:grid;place-items:center;font-size:16px;box-shadow:0 0 0 3px var(--surface)}
+.ch-photo:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+.ch-photo:disabled{cursor:default}
+.ch-hi{min-width:0}
+.ch-hi h2{margin:0;font-size:26px;font-weight:800;letter-spacing:-.03em;line-height:1.15}
+.ch-hi span{font-size:14.5px;color:var(--muted)}
+.ch-hi b{color:var(--ink)}
+.ch-hi .link{font-size:14.5px;color:var(--accent);font-weight:600;background:none;border:0;padding:0;cursor:pointer}
+.hb{background:var(--accent-soft);border-radius:14px;margin-bottom:14px}
+.hb-h{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;width:100%;text-align:left;background:none;border:0;padding:12px 14px;cursor:pointer;color:var(--ink)}
+.hb-h .ch-k{grid-column:1}.hb-h b{grid-column:1;font-size:15px}
+.hb-h svg{grid-column:2;grid-row:1/3;width:20px;height:20px;stroke:var(--accent);fill:none;stroke-width:2;transition:transform .15s}
+.hb.open .hb-h svg{transform:rotate(180deg)}
+.hb-b{padding:0 14px 12px;font-size:15px}.hb-b ul{margin:0 0 6px;padding-left:20px}.hb-b li{margin:4px 0}
+.ch-sec{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin:2px 0 8px}
+.ch-sec h3{margin:0;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.ch-sec .link,.more-pts{font-size:14px;color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0}
+.more-pts{display:block;margin:6px auto 0}
+.dcs{display:flex;flex-direction:column;gap:8px}
+.dc{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface)}
+.dc-dot{flex:none;width:10px;height:10px;border-radius:50%;margin-top:6px;background:var(--accent)}
+.dc.bad .dc-dot{background:var(--bad)}.dc.warn .dc-dot{background:var(--warn)}.dc.ok .dc-dot{background:var(--ok)}
+.dc.bad{border-color:color-mix(in srgb,var(--bad) 35%,var(--line))}
+.dc-body{flex:1;min-width:0}
+.dc-body b{display:block;font-size:15.5px;line-height:1.3}
+.dc-body p{margin:3px 0 0;font-size:14px;color:var(--muted);line-height:1.4;overflow-wrap:anywhere}
+.dc-acts{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:10px}
+.dc-acts .link{font-size:14px;color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0}
+.dc-more{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+/* Bien démarrer : une ligne */
+.onboard{padding:0!important;overflow:hidden}
+.ob-h{display:flex;align-items:center;gap:12px;width:100%;background:none;border:0;padding:16px;cursor:pointer;color:var(--ink);text-align:left}
+.ob-h b{font-size:16px;white-space:nowrap}
+.ob-h .ob-bar{flex:1;margin:0}
+.ob-n{font-size:14px;color:var(--muted);font-weight:600}
+.ob-h svg{width:20px;height:20px;stroke:var(--muted);fill:none;stroke-width:2;transition:transform .15s}
+.onboard.open .ob-h svg{transform:rotate(180deg)}
+.onboard .ob-list{padding:0 16px}.onboard .ob-off{margin:4px 16px 12px}
+/* Photo du couple (Réglages) */
+.photo-row{display:flex;gap:16px;align-items:center}
+/* Comparateur : liste à cocher */
+.pick-h{display:flex;justify-content:space-between;align-items:baseline;margin:12px 0 6px;font-size:14px;color:var(--muted)}
+.pick-h .link{font-size:14px;color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:4px 0}
+.pick-list{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pick-row{display:grid;grid-template-columns:auto 1fr;grid-template-rows:auto auto;column-gap:12px;align-items:center;text-align:left;width:100%;background:var(--surface);border:0;border-top:1px solid var(--line);padding:10px 12px;cursor:pointer;color:var(--ink);min-height:52px}
+.pick-row:first-child{border-top:0}
+.pick-row .gcheck{grid-row:1/3}
+.pick-row .pr-n{font-weight:600;font-size:15px}
+.pick-row .pr-m{font-size:13px;color:var(--muted)}
+.pick-row.on{background:var(--accent-soft)}
+.pick-row.off .pr-n{color:var(--muted)}
+.pick-row:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.coach-home .ch-hi span b{display:inline;font-family:inherit;font-size:inherit;font-weight:700;line-height:inherit;color:var(--ink)}
+.coach-home .ch-hi span{display:block}
