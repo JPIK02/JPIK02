@@ -108,7 +108,7 @@ export async function runPinterest({ log = console.log } = {}) {
     const out = await runForOutput({
       system: "Tu es le wedding planner de Claire et Julien. Ils épinglent sur Pinterest des idées pour leur mariage. Pour chaque image, décris en deux phrases ce qu'elle montre et ce qui peut leur plaire (style, couleurs, matières, ambiance), en français, et range-la dans la catégorie la plus juste. Si un tableau est consacré à une catégorie, garde cette catégorie. N'invente rien que l'image ne montre pas.",
       user: [...blocks, { type: "text", text: `Catégories possibles : ${Object.entries(CATS).map(([k, l]) => `${k} = ${l}`).join(" ; ")}.` }],
-      output: OUT, feature: "synthese", effort: "low",
+      output: OUT, feature: "pinterest",
     });
     const byN = Object.fromEntries((out.epingles || []).map(e => [e.n, e]));
     const w = db.batch();

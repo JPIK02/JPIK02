@@ -144,6 +144,7 @@ test("coût : tarifs, cache, recherches, niveaux et budget", async () => {
   assert.equal(Math.round(costOf("claude-sonnet-5-5", { cache_read_input_tokens: 1e6, cache_creation_input_tokens: 1e6 }) * 100) / 100, 2.7);
   assert.equal(costOf("claude-sonnet-5-5", { server_tool_use: { web_search_requests: 3 } }), 0.03);
   assert.equal(profileFor({}, "analyse").model, "claude-sonnet-5-5");
+  assert.equal(profileFor({}, "pinterest").model, "claude-sonnet-5-5");
   assert.equal(profileFor({ niveaux: { analyse: "max" } }, "analyse").model, "claude-opus-5-5");
   assert.equal(profileFor({ niveaux: { coach: "nimporte" } }, "coach").niveau, "equilibre");
   assert.equal(overBudget({ budget: 10 }, { usd: 11 }), true);

@@ -19,6 +19,8 @@ export const PROFILES = {
   mail:     { eco: { model: SONNET, effort: "low" },    equilibre: { model: SONNET, effort: "medium" }, max: { model: OPUS, effort: "medium" } },
   analyse:  { eco: { model: SONNET, effort: "low", maxSearches: 2 }, equilibre: { model: SONNET, effort: "medium", maxSearches: 3 }, max: { model: OPUS, effort: "medium", maxSearches: 4 } },
   synthese: { eco: { model: SONNET, effort: "low" },    equilibre: { model: OPUS, effort: "low" },    max: { model: OPUS, effort: "medium" } },
+  // décrire et ranger des images d'épingles : Sonnet suffit, Opus en Max
+  pinterest: { eco: { model: SONNET, effort: "low" },   equilibre: { model: SONNET, effort: "low" },  max: { model: OPUS, effort: "low" } },
 };
 export const FEATURES = Object.keys(PROFILES);
 export const DEFAULT_BUDGET_EUR = 20;

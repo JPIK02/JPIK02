@@ -934,7 +934,7 @@ async function acceptSug(id,quiet){
 }
 
 /* ---------- Settings ---------- */
-const IA_FEAT={coach:["Coach","Vos conversations au quotidien"],brief:["Entretien Nos envies","Questions sur vos goûts, photos d'inspiration"],mail:["Lecture des mails","Tri de la boîte, devis et pièces jointes"],analyse:["Analyse des prestataires","Avis en ligne et note de fit"],synthese:["Synthèse et point de la semaine","Résumé de vos envies, point du lundi"]};
+const IA_FEAT={coach:["Coach","Vos conversations au quotidien"],brief:["Entretien Nos envies","Questions sur vos goûts, photos d'inspiration"],mail:["Lecture des mails","Tri de la boîte, devis et pièces jointes"],analyse:["Analyse des prestataires","Avis en ligne et note de fit"],synthese:["Synthèse et point de la semaine","Résumé de vos envies, point du lundi, briefs prestataires"],pinterest:["Pinterest","Description et rangement des épingles importées"]};
 const IA_LVL=[["eco","Éco"],["equilibre","Équilibré"],["max","Max"]];
 const IA_EFF={low:"réflexion courte",medium:"réflexion moyenne",high:"réflexion poussée"};
 const euro=usd=>(usd*USD_EUR).toLocaleString("fr-FR",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:2});
