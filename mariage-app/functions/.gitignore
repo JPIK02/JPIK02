@@ -1,0 +1,4 @@
+node_modules/
+.env
+# copié depuis ../src/questions.js au déploiement (une seule source de vérité)
+questions.js

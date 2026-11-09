@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shouldRun, slotMatches, parisClock, vendorsToAnalyse, profilDue } from "../lib/scheduler.js";
+import { shouldRun, slotMatches, parisClock, vendorsToAnalyse, profilDue, vendorsRequested } from "../lib/scheduler.js";
 import { cleanPayload, cleanSubject } from "../lib/validate.js";
 import { extractText, stripHtml } from "../lib/mailtext.js";
 
@@ -73,4 +73,15 @@ test("synthèse des envies : relancée après une modification, une fois la sais
   assert.equal(profilDue({ profilRequestedAt: now - 10 * 60e3 }, { updatedAt: 0 }, now), true);
   assert.equal(profilDue({ profilRequestedAt: now - 60e3 }, { updatedAt: 0 }, now), false);  // saisie en cours
   assert.equal(profilDue({ profilRequestedAt: now - 10 * 60e3 }, { updatedAt: now - 60e3 }, now), false); // déjà refaite
+});
+
+test("notes de visite : seuls les prestataires modifiés sont réanalysés", () => {
+  const now = Date.now();
+  const vs = [
+    { id: "a", status: "devis", fit: { updatedAt: now - 1000 }, fitRequestedAt: now },        // notes après la fiche
+    { id: "b", status: "devis", fit: { updatedAt: now - 1000 }, fitRequestedAt: now - 5000 }, // déjà prises en compte
+    { id: "c", status: "ecarte", fit: { updatedAt: now - 1000 }, fitRequestedAt: now },       // écarté : ignoré
+  ];
+  assert.deepEqual(vendorsRequested(vs).map(v => v.id), ["a"]);
+  assert.deepEqual(vendorsToAnalyse(vs, 0, now).map(v => v.id), ["a"]);
 });

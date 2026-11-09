@@ -5,6 +5,7 @@
 import firebase from "firebase/compat/app";
 import "firebase/compat/auth";
 import "firebase/compat/firestore";
+import "firebase/compat/functions";
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -22,6 +23,9 @@ firebase.initializeApp(config);
 export const auth = firebase.auth();
 auth.languageCode = "fr";
 export const db = firebase.firestore();
+// Assistant IA : fonction serveur (la clé Claude n'est jamais dans l'app)
+const fns = firebase.app().functions("europe-west1");
+export const callAssistant = data => fns.httpsCallable("assistant", { timeout: 300000 })(data).then(r => r.data);
 
 // Cache local : l'app reste lisible hors ligne et se resynchronise ensuite.
 db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
@@ -29,6 +33,7 @@ db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 if (import.meta.env.VITE_USE_EMULATORS === "1") {
   db.useEmulator("127.0.0.1", 8080);
   auth.useEmulator("http://127.0.0.1:9099");
+  fns.useEmulator("127.0.0.1", 5001);
 }
 
 export async function signInGoogle() {

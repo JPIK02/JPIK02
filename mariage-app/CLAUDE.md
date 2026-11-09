@@ -9,11 +9,14 @@ App d'organisation du mariage de Claire et Julien (2028). Tout est en français 
 - **Agents IA** (`agents/`) : Node 22, vérifiés toutes les 10 minutes par `../.github/workflows/agents.yml` (racine du dépôt). `agents/run.js` lit `meta/planning` et ne lance un agent que s'il est dû (`lib/scheduler.js`) ou demandé depuis l'app (`requestedAt` > `lastRunAt`).
   - `mail-agent.js` : Gmail en **lecture seule** → propositions dans `inbox` (status `"new"`). Ne modifie jamais vendors/tasks/guests/budget : c'est Claire et Julien qui valident dans l'app (`acceptSug` dans app.js).
   - `analyse-agent.js` : synthèse du brief → `meta/profil` ; note de fit (recherche web Claude) → champ `fit` de chaque `vendors/<id>`.
+  - `lib/push.js` : notifications Web Push (clés VAPID générées au 1er passage : publique dans `meta/push`, privée dans `private/vapid`), envoyées aux abonnements `pushSubs` quand il y a des propositions ou une analyse terminée.
+- **Assistant IA intégré** (`functions/`, Cloud Functions 2e gén., `europe-west1`, offre Blaze) : fonction appelable `assistant`, réservée aux deux comptes (`ALLOWED_EMAILS`). `converse.js` = boucle Claude ↔ outils ; `tools.js` = 9 outils de lecture + 12 d'action, **aucune suppression**, chaque écriture renvoie l'état d'avant (`ops`) pour le bouton « Annuler » de l'app ; `prompt.js` = consignes (mode `chat` ou `brief` pour remplir Nos envies). Historique dans `chats/<email>`, garde-fou de 150 messages/jour dans `meta/assistant`. Le questionnaire vient de `src/questions.js` (copié dans `functions/` au déploiement). Déployé par `../.github/workflows/functions.yml` ; la clé Claude est écrite dans `functions/.env` depuis le secret GitHub, jamais commitée.
   - Claude rend toujours son résultat via un outil de sortie à schéma (`lib/claude.js` → `runForOutput`, modèle par défaut `claude-opus-5-5`, tool_choice auto : les modèles récents refusent un choix d'outil forcé), puis `lib/validate.js` nettoie.
 
 ## Modèle de données (Firestore)
-Collections : `tasks`, `budget`, `guests`, `vendors`, `schedule`, `rdv`, `inbox`, `brief`.
-Documents `meta/*` : `settings` (date, lieu, ville, mairie, budgetTotal, invitesCible, notes, updatedAt), `agent` (mailbox, types, consignes, lastRun, lastRunAt, requestedAt, status), `analyse` (status, lastRun, lastRunAt, requestedAt, profilRequestedAt : posé par l'app quand les envies ou les réglages changent → `run.js` refait la synthèse seule après 5 min de calme, voir `profilDue`), `profil`, `planning` ({mail, analyse} : {enabled, mode: hourly|daily|twice|weekly, h1, h2, day}), `prefs` (notDupes : paires de tâches « ce ne sont pas des doublons », `idA|idB`).
+Collections : `tasks`, `budget`, `guests`, `vendors`, `schedule`, `rdv`, `inbox`, `brief`, `chats` (conversation de chacun avec l'assistant), `pushSubs` (abonnements push par téléphone).
+- `vendors` : en plus des champs du devis, `visitNotes` (notes de visite) et `fitRequestedAt` (posé quand les notes changent → l'agent réanalyse ce prestataire seul).
+Documents `meta/*` : `settings` (date, lieu, ville, mairie, budgetTotal, invitesCible, notes, updatedAt), `agent` (mailbox, types, consignes, lastRun, lastRunAt, requestedAt, status), `analyse` (status, lastRun, lastRunAt, requestedAt, profilRequestedAt : posé par l'app quand les envies ou les réglages changent → `run.js` refait la synthèse seule après 5 min de calme, voir `profilDue`), `profil`, `planning` ({mail, analyse} : {enabled, mode: hourly|daily|twice|weekly, h1, h2, day}), `prefs` (notDupes : paires de tâches « ce ne sont pas des doublons », `idA|idB`), `push` (clé publique VAPID), `presence` (dernière connexion de chacun), `assistant` (compteur du jour). `private/vapid` : clé privée des notifications (lue seulement par les agents).
 - `inbox` : doc id = id du message Gmail (suffixe `-xxx` pour une 2e proposition). Types : vendor, quote, task, payment, rdv, rsvp ; `type: "ignored"` = mail lu sans proposition (masqué dans l'app).
 - `brief` : `<cat>--<qid>` et `<cat>--_meta`. Les questions sont dans `QCATS` (app.js).
 - `tasks.phase` : m12, m9, m6, m4, m2, m1, s1, j, apres. Échéance calculée depuis `settings.date` (voir `PHASES`).
@@ -30,7 +33,7 @@ Documents `meta/*` : `settings` (date, lieu, ville, mairie, budgetTotal, invites
 ## Commandes
 - `npm run dev` : front en local (variables dans `.env`, voir `.env.example`)
 - `npm run emulators` + `VITE_USE_EMULATORS=1` : base et auth locales
-- `npm test` : tests des agents (`agents/test/`, sans dépendances réseau)
+- `npm test` : tests des agents (`agents/test/`, sans dépendances réseau) ; `cd functions && cp ../src/questions.js . && npm test` : tests de l'assistant
 - `npm run deploy` : build + Firebase Hosting + règles
 - `cd agents && node --env-file=.env run.js mail` : lancer un agent à la main
 

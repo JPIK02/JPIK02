@@ -9,6 +9,7 @@
 <meta name="apple-mobile-web-app-title" content="Mariage">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <title>Mariage Claire &amp; Julien</title>
 <script>/* thème choisi dans Réglages, appliqué avant l'affichage pour éviter un flash */try{var t=localStorage.getItem("mariage-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,6 +36,7 @@
 </nav>
 <main class="wrap" id="main"></main>
 <nav class="bnav" id="bnav" aria-label="Navigation"></nav>
+<button class="fab" id="fab" data-act="chat" aria-label="Ouvrir l'assistant IA"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg><span>Assistant</span></button>
 <div id="layer"></div>
 
 <script type="module" src="/src/app.js"></script>

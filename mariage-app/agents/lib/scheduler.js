@@ -46,10 +46,15 @@ export function shouldRun(plan, meta = {}, now = new Date(), { force = false } =
 }
 
 const MONTH = 30 * 24 * 3600 * 1000;
-/** Prestataires à (ré)analyser : non écartés, sans fiche, fiche > 30 j ou antérieure à une demande. */
+/** Prestataires dont les notes de visite ont changé depuis leur dernière fiche. */
+export const vendorsRequested = vendors =>
+  vendors.filter(v => v.status !== "ecarte" && (+v.fitRequestedAt || 0) > (+(v.fit && v.fit.updatedAt) || 0));
+
+/** Prestataires à (ré)analyser : non écartés, sans fiche, fiche > 30 j, antérieure à une demande ou à des notes de visite. */
 export function vendorsToAnalyse(vendors, requestedAt = 0, now = Date.now()) {
   return vendors.filter(v => v.status !== "ecarte" &&
-    (!v.fit || !v.fit.updatedAt || now - v.fit.updatedAt > MONTH || (requestedAt && v.fit.updatedAt < requestedAt)));
+    (!v.fit || !v.fit.updatedAt || now - v.fit.updatedAt > MONTH || (requestedAt && v.fit.updatedAt < requestedAt)
+      || (+v.fitRequestedAt || 0) > v.fit.updatedAt));
 }
 
 /**

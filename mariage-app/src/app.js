@@ -1,4 +1,5 @@
-import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED} from "./firebase.js";
+import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant} from "./firebase.js";
+import {QCATS} from "./questions.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
 const setHTML=(el,h)=>{if(el&&el._h!==h){el._h=h;el.innerHTML=h}};
@@ -48,115 +49,12 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},tasks:[],budget:[],guests:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vStat:"all",bcat:"vision",overview:false}
 };
 
 /* ---------- Interview (senior wedding planner brief) ---------- */
-// [id, type t=texte libre | m=choix multiples | c=choix unique, question, options]
-const QCATS=[
- {k:"vision",label:"Votre mariage",intro:"Avant de parler prestataires, parlons de vous. Ces réponses guident tous les choix qui suivent : c'est la boussole du projet.",qs:[
-  ["ambiance","t","Si vous deviez décrire l'ambiance de votre mariage en trois mots ?"],
-  ["style","m","Quel style vous ressemble ?",["Champêtre","Bohème","Élégant et chic","Château classique","Moderne et épuré","Guinguette festive","Intime","Grande fête"]],
-  ["invites","t","Combien d'invités imaginez-vous, au minimum et au maximum ?"],
-  ["format","m","Quel format ?",["Une journée","Week-end complet","Brunch du lendemain","Cérémonie laïque","Cérémonie religieuse","Mariage civil seul"]],
-  ["periode","t","Saison et période idéales ? Des dates à éviter (examens, vacances, événements familiaux) ?"],
-  ["moments","t","Les trois moments que vous voulez absolument réussir ?"],
-  ["craintes","t","Qu'est-ce qui vous inquiète le plus pour ce jour-là ?"],
-  ["souvenirs","t","Un mariage où vous étiez invités : ce que vous avez adoré, ce que vous ne voulez surtout pas reproduire ?"],
-  ["juliette","t","Quelle place voulez-vous donner à Juliette dans la journée ?"],
-  ["recit","t","Le lendemain, qu'aimeriez-vous que vos invités racontent de votre mariage ?"],
-  ["arbitrage","t","Budget : sur quoi voulez-vous mettre le paquet, et où êtes-vous prêts à économiser ?"]]},
- {k:"lieu",label:"Lieu",vcat:"Lieu",intro:"Le lieu fixe la date, la capacité, le style et une bonne partie du budget. C'est la décision qui conditionne toutes les autres.",qs:[
-  ["region","t","Dans quelle région, et à quelle distance maximum de chez vous et de la majorité des invités ?"],
-  ["type","m","Quel type de lieu vous fait rêver ?",["Château","Domaine ou manoir","Ferme ou grange","Bord de mer","Lieu urbain","Jardin privé"]],
-  ["exclu","c","Privatisation exclusive du week-end ?",["Indispensable","Souhaitable","Indifférent"]],
-  ["dodo","t","Combien de personnes doivent pouvoir dormir sur place ?"],
-  ["traiteur","c","Liberté de choisir votre traiteur ?",["Indispensable","Préférable","Peu importe"]],
-  ["pluie","t","Plan B en cas de pluie : quel niveau d'exigence (salle de repli, tente, rien) ?"],
-  ["horaires","t","Heure de fin de soirée et limite de son acceptables ?"],
-  ["acces","t","Accessibilité : personnes âgées, mobilité réduite, parking, gare proche ?"]]},
- {k:"traiteur",label:"Traiteur",vcat:"Traiteur",intro:"Le repas est ce dont les invités se souviennent le plus, en bien comme en mal. On cherche le bon format autant que la bonne cuisine.",qs:[
-  ["format","m","Format du repas ?",["Assis, servi à l'assiette","Buffet","Grandes tablées à partager","Food trucks","Cocktail dînatoire"]],
-  ["cuisine","t","Quelle cuisine : terroir, gastronomique, du monde, végétale ? Des plats incontournables ?"],
-  ["cocktail","t","Vin d'honneur : durée, nombre de pièces, ateliers ou animations culinaires ?"],
-  ["regimes","t","Régimes et allergies déjà connus chez les invités ?"],
-  ["boissons","c","Les vins et champagnes ?",["Fournis par nous (droit de bouchon)","Fournis par le traiteur","À voir selon le prix"]],
-  ["dessert","m","Dessert ?",["Pièce montée","Wedding cake","Buffet de desserts","Dessert à l'assiette"]],
-  ["brunch","c","Un brunch le lendemain ?",["Oui","Non","Peut-être"]],
-  ["budgetpp","t","Budget cible par personne, boissons comprises ?"]]},
- {k:"photo",label:"Photographe",vcat:"Photographe",intro:"Les photos sont la seule chose qui reste vraiment. Le style compte plus que le matériel : il faut que vous vous reconnaissiez dans son regard.",qs:[
-  ["style","m","Quel style photo ?",["Reportage naturel","Posé et classique","Artistique, éditorial","Argentique","Lumineux et pastel","Contrasté et intense"]],
-  ["couverture","t","Couverture souhaitée : des préparatifs jusqu'à quelle heure ?"],
-  ["couple","m","Séance couple ?",["Avant le jour J","Pendant le jour J","Le lendemain (day after)","Pas de séance"]],
-  ["groupes","t","Photos de groupe : avec qui, combien, combien de temps leur accorder ?"],
-  ["aise","c","Êtes-vous à l'aise devant l'objectif ?",["Très à l'aise","Moyennement","Pas du tout"]],
-  ["livrables","t","Livrables attendus : album, tirages, nombre de photos, délai de livraison acceptable ?"],
-  ["refs","t","Des photographes dont vous aimez le travail (Instagram, sites) ?"]]},
- {k:"video",label:"Vidéaste",vcat:"Vidéaste",intro:"Une vidéo réussie fait revivre les voix et les émotions. Encore faut-il savoir ce que vous voulez revoir dans dix ans.",qs:[
-  ["envie","c","Une vidéo, vraiment ?",["Indispensable","Si le budget le permet","Non"]],
-  ["format","m","Quels formats ?",["Film court (3 à 5 min)","Film long","Discours en intégralité","Images de drone","Teaser réseaux sociaux"]],
-  ["style","t","Style : cinématographique, documentaire, avec les voix et les sons du jour ?"],
-  ["discretion","t","Quelle discrétion attendez-vous pendant la cérémonie ?"]]},
- {k:"musique",label:"Musique",vcat:"Musique",intro:"La musique fait l'énergie de la soirée. On cherche quelqu'un qui lit une salle, pas seulement une playlist.",qs:[
-  ["formule","m","Quelle formule ?",["DJ","Groupe live","Musiciens pour la cérémonie","Musique au cocktail","Playlist maison"]],
-  ["styles","t","Les styles qui doivent passer, et ceux à bannir ?"],
-  ["ouverture","t","Ouverture de bal : une chanson en tête, une danse préparée ?"],
-  ["animation","c","Animation ?",["Discrète, la musique suffit","Ambianceur qui fait participer","Entre les deux"]],
-  ["moments","t","Les moments musicaux clés : entrée, sortie de cérémonie, gâteau, chanson signature ?"],
-  ["fin","t","Jusqu'à quelle heure la fête doit-elle durer ?"]]},
- {k:"fleurs",label:"Fleurs et déco",vcat:"Fleuriste",intro:"Fleurs et décoration créent l'atmosphère dès la première photo. On part de vos couleurs et de ce que le lieu offre déjà.",qs:[
-  ["palette","t","Votre palette de couleurs ?"],
-  ["aimees","t","Les fleurs que vous aimez, celles à éviter (allergies, odeurs) ?"],
-  ["style","m","Quel style ?",["Fleurs des champs","Luxuriant","Épuré","Fleurs séchées","Feuillages et végétal"]],
-  ["quoi","m","Que faut-il fleurir ?",["Bouquet de la mariée","Boutonnières","Arche ou allée de cérémonie","Centres de table","Voiture","Coiffure","Espace cocktail"]],
-  ["deco","t","Au-delà des fleurs : lumières, guirlandes, bougies, signalétique ?"],
-  ["diy","c","Faire une partie vous-mêmes ?",["Oui, avec plaisir","Un peu","Non, tout déléguer"]]]},
- {k:"tenues",label:"Tenues",vcat:"Tenues",intro:"Il faut se sentir soi-même, en plus beau. Les délais de fabrication et de retouches imposent de s'y prendre tôt.",qs:[
-  ["claire","t","Claire : la tenue rêvée, les silhouettes et matières à éviter ?"],
-  ["julien","t","Julien : costume, smoking, couleur, sur mesure ou prêt-à-porter ?"],
-  ["soiree","c","Une deuxième tenue pour la soirée ?",["Oui","Non","Peut-être"]],
-  ["accessoires","t","Accessoires : voile, chaussures, bijoux, montre, boutons de manchette ?"],
-  ["cortege","t","Des tenues coordonnées pour les témoins, le cortège ou Juliette ?"],
-  ["budget","t","Budget tenues pour chacun de vous ?"]]},
- {k:"alliances",label:"Alliances",vcat:"Alliances",intro:"Les seuls objets du mariage que vous porterez tous les jours.",qs:[
-  ["metal","m","Quel métal ?",["Or jaune","Or blanc","Or rose","Platine","Mélange"]],
-  ["assorties","c","Assorties ou chacun son style ?",["Assorties","Chacun son style","Un détail commun"]],
-  ["artisan","c","Où les faire ?",["Créateur ou artisan","Bijouterie classique","Peu importe"]],
-  ["gravure","t","Une gravure ? Laquelle ?"]]},
- {k:"beaute",label:"Coiffure et maquillage",vcat:"Coiffure & maquillage",intro:"L'objectif : être soi-même en mieux, et tenir de 9h à 2h du matin.",qs:[
-  ["pour","m","Pour qui ?",["Claire","Témoins","Mamans","Juliette"]],
-  ["style","t","Style recherché : naturel, glamour, bohème ? Des photos d'inspiration ?"],
-  ["domicile","c","Prestation sur place indispensable ?",["Oui","Non"]],
-  ["retouches","c","Des retouches pendant la journée ?",["Oui","Non","Pour la soirée seulement"]]]},
- {k:"papeterie",label:"Papeterie",vcat:"Papeterie",intro:"Le faire-part est la première image de votre mariage que les invités reçoivent.",qs:[
-  ["supports","m","Quels supports ?",["Save-the-date","Faire-part","Site internet","Menus","Marque-places","Plan de table","Livret de cérémonie","Remerciements"]],
-  ["papier","c","Papier, numérique ou les deux ?",["Papier","Numérique","Les deux"]],
-  ["identite","t","Identité visuelle : monogramme, illustration du lieu, couleurs ?"],
-  ["reponses","c","Comment les invités répondent-ils ?",["Site internet","E-mail","Carte réponse"]]]},
- {k:"transport",label:"Transport",vcat:"Transport",intro:"Ce qui ne se voit pas mais se ressent : personne ne doit se perdre ni conduire après la fête.",qs:[
-  ["voiture","t","Voiture des mariés : vintage, décapotable, aucune ?"],
-  ["navettes","t","Navettes pour les invités : depuis la gare, les hôtels, retour de nuit ?"],
-  ["trajets","t","Les distances entre mairie, cérémonie et réception ?"]]},
- {k:"ceremonie",label:"Cérémonie",vcat:"Officiant",intro:"Le cœur émotionnel de la journée. On construit un moment qui vous ressemble, au bon rythme.",qs:[
-  ["type","m","Quelle(s) cérémonie(s) ?",["Civile seule","Laïque","Religieuse"]],
-  ["officiant","c","Pour la cérémonie laïque, qui officie ?",["Un officiant professionnel","Un proche","Pas de cérémonie laïque"]],
-  ["message","t","Ce que vous voulez transmettre : votre histoire, des valeurs, des rituels ?"],
-  ["intervenants","t","Qui prendra la parole ?"],
-  ["duree","c","Durée idéale ?",["20 min","30 min","45 min"]],
-  ["roles","t","Le rôle des témoins et de Juliette pendant la cérémonie ?"]]},
- {k:"hebergement",label:"Hébergement",vcat:"Hébergement",intro:"Bien loger les invités, c'est leur permettre de profiter jusqu'au bout.",qs:[
-  ["combien","t","Combien d'invités devront dormir sur place ou à proximité ?"],
-  ["qui","c","Qui paie l'hébergement ?",["Nous","Les invités","Partagé"]],
-  ["priorite","t","Pour qui réserver en priorité (famille proche, personnes âgées) ?"],
-  ["noces","t","Votre nuit de noces : sur place ou ailleurs ?"]]},
- {k:"enfants",label:"Enfants",vcat:"Animation enfants",intro:"Des enfants heureux, ce sont des parents qui profitent de la fête.",qs:[
-  ["nombre","t","Nombre d'enfants attendus et tranches d'âge ?"],
-  ["formule","m","Quelle formule ?",["Baby-sitters","Animateurs","Coin enfants","Repas enfants à part","Espace sieste"]],
-  ["horaire","t","Jusqu'à quelle heure les enfants restent-ils à la fête ?"],
-  ["juliette","t","Le jour J et le soir, qui s'occupe de Juliette ?"]]}
-];
 const QC=Object.fromEntries(QCATS.map(c=>[c.k,c]));
 const VCAT2Q=Object.fromEntries(QCATS.filter(c=>c.vcat).map(c=>[c.vcat,c.k]));
 const IMPORT=["Secondaire","Utile","Important","Très important","Essentiel"];
@@ -413,7 +311,7 @@ function vApercu(){
 
   return `<div class="vh"><div><h2>${cur?esc(cur.label.charAt(0).toUpperCase()+cur.label.slice(1)):"Tableau de bord"}</h2><p>${cur?esc((cur.hint?cur.hint+" · ":"")+"à boucler avant le "+fmtD(cur.due(d))):"Commencez par fixer la date et le budget dans Réglages."}</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-new="rdv" ${S.canWrite?"":"disabled"}>Rendez-vous</button><button class="btn primary" data-new="tasks" ${S.canWrite?"":"disabled"}>Nouvelle tâche</button></div></div>
-  <div class="dash">${alH}${focusH}${rdvH}${S.f.overview?`<div class="c12 ov-h"><h3 class="sec dash-sec">Vue d'ensemble</h3><button class="link" data-act="overview">Masquer</button></div>${kpis}${milesH}${payH}${whoH}${budH}${agH}`
+  <div class="dash">${alH}${onboardH()}${focusH}${rdvH}${S.f.overview?`<div class="c12 ov-h"><h3 class="sec dash-sec">Vue d'ensemble</h3><button class="link" data-act="overview">Masquer</button></div>${kpis}${milesH}${payH}${whoH}${budH}${agH}`
     :`<button class="ov-open c12" data-act="overview"><span><b>Vue d'ensemble</b><span>Avancement, jalons, paiements, budget par poste, qui fait quoi</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>`}</div>`;
 }
 
@@ -654,7 +552,8 @@ function vPrestataires(){
   const groups=cats.map(c=>{
     const list=vs.filter(v=>v.cat===c).sort((a,b)=>sc(b)-sc(a)||VSTAT_RANK[b.status]-VSTAT_RANK[a.status]);
     const qk=VCAT2Q[c],p=qk?catProg(qk):null,m=qk?bMeta(qk):{};
-    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${p?`<button class="chip ${p.p>=.7?"ok":p.p>0?"warn":""}" data-bgo="${qk}">Brief ${Math.round(p.p*100)} %</button>`:""}</div></div>
+    const cmp=S.vendors.filter(v=>v.cat===c&&v.status!=="ecarte").length>=2;
+    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${cmp?`<button class="chip acc" data-act="compare" data-cat="${esc(c)}">Comparer</button>`:""}${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${p?`<button class="chip ${p.p>=.7?"ok":p.p>0?"warn":""}" data-bgo="${qk}">Brief ${Math.round(p.p*100)} %</button>`:""}</div></div>
     <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">${list.length>1?`<span class="rank">${i+1}</span>`:""}${fitBadge(v)}
       <div class="main" style="flex:1;min-width:0"><div class="t" style="font-weight:500">${esc(v.name)}</div>
         ${fi.verdict?`<div class="verdict">${esc(fi.verdict)}</div>`:""}
@@ -668,6 +567,37 @@ function vPrestataires(){
   ${groups||emptyBlock(S.vendors.length?"Aucun prestataire avec ce statut":"Aucun prestataire pour l'instant","Notez chaque piste dès le premier contact, ou laissez l'assistant e-mails les ajouter.")}`;
 }
 
+/* ---------- Comparateur ---------- */
+// Valeur d'une ligne « Libellé : valeur » des notes (capacité, couchages… importés du fichier Excel)
+const noteVal=(v,label)=>{const m=fold(v.note).match(new RegExp(fold(label)+"\\s*:?\\s*([^\\n]+)"));return m?m[1].trim():""};
+const capMax=v=>{const m=noteVal(v,"Capacité").match(/(\d+)(?:\s*-\s*(\d+))?/);return m?+(m[2]||m[1]):null};
+function openCompare(cat){
+  const vs=S.vendors.filter(v=>v.cat===cat&&v.status!=="ecarte").sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1)).slice(0,4);
+  if(vs.length<2)return;
+  const line=budgetLineFor(cat),env=line?num(line.prevu):0,guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
+  const best=(vals,dir)=>{const ns=vals.filter(x=>x!=null);if(ns.length<2)return null;return dir>0?Math.max(...ns):Math.min(...ns)};
+  const L=a=>Array.isArray(a)&&a.length?`<ul class="blist">${a.slice(0,3).map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:'<span class="na">—</span>';
+  const rowNum=(label,get,fmt,dir,hint)=>{const vals=vs.map(get),b=best(vals,dir);return `<tr><th scope="row">${label}${hint?`<small>${hint}</small>`:""}</th>${vals.map(x=>`<td class="${x!=null&&x===b?"best":""}">${x==null?'<span class="na">—</span>':fmt(x)}</td>`).join("")}</tr>`};
+  const row=(label,get)=>`<tr><th scope="row">${label}</th>${vs.map(v=>`<td>${get(v)}</td>`).join("")}</tr>`;
+  const crits=[...new Set(vs.flatMap(v=>((v.fit&&v.fit.criteres)||[]).map(c=>c.label)))];
+  const body=[
+    rowNum("Note de fit",v=>v.fit&&v.fit.score!=null?Math.round(v.fit.score):null,x=>`<b class="num">${x}</b>/100`,1),
+    row("Confiance",v=>v.fit&&v.fit.confiance?esc(v.fit.confiance):'<span class="na">—</span>'),
+    rowNum("Prix",v=>num(v.prix)||null,x=>`<b class="num">${eur(x)}</b>`,-1),
+    env?rowNum("Écart à l'enveloppe",v=>num(v.prix)?num(v.prix)-env:null,x=>`<span class="num ${x>0?"over":"ok-t"}">${x>0?"+":""}${eur(x)}</span>`,-1,`poste ${esc(line.label)} : ${eur(env)}`):"",
+    cat==="Lieu"?rowNum("Capacité",capMax,x=>`<span class="num ${guests>x?"over":""}">${x}</span>`,1,`${guests} invités au dîner`):"",
+    cat==="Lieu"?rowNum("Couchages",v=>{const m=noteVal(v,"Couchages").match(/\d+/);return m?+m[0]:null},x=>`<span class="num">${x}</span>`,1):"",
+    rowNum("Avis en ligne",v=>v.fit&&v.fit.avis&&v.fit.avis.note!=null?num(v.fit.avis.note):null,x=>`<span class="stars">★ ${String(x).replace(".",",")}</span>`,1),
+    ...crits.map(cl=>rowNum(esc(cl),v=>{const c=((v.fit&&v.fit.criteres)||[]).find(c=>c.label===cl);return c?Math.round(num(c.note)):null},x=>`<span class="num">${x}</span>/100`,1)),
+    row("Points forts",v=>L(v.fit&&v.fit.forces)),
+    row("Vigilance",v=>L(v.fit&&v.fit.vigilance)),
+    row("Notes de visite",v=>v.visitNotes?`<span class="vn">${esc(v.visitNotes)}</span>`:'<span class="na">—</span>'),
+    row("Statut",v=>`<span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>`),
+  ].join("");
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal cmp-modal" role="dialog" aria-modal="true" aria-label="Comparer : ${esc(cat)}">
+    <h3>Comparer · ${esc(cat)}</h3><p class="plan-when" style="margin:-8px 0 14px">En vert, la meilleure valeur de chaque ligne. Faites glisser le tableau sur le côté.</p>
+    <div class="cmp-wrap"><table class="cmp"><thead><tr><th></th>${vs.map(v=>`<th scope="col"><button class="link" data-fiche="${v.id}">${esc(v.name)}</button></th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div></div></div>`;
+}
 function openFiche(id){
   const v=S.vendors.find(x=>x.id===id);if(!v)return;
   const fi=v.fit||{},av=fi.avis||{};
@@ -684,6 +614,9 @@ function openFiche(id){
     ${crit}
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
+    <div class="fsec"><h4>Notes de visite</h4>${v.visitNotes?`<p class="vnotes">${esc(v.visitNotes)}</p>`:`<p class="plan-when" style="margin:0 0 8px">Après une visite ou un échange, notez vos impressions : l'IA recalcule la note avec ces informations de première main.</p>`}
+      ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (d'ici 15 minutes environ).</p>`:""}
+      ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div><button type="button" class="btn" data-close="1">Fermer</button><button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
@@ -693,6 +626,7 @@ function openFiche(id){
 /* ---------- Nos envies ---------- */
 function vEnvies(){
   const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
+  const chatCta=S.canWrite?`<div class="chat-cta"><div><b>Plus simple : répondez en discutant</b><span>L'assistant vous pose les questions une par une et remplit le questionnaire pour vous.</span></div><button class="btn primary" data-act="chat" data-m="brief">Commencer l'entretien</button></div>`:"";
   const pr=S.profil||{};
   const nav=`<nav class="env-nav" aria-label="Catégories du questionnaire">${QCATS.map(x=>{const p=catProg(x.k);return `<button data-bcat="${x.k}" aria-current="${x.k===c}"><span>${x.label}</span><span class="pbar" title="${p.n}/${p.t}"><i style="width:${p.p*100}%"></i></span></button>`}).join("")}</nav>`;
   const qhtml=cat.qs.map(([id,type,q,opts],i)=>{
@@ -715,7 +649,7 @@ function vEnvies(){
     ${Array.isArray(pr.questionsOuvertes)&&pr.questionsOuvertes.length?`<h3 class="sec" style="margin-top:14px">Ce qu'il nous manque pour bien choisir</h3><ul class="blist">${pr.questionsOuvertes.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}</div>`:"";
   const tot=allProg();
   return `<div class="vh"><div><h2>Nos envies</h2><p>Le questionnaire de votre wedding planner. Répondez ensemble ; quand vos avis diffèrent, chacun écrit le sien. Tout s'enregistre dès que vous quittez un champ.</p></div><span class="chip ${tot>=.7?"ok":"gold"} num" style="font-size:13px;padding:6px 12px">${Math.round(tot*100)} % rempli</span></div>
-  ${analyseBar("envies")}${synth}
+  ${chatCta}${analyseBar("envies")}${synth}
   <div class="env">${nav}<section style="min-width:0">
     <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p></div>
     <div class="qs">${qhtml}${metaH}</div>
@@ -780,7 +714,7 @@ function vAssistant(){
   </div>
   <div class="grid2">
     <section>
-      <h3 class="sec">${ps.length?`À valider · ${ps.length}`:"Aperçu de ce que l'assistant proposera"}</h3>
+      <div class="sec-row"><h3 class="sec">${ps.length?`À valider · ${ps.length}`:"Aperçu de ce que l'assistant proposera"}</h3>${ps.length>1&&S.canWrite?`<button class="btn sm primary" data-act="acceptall">Tout valider</button>`:""}</div>
       <div class="sugs">${ps.length?ps.map(s=>sugCard(s,false)).join(""):exampleSugs().map(s=>sugCard(s,true)).join("")}</div>
       ${hist.length?`<h3 class="sec" style="margin-top:28px">Historique</h3><div class="list">${hist.map(s=>`<div class="row"><div class="main"><div class="t">${esc(s.summary||s.subject)}</div><div class="m"><span>${esc((SUGTYPE[s.type]||["Info"])[0])}</span><span>${esc(s.from||"")}</span></div></div><div class="end"><span class="chip ${s.status==="accepted"?"ok":""}">${s.status==="accepted"?"Ajouté":"Ignoré"}</span>${s.status==="dismissed"?`<button class="btn ghost sm" data-act="restore" data-id="${s.id}" ${dis}>Rétablir</button>`:""}</div></div>`).join("")}</div>`:""}
     </section>
@@ -803,8 +737,8 @@ function vAssistant(){
     </section>
   </div>`;
 }
-async function acceptSug(id){
-  const s=S.inbox.find(x=>x.id===id);if(!s)return;
+async function acceptSug(id,quiet){
+  const s=S.inbox.find(x=>x.id===id);if(!s)return false;
   const p=Object.assign({},s.payload||{});let ok=true;
   const stamp={source:"mail",sourceId:s.id};
   if(s.type==="vendor"||s.type==="quote"){
@@ -826,12 +760,14 @@ async function acceptSug(id){
     const upd={};if(p.rsvp)upd.rsvp=p.rsvp;if(p.regime)upd.regime=p.regime;
     ok=g?await patch("guests",g.id,upd):await save("guests",null,Object.assign({name:p.name||s.from||"Invité",side:"commun",group:"",rsvp:p.rsvp||"attente",regime:p.regime||"",ceremonie:true,vin:true,diner:true,enfant:false},stamp));
   }
-  if(ok){await patch("inbox",id,{status:"accepted",decidedAt:Date.now()});toast("Ajouté")}
+  if(ok){await patch("inbox",id,{status:"accepted",decidedAt:Date.now()});if(!quiet)toast("Ajouté")}
+  return ok;
 }
 
 /* ---------- Settings ---------- */
 function vReglages(){
   const s=S.settings,dis=S.canWrite?"":"disabled";
+  if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported";render()}),0);
   return `<div class="vh"><div><h2>Réglages</h2><p>Les infos de base qui alimentent le compte à rebours, les échéances et le budget.</p></div></div>
   <form class="formpanel form" id="settings-form">
     <div class="cols2">
@@ -848,6 +784,7 @@ function vReglages(){
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
     <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes (GitHub Actions) s'ils ont du travail et ne tournent que selon le planning ci-dessous. Un passage demandé démarre dans les 10 à 15 minutes.</p>
     <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
+  ${pushPanel()}
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Apparence</h3></div>
     <p class="plan-when" style="margin:0 0 12px">Choix propre à cet appareil. « Automatique » suit le réglage clair ou sombre du téléphone.</p>
     <div class="seg" role="group" aria-label="Thème">${[["auto","Automatique"],["light","Clair"],["dark","Sombre"]].map(([k,l])=>`<button data-act="theme" data-v="${k}" aria-pressed="${themePref()===k}">${l}</button>`).join("")}</div></div>
@@ -864,6 +801,126 @@ function vReglages(){
   </div>`;
 }
 
+/* ---------- Assistant IA intégré ---------- */
+const VIEW_LABEL=()=>(VIEWS.find(v=>v[0]===S.view)||[0,"Accueil"])[1];
+// Mise en forme légère des réponses : paragraphes, listes à puces, **gras**
+function mdLite(t){
+  const inline=x=>esc(x).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
+  const out=[];let list=[];
+  const flush=()=>{if(list.length){out.push(`<ul>${list.map(li=>`<li>${inline(li)}</li>`).join("")}</ul>`);list=[]}};
+  String(t||"").split(/\n/).forEach(l=>{const m=l.match(/^\s*(?:[-•*]|\d+[.)])\s+(.*)/);if(m)list.push(m[1]);else{flush();if(l.trim())out.push(`<p>${inline(l)}</p>`)}});
+  flush();return out.join("");
+}
+const CHAT_SUGG={chat:["Que devons-nous faire cette semaine ?","Compare nos lieux et dis-moi lequel te semble le meilleur","Ajoute un rendez-vous de dégustation samedi prochain à 14 h","Mets Alex et Chloé dans le groupe Amis"],
+  brief:["Commençons le questionnaire Nos envies","Reprenons là où on s'était arrêtés"]};
+function chatMsgsHTML(){
+  const c=S.chat;
+  const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u"><div class="bub">${esc(m.text)}</div></div>`
+    :`<div class="cm a"><div class="bub">${mdLite(m.text)}</div>${(m.actions||[]).length?`<div class="acts-done">${m.actions.map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
+      ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`).join("");
+  const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`:"";
+  const intro=!c.messages.length?`<div class="chat-intro"><b>${c.mode==="brief"?"Entretien « Nos envies »":"Bonjour !"}</b><p>${c.mode==="brief"?"Je vous pose les questions du questionnaire une par une, en langage naturel, et je note vos réponses au fur et à mesure.":"Posez une question sur votre organisation, ou demandez-moi d'agir : ajouter une tâche, ranger des invités, noter un devis, préparer une visite… Chaque action s'annule d'un toucher."}</p></div>`:"";
+  return intro+msgs+(c.busy?'<div class="cm a"><div class="bub typing" aria-label="L\'assistant réfléchit"><i></i><i></i><i></i></div></div>':"")+sugg;
+}
+function renderChat(){
+  const box=document.getElementById("chat-msgs");if(!box)return;
+  box.innerHTML=chatMsgsHTML();box.scrollTop=box.scrollHeight;
+  const b=document.getElementById("chat-send");if(b)b.disabled=S.chat.busy;
+  const md=document.getElementById("chat-mode");if(md)md.innerHTML=S.chat.mode==="brief"?`<span class="chip acc">Entretien Nos envies</span><button class="link" data-act="chatmode" data-m="chat">Quitter</button>`:`<button class="link" data-act="chatmode" data-m="brief">Remplir nos envies avec l'assistant</button>`;
+}
+async function openChat(mode){
+  const c=S.chat,switched=!!mode&&mode!==c.mode;if(switched)c.mode=mode;
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal chat" role="dialog" aria-modal="true" aria-label="Assistant IA">
+    <div class="chat-h"><h3>Assistant</h3><button class="link" data-act="chatreset" ${c.busy?"disabled":""}>Nouvelle conversation</button></div>
+    <div class="chat-mode" id="chat-mode"></div>
+    <div class="chat-msgs" id="chat-msgs" aria-live="polite"></div>
+    <form class="chat-in" id="chat-form"><label class="sr" for="chat-text">Votre message</label><textarea id="chat-text" rows="1" placeholder="Écrivez votre message…" ${S.canWrite?"":"disabled"}></textarea>
+    <button class="btn primary" id="chat-send" type="submit" aria-label="Envoyer">Envoyer</button></form></div></div>`;
+  renderChat();
+  if(!c.loaded&&S.db&&S.user){try{const d=(await S.db.doc("chats/"+String(S.user.email).toLowerCase()).get()).data();c.loaded=true;if(d&&Array.isArray(d.messages)&&!c.messages.length){c.messages=d.messages;if(d.mode&&!mode)c.mode=d.mode}renderChat()}catch(e){}}
+  if(mode==="brief"&&(switched||!c.messages.length))sendChat("Commençons le questionnaire Nos envies.");
+}
+async function sendChat(text){
+  const c=S.chat;text=String(text||"").trim();if(!text||c.busy||!S.canWrite)return;
+  c.messages.push({role:"user",text});c.busy=true;renderChat();
+  try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL()});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[]})}
+  catch(e){const msg=e&&e.code==="functions/resource-exhausted"?e.message:e&&e.code==="functions/permission-denied"?"Assistant réservé à Claire et Julien.":e&&/not-found|internal|unavailable/.test(e.code||"")?"L'assistant n'est pas encore disponible (en cours d'installation) ou ne répond pas. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
+    c.messages.push({role:"assistant",text:msg,actions:[],error:true})}
+  c.busy=false;renderChat();
+}
+async function undoChat(i){
+  const m=S.chat.messages[i];if(!m||m.undone)return;
+  try{
+    for(const a of (m.actions||[]).slice().reverse())for(const op of (a.ops||[]).slice().reverse()){
+      const ref=S.db.doc(op.path);op.before?await ref.set(op.before):await ref.delete();
+    }
+    m.undone=true;renderChat();toast("Actions annulées");
+    await S.db.doc("chats/"+String(S.user.email).toLowerCase()).set({messages:S.chat.messages.filter(x=>!x.error),mode:S.chat.mode,updatedAt:Date.now()});
+  }catch(e){writeErr(e)}
+}
+
+/* ---------- Démarrage guidé ---------- */
+function onboarding(){
+  const s=S.settings,g=S.guests;
+  const other=Object.keys(S.presence||{}).filter(k=>k!==presKey());
+  return [
+    ["Date du mariage",!!s.date,"reglages"],["Budget total",!!num(s.budgetTotal),"reglages"],
+    ["Ville et nombre d'invités visé",!!(s.ville&&num(s.invitesCible)),"reglages"],
+    ["Invités rangés par groupe",g.length>0&&g.filter(x=>!x.group).length<=g.length*.2,"invites"],
+    ["Nos envies remplies (70 %)",allProg()>=.7,"brief"],
+    ["Notifications activées sur ce téléphone",S.pushState==="on","reglages"],
+    ["Les deux connectés à l'app",other.length>0,null],
+  ];
+}
+const presKey=()=>String(S.user&&S.user.email||"").toLowerCase().replace(/[^a-z0-9]/g,"_");
+function onboardH(){
+  let hidden=false;try{hidden=localStorage.getItem("mariage-onboard-off")==="1"}catch(e){}
+  const items=onboarding(),done=items.filter(x=>x[1]).length;
+  if(hidden||done===items.length)return "";
+  return `<div class="panel c12 onboard"><div class="panel-h"><h3>Bien démarrer</h3><span class="chip acc num">${done} / ${items.length}</span></div>
+    <div class="ob-bar"><i style="width:${done/items.length*100}%"></i></div>
+    <ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec l'assistant</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:'<span class="ob-hint">Claire et Julien se connectent chacun une fois</span>'}</li>`).join("")}</ul>
+    <button class="link ob-off" data-act="onboardoff">Masquer</button></div>`;
+}
+
+/* ---------- Notifications push ---------- */
+const isStandalone=()=>window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const isIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent);
+const b64u=s=>{const p="=".repeat((4-s.length%4)%4),b=atob((s+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(b,c=>c.charCodeAt(0))};
+const subId=sub=>btoa(sub.endpoint).replace(/[^a-zA-Z0-9]/g,"").slice(-60);
+async function refreshPushState(){
+  let st;
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))st=isIOS()&&!isStandalone()?"install":"unsupported";
+  else if(Notification.permission==="denied")st="denied";
+  else{const reg=await navigator.serviceWorker.getRegistration("/");const sub=reg&&await reg.pushManager.getSubscription();st=sub?"on":"off"}
+  if(st!==S.pushState){S.pushState=st;if(S.view==="reglages")render()}
+}
+async function enablePush(){
+  if(!S.push.publicKey){toast("Les notifications seront prêtes après le prochain passage des agents (10 min)");return}
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted"){await refreshPushState();toast("Notifications refusées");return}
+  const reg=await navigator.serviceWorker.register("/sw.js");await navigator.serviceWorker.ready;
+  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(S.push.publicKey)});
+  await save("pushSubs",subId(sub),{sub:JSON.parse(JSON.stringify(sub)),email:S.user&&S.user.email||"",ua:navigator.userAgent.slice(0,160),createdAt:Date.now()});
+  reg.showNotification("Notifications activées",{body:"Vous serez prévenus des nouvelles propositions et des analyses terminées.",icon:"/icon.svg"});
+  await refreshPushState();
+}
+async function disablePush(){
+  const reg=await navigator.serviceWorker.getRegistration("/");const sub=reg&&await reg.pushManager.getSubscription();
+  if(sub){await remove("pushSubs",subId(sub));await sub.unsubscribe()}
+  await refreshPushState();toast("Notifications coupées sur ce téléphone");
+}
+function pushPanel(){
+  const st=S.pushState;
+  const txt={on:"Activées sur ce téléphone. Vous êtes prévenus des nouvelles propositions de l'assistant et des analyses terminées.",
+    off:"Recevez une notification quand l'assistant trouve un devis ou un rendez-vous dans vos mails, ou quand une analyse est terminée.",
+    install:"Sur iPhone, les notifications ne marchent que depuis l'app installée : Safari → Partager → « Sur l'écran d'accueil », puis ouvrez l'app depuis son icône et revenez ici.",
+    denied:"Les notifications sont bloquées pour cette app. Réautorisez-les dans les réglages du téléphone (Notifications → Mariage), puis revenez ici.",
+    unsupported:"Ce navigateur ne gère pas les notifications push.",null:"Vérification…"}[st];
+  return `<div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Notifications</h3>${st==="on"?'<span class="chip ok">Activées</span>':""}</div>
+    <p class="plan-when" style="margin:0 0 12px">${txt}</p>
+    ${st==="off"?`<button class="btn primary" data-act="pushon" ${S.canWrite?"":"disabled"}>Activer sur ce téléphone</button>`:st==="on"?`<button class="btn" data-act="pushoff">Couper sur ce téléphone</button>`:""}</div>`;
+}
 const THEME_KEY="mariage-theme";
 const themePref=()=>{try{const t=localStorage.getItem(THEME_KEY);return t==="light"||t==="dark"?t:"auto"}catch(e){return "auto"}};
 function applyTheme(t){
@@ -931,7 +988,8 @@ const SCHEMAS={
     {k:"acomptePaye",label:"Acompte versé",type:"check"},
     {k:"soldePaye",label:"Solde versé",type:"check"},
     {row:[{k:"contact",label:"Contact (nom, e-mail, site)",type:"text"},{k:"tel",label:"Téléphone",type:"text"}]},
-    {k:"note",label:"Notes",type:"textarea"}]},
+    {k:"note",label:"Notes",type:"textarea"},
+    {k:"visitNotes",label:"Notes de visite ou d'échange (l'IA en tient compte et recalcule la note)",type:"textarea"}]},
   schedule:{one:"le moment",fields:[
     {row:[{k:"time",label:"Heure",type:"time"},{k:"title",label:"Moment",type:"text",req:1}]},
     {row:[{k:"lieu",label:"Lieu",type:"text"},{k:"qui",label:"Qui est concerné",type:"text"}]},
@@ -977,10 +1035,11 @@ function openEditor(col,id){
     });
     delete out._ev;delete out.template;
     if(col==="tasks"&&isNew){const same=S.tasks.filter(t=>t.phase===out.phase);out.order=same.reduce((m,t)=>Math.max(m,t.order||0),0)+1}
+    if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim())out.fitRequestedAt=Date.now();
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
     const ok=await save(col,id,out);
-    if(ok){closeModal();toast(isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
+    if(ok){closeModal();toast(out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000?"Enregistré : la note sera recalculée d'ici 15 minutes":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
   });
   const del=form.querySelector('[data-act="del"]');
   if(del)del.addEventListener("click",async ev=>{
@@ -1072,6 +1131,19 @@ document.addEventListener("click",async e=>{
   if(a==="unseat"){if(S.canWrite)await patch("guests",id,{table:""});return}
   if(a==="bulk"){if(S.canWrite)openBulk();return}
   if(a==="csv"){exportCSV();return}
+  if(a==="chat"){openChat(t.dataset.m||null);return}
+  if(a==="chatsugg"){sendChat(t.dataset.t);return}
+  if(a==="chatundo"){if(S.canWrite)await undoChat(+t.dataset.i);return}
+  if(a==="chatmode"){S.chat.mode=t.dataset.m;renderChat();if(t.dataset.m==="brief")sendChat("Commençons le questionnaire Nos envies.");return}
+  if(a==="chatreset"){if(S.chat.busy)return;S.chat.messages=[];renderChat();try{await callAssistant({reset:true})}catch(e){}return}
+  if(a==="onboardoff"){try{localStorage.setItem("mariage-onboard-off","1")}catch(e){}render();return}
+  if(a==="pushon"){t.disabled=true;try{await enablePush()}catch(err){toast("Activation impossible : "+(err.message||err));t.disabled=false}return}
+  if(a==="pushoff"){t.disabled=true;try{await disablePush()}catch(err){toast("Échec : "+(err.message||err));t.disabled=false}return}
+  if(a==="compare"){openCompare(t.dataset.cat);return}
+  if(a==="acceptall"){if(!S.canWrite)return;const ids=pendingSugs().map(x=>x.id);
+    if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent=`Confirmer : valider les ${ids.length}`;setTimeout(()=>{if(t.isConnected){t.classList.remove("armed");t.textContent="Tout valider"}},5000);return}
+    t.disabled=true;t.textContent="Validation…";let n=0;for(const x of ids)if(await acceptSug(x,true))n++;
+    toast(n===ids.length?`${n} propositions ajoutées`:`${n} sur ${ids.length} ajoutées, les autres restent à valider`);return}
   if(a==="accept"){if(S.canWrite){t.disabled=true;await acceptSug(id)}return}
   if(a==="dismiss"){if(S.canWrite&&await patch("inbox",id,{status:"dismissed",decidedAt:Date.now()}))toast("Ignoré");return}
   if(a==="restore"){if(S.canWrite)await patch("inbox",id,{status:"new"});return}
@@ -1088,7 +1160,9 @@ function renderInvitesPart(){
   document.querySelectorAll('[data-f^="g"]').forEach(b=>b.setAttribute("aria-pressed",S.f[b.dataset.f]===b.dataset.v));
   if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
-document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}});
+document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
+  if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px"}});
+document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
   const el=e.target;
   if(el.id==="hide-done"){S.f.hideDone=el.checked;saveF();render();return}
@@ -1099,6 +1173,7 @@ document.addEventListener("focusout",()=>{setTimeout(()=>{if(S.pending&&!(docume
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.fiche){e.preventDefault();openFiche(e.target.dataset.fiche)}});
 document.addEventListener("submit",async e=>{
   const f=e.target;
+  if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";await sendChat(v);ta.focus();return}
   if(f.id==="settings-form"){
     e.preventDefault();
     const d={updatedAt:Date.now()};["date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
@@ -1170,7 +1245,8 @@ function boot(){
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
-    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");
+    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");
+    db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});
     COLS.forEach(c=>{
       unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));
     });

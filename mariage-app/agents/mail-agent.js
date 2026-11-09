@@ -6,6 +6,7 @@ import { gmailClient, recentThreads, threadUrl } from "./lib/gmail.js";
 import { runForOutput } from "./lib/claude.js";
 import { TYPES, cleanPayload, cleanSubject } from "./lib/validate.js";
 import { parisClock } from "./lib/scheduler.js";
+import { notify } from "./lib/push.js";
 
 const COUPLE = (process.env.COUPLE_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 const SYSTEM = readFileSync(new URL("./prompts/mail.md", import.meta.url), "utf8")
@@ -128,6 +129,9 @@ export async function runMailAgent({ log = console.log } = {}) {
   }
 
   if (writes.length) await batchWrite(writes);
+  const nb = Object.values(stats).reduce((a, b) => a + b, 0);
+  if (nb) await notify({ title: `${nb} nouvelle${nb > 1 ? "s" : ""} proposition${nb > 1 ? "s" : ""} à valider`,
+    body: "L'assistant e-mails a repéré des devis, rendez-vous ou tâches dans vos mails.", url: "/#assistant", tag: "mail" }, { log });
   await mergeMeta("agent", { lastRun: parisClock().isoDate, lastRunAt: Date.now(), status: "actif" });
   const summary = { mailsLus: read, propositions: stats, ignores: ignored };
   log(JSON.stringify(summary));
