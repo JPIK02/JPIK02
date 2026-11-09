@@ -761,7 +761,7 @@ function briefsPanel(c){
     <p class="plan-when" style="margin:0 0 12px">${running?"Le coach rédige vos briefs : un fil rouge commun puis un brief par prestataire. Environ deux minutes, vous recevrez une notification."
       :ready?`${esc(b.filRouge.titre||"")}${b.filRouge.titre?" · ":""}rédigés le ${esc(when)}.${stale?" Vos réponses ou vos inspirations ont changé depuis.":""} Le même fil rouge ouvre chaque brief : tous vos prestataires partent de la même vision.`
       :"Le coach compile vos réponses et vos inspirations en un fil rouge commun (ambiance, palette, matières, ce que vous ne voulez pas), puis en un brief par prestataire, avec les questions à leur poser. À envoyer en PDF avant chaque échange."}</p>
-    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
+    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
       ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
 }
 const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
@@ -793,9 +793,7 @@ function pdfBriefs(k){
 }
 function vEnvies(){
   const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
-  const chatCta=S.canWrite?`<div class="chat-cta"><div><b>Plus simple : répondez en discutant avec le coach</b><span>Il vous pose les questions une par une et remplit le questionnaire pour vous.</span></div><button class="btn primary" data-act="chat" data-m="brief">Commencer l'entretien</button></div>`:"";
   const pr=S.profil||{};
-  const nav=`<nav class="env-nav" aria-label="Catégories du questionnaire">${QCATS.map(x=>{const p=catProg(x.k);return `<button data-bcat="${x.k}" aria-current="${x.k===c}"><span>${x.label}</span><span class="pbar" title="${p.n}/${p.t}"><i style="width:${p.p*100}%"></i></span></button>`}).join("")}</nav>`;
   const qhtml=cat.qs.map(([id,type,q,opts],i)=>{
     const a=bGet(c,id),done=answered(a),base=`search-q-${c}-${id}`;
     const choix=Array.isArray(a.choix)?a.choix:[];
@@ -814,16 +812,68 @@ function vEnvies(){
     <p>${esc(pr.resume)}</p>
     ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">Claire :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">Julien :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
     ${Array.isArray(pr.questionsOuvertes)&&pr.questionsOuvertes.length?`<h3 class="sec" style="margin-top:14px">Ce qu'il nous manque pour bien choisir</h3><ul class="blist">${pr.questionsOuvertes.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}</div>`:"";
-  const tot=allProg();
-  return `<div class="vh"><div><h2>Nos envies</h2><p>Le questionnaire de votre wedding planner. Répondez ensemble ; quand vos avis diffèrent, chacun écrit le sien. Tout s'enregistre dès que vous quittez un champ.</p></div><span class="chip ${tot>=.7?"ok":"gold"} num" style="font-size:13px;padding:6px 12px">${Math.round(tot*100)} % rempli</span></div>
-  ${chatCta}${analyseBar("envies")}${synth}${briefsPanel(c)}
-  <div class="env">${nav}<section style="min-width:0">${inspGallery(c)}
-    <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p></div>
-    <div class="qs">${qhtml}${metaH}</div>
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:18px;flex-wrap:wrap">${(()=>{const i=QCATS.findIndex(x=>x.k===c);return `${i>0?`<button class="btn" data-bcat="${QCATS[i-1].k}">← ${esc(QCATS[i-1].label)}</button>`:"<span></span>"}${i<QCATS.length-1?`<button class="btn primary" data-bcat="${QCATS[i+1].k}">${esc(QCATS[i+1].label)} →</button>`:""}`})()}</div>
-  </section></div>`;
+  const tot=allProg(),tab=["mood","quest","synth"].includes(S.f.envTab)?S.f.envTab:(S.inspirations.length?"mood":"quest");
+  const fr=(S.briefs||{}).filRouge||{},anyAns=S.brief.some(d=>answered(d));
+  const firstSentence=t=>String(t||"").split(/(?<=[.!?])\s/)[0];
+  const hero=`<div class="env-hero"><div class="eh-top"><div style="min-width:0"><span class="eh-k">Nos envies</span><h2>${esc(fr.titre||"Votre mariage, en images et en mots")}</h2>
+      ${fr.motsCles&&fr.motsCles.length?`<div class="eh-tags">${fr.motsCles.slice(0,5).map(x=>`<span>${esc(x)}</span>`).join("")}</div>`:`<p>${esc(pr.resume?firstSentence(pr.resume):"Tout ce qui fait votre mariage au même endroit : vos photos coup de cœur, vos réponses au coach et ce qu'il en retient pour vos prestataires.")}</p>`}</div>
+      <div class="eh-ring" title="Questionnaire rempli à ${Math.round(tot*100)} %">${ring(tot,"var(--gold)")}</div></div>
+    ${S.canWrite?`<div class="eh-acts"><button class="btn eh-main" data-act="chatcat" data-c="">${anyAns?"Continuer avec le coach":"Parler au coach"}</button><button class="btn eh-ghost" data-act="inspadd">+ Photo</button></div>`:""}</div>`;
+  const nI=S.inspirations.length;
+  const tabs=`<div class="seg env-tabs" role="tablist" aria-label="Nos envies">${[["mood",`Moodboard${nI?` <span class="num">${nI}</span>`:""}`],["quest",`Questions <span class="num">${Math.round(tot*100)} %</span>`],["synth","Synthèse"]].map(([k,l])=>`<button role="tab" data-act="envtab" data-v="${k}" aria-selected="${tab===k}" aria-pressed="${tab===k}">${l}</button>`).join("")}</div>`;
+  let body="";
+  if(tab==="mood")body=moodboard();
+  else if(tab==="synth")body=`${analyseBar("envies")}${synth||`<div class="synth"><p class="plan-when" style="margin:0">La synthèse du coach apparaîtra ici dès que vous aurez répondu à quelques questions : vos priorités, vos points d'accord et ce qu'il reste à trancher.</p></div>`}${briefsPanel(null)}`;
+  else if(!S.f.bcatOpen)body=questGrid();
+  else{
+    const i=QCATS.findIndex(x=>x.k===c),p=catProg(c);
+    body=`<div class="env-detail"><button class="link env-back" data-act="envgrid">${BACK_SVG}<span>Toutes les catégories</span></button>
+      <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p><div class="eh-prog"><span class="pbar"><i style="width:${p.p*100}%"></i></span><span>${p.n}/${p.t} réponses</span></div></div>
+      ${inspStrip(c)}
+      ${briefsState().ready&&S.briefs.categories[c]?`<div class="env-brief"><span>Le brief « ${esc(BRIEF_LABEL[c])} » est prêt à envoyer à vos prestataires.</span><button class="btn sm" data-act="briefpdf" data-c="${c}">Brief PDF</button></div>`:""}
+      ${S.canWrite?`<div class="chat-cta"><div><b>Plus simple : en discutant</b><span>Le coach vous pose les questions de « ${esc(cat.label)} » une par une et remplit pour vous.</span></div><button class="btn primary" data-act="chatcat" data-c="${c}">Remplir avec le coach</button></div>`:""}
+      <div class="qs">${qhtml}${metaH}</div>
+      <div class="env-pn">${i>0?`<button class="btn" data-bcat="${QCATS[i-1].k}">← ${esc(QCATS[i-1].label)}</button>`:"<span></span>"}${i<QCATS.length-1?`<button class="btn primary" data-bcat="${QCATS[i+1].k}">${esc(QCATS[i+1].label)} →</button>`:""}</div></div>`;
+  }
+  return `${hero}${tabs}<div class="env-body">${body}</div>`;
 }
-
+/* Moodboard : toutes les inspirations en mur de photos, filtrables par catégorie ; un toucher ouvre la photo en grand */
+const inspSorted=()=>S.inspirations.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+const moodList=()=>{const f=S.f.moodCat||"all";return inspSorted().filter(x=>f==="all"||x.cat===f)};
+function moodboard(){
+  const all=inspSorted(),f=QC[S.f.moodCat]?S.f.moodCat:"all",list=moodList();
+  if(!all.length)return `<div class="mood-empty"><b>Votre moodboard est vide</b><p>Ajoutez une photo de lieu, de déco, de tenue ou de fleurs qui vous plaît : le coach la décrit, en tire vos goûts et la range ici. Vous pouvez aussi relier un tableau Pinterest.</p>
+    ${S.canWrite?`<div class="eh-acts"><button class="btn primary" data-act="inspadd">Ajouter une photo</button><button class="btn" data-go="reglages-ia">Relier Pinterest</button></div>`:""}</div>`;
+  const cats=QCATS.filter(q=>all.some(x=>x.cat===q.k));
+  const chips=`<div class="mood-f" role="group" aria-label="Filtrer par catégorie"><button class="chip" data-act="moodcat" data-v="all" aria-pressed="${f==="all"}">Tout · ${all.length}</button>${cats.map(q=>`<button class="chip" data-act="moodcat" data-v="${q.k}" aria-pressed="${f===q.k}">${esc(q.label)} · ${all.filter(x=>x.cat===q.k).length}</button>`).join("")}</div>`;
+  const tiles=list.map(x=>`<button class="mood-i" data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"><span class="mood-c">${esc((QC[x.cat]||{}).label||"")}${x.source==="pinterest"?" · Pinterest":""}</span></button>`).join("");
+  return `${chips}<div class="mood">${S.canWrite?`<button class="mood-add" data-act="inspadd"><span aria-hidden="true">+</span>Ajouter une photo</button>`:""}${tiles}</div>
+    <p class="plan-when mood-n">Touchez une photo pour la voir en grand, la changer de catégorie ou en parler au coach.${S.pinterest&&(S.pinterest.boards||[]).length?"":` <button class="link" data-go="reglages-ia">Relier un tableau Pinterest</button>`}</p>`;
+}
+function inspStrip(c){
+  const list=inspSorted().filter(x=>x.cat===c);
+  if(!list.length&&!S.canWrite)return "";
+  return `<div class="strip-insp"><div class="insp-h"><h3>Inspirations${list.length?` · ${list.length}`:""}</h3></div><div class="strip-row">
+    ${S.canWrite?`<button class="mood-add sm" data-act="inspadd"><span aria-hidden="true">+</span>Photo</button>`:""}
+    ${list.map(x=>`<button class="strip-i" data-act="inspopen" data-id="${x.id}" data-scope="${c}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"></button>`).join("")}
+    ${!list.length?`<p class="plan-when" style="margin:0;align-self:center">Une photo vaut mieux qu'un long discours : montrez au coach ce qui vous plaît.</p>`:""}</div></div>`;
+}
+function questGrid(){
+  return `<div class="qcats">${QCATS.map(q=>{const p=catProg(q.k),m=bMeta(q.k),th=inspSorted().filter(x=>x.cat===q.k).slice(0,3);
+    return `<button class="qcat ${p.p>=1?"done":""}" data-bcat="${q.k}"><span class="qcat-img ${th.length?"":"none"}">${th.length?th.map(x=>`<img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy">`).join(""):`<span>${esc(q.label.charAt(0))}</span>`}</span>
+      <span class="qcat-b"><b>${esc(q.label)}</b><span class="qcat-s">${p.p>=1?"Complet":`${p.n}/${p.t} réponses`}${m.importance>=4?` · ${esc(IMPORT[m.importance-1])}`:""}</span><span class="pbar"><i style="width:${p.p*100}%"></i></span></span></button>`}).join("")}</div>`;
+}
+/* Visionneuse d'une inspiration : grande photo, description, catégorie, source, en parler au coach */
+function openInsp(id,scope){
+  const list=scope?inspSorted().filter(x=>x.cat===scope):moodList(),i=list.findIndex(x=>x.id===id),x=list[i];if(!x)return;
+  const nav=(d,l)=>list[i+d]?`<button class="lb-arrow ${d<0?"prev":"next"}" data-act="inspopen" data-id="${list[i+d].id}" ${scope?`data-scope="${scope}"`:""} aria-label="${l}">${d<0?"‹":"›"}</button>`:"<span></span>";
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal lb" role="dialog" aria-modal="true" aria-label="Inspiration">
+    <div class="lb-img"><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description||"")}">${nav(-1,"Photo précédente")}${nav(1,"Photo suivante")}</div>
+    <p class="lb-n">${i+1} / ${list.length}${x.by?` · ${esc(x.by)}`:""}${x.pinUrl?` · <a href="${esc(x.pinUrl)}" target="_blank" rel="noopener noreferrer">Voir sur Pinterest</a>`:""}</p>
+    <p class="lb-d">${esc(x.description||"")}</p>
+    ${S.canWrite?`<div class="field"><label for="search-insp-cat">Catégorie</label><select id="search-insp-cat" data-inspcat="${x.id}">${QCATS.map(q=>`<option value="${q.k}" ${q.k===x.cat?"selected":""}>${esc(q.label)}</option>`).join("")}</select></div>
+    <div class="lb-acts"><button class="btn primary" data-act="inspask" data-id="${x.id}">En parler au coach</button><button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button></div>`:""}</div></div>`;
+}
 /* ---------- Day-of ---------- */
 const dayKey=t=>{if(!t)return "99";const h=+String(t).slice(0,2);return (h<6?String(h+24):String(h).padStart(2,"0"))+String(t).slice(2)};
 const scheduleRows=()=>S.schedule.slice().sort((a,b)=>dayKey(a.time).localeCompare(dayKey(b.time)));
@@ -1502,8 +1552,8 @@ document.addEventListener("click",async e=>{
   if(t.dataset.close){if(e.target===t||t.tagName==="BUTTON")closeModal();return}
   if(t.dataset.go){go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
-  if(t.dataset.bgo){S.f.bcat=t.dataset.bgo;saveF();go("envies");return}
-  if(t.dataset.bcat){S.f.bcat=t.dataset.bcat;saveF();render();const n=document.querySelector(".env");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView({behavior:"smooth"});return}
+  if(t.dataset.bgo){S.f.bcat=t.dataset.bgo;S.f.envTab="quest";S.f.bcatOpen=true;saveF();go("envies");return}
+  if(t.dataset.bcat){S.f.bcat=t.dataset.bcat;S.f.envTab="quest";S.f.bcatOpen=true;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView({behavior:"smooth"});return}
   if(t.dataset.bchip){if(!S.canWrite)return;const [c,q,type]=t.dataset.bchip.split("|"),o=t.dataset.o;const cur=Array.isArray(bGet(c,q).choix)?bGet(c,q).choix.slice():[];let next;if(type==="c")next=cur.includes(o)?[]:[o];else next=cur.includes(o)?cur.filter(x=>x!==o):cur.concat(o);t.setAttribute("aria-pressed",next.includes(o));await saveBrief(c,q,{choix:next});return}
   if(t.dataset.bimp){if(!S.canWrite)return;const [c,n]=t.dataset.bimp.split("|");await saveBrief(c,"_meta",{importance:+n});return}
   if(t.dataset.who){S.f.owner=t.dataset.who;S.f.hideDone=true;saveF();go("planning");return}
@@ -1526,6 +1576,16 @@ document.addEventListener("click",async e=>{
     if(await patch("tasks",A.id,{status:st,note,due:A.due||B.due||null})&&await remove("tasks",B.id))toast("Tâches fusionnées");return}
   if(a==="dupkeep"){if(S.canWrite&&await mergeDoc("meta/prefs",{notDupes:[...(S.prefs.notDupes||[]),t.dataset.k]}))toast("C'est noté");return}
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
+  if(a==="envtab"){S.f.envTab=t.dataset.v;if(t.dataset.v==="quest")S.f.bcatOpen=false;saveF();render();return}
+  if(a==="envgrid"){S.f.bcatOpen=false;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView();return}
+  if(a==="moodcat"){S.f.moodCat=t.dataset.v;saveF();render();return}
+  if(a==="inspopen"){openInsp(t.dataset.id,t.dataset.scope);return}
+  if(a==="inspask"){const x=S.inspirations.find(y=>y.id===t.dataset.id);if(!x)return;
+    S.chat.atts=[{media_type:"image/jpeg",data:x.thumb,name:"inspiration.jpg",preview:"data:image/jpeg;base64,"+x.thumb}];
+    closeModal();await openChat("chat","Que penses-tu de cette inspiration pour notre mariage ? ");renderAtt();return}
+  if(a==="chatcat"){const c=t.dataset.c;if(!S.canWrite)return;
+    if(!c){openChat("brief");return}
+    S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
   if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
   if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
@@ -1555,7 +1615,7 @@ document.addEventListener("click",async e=>{
   if(a==="homephoto"){openChat("chat");setTimeout(()=>document.getElementById("chat-file")?.click(),50);return}
   if(a==="chatfile"){document.getElementById("chat-file")?.click();return}
   if(a==="chatattx"){(S.chat.atts||[]).splice(+t.dataset.i,1);renderAtt();return}
-  if(a==="inspdel"){if(!S.canWrite)return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer";return}if(await remove("inspirations",id))toast("Inspiration retirée");return}
+  if(a==="inspdel"){if(!S.canWrite)return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer";return}if(await remove("inspirations",id)){if(document.querySelector(".modal.lb"))closeModal();toast("Inspiration retirée")};return}
   if(a==="inspadd"){openChat("brief");setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
   if(a==="chatmic"){toggleMic(t);return}
   if(a==="mailcopy"){const m=mailOf((S.chat.messages[+t.dataset.i]||{}).text);if(!m)return;const txt=`Objet : ${m.subject}\n\n${m.body}`;try{await navigator.clipboard.writeText(txt);toast("Mail copié")}catch(e){toast("Copie impossible : sélectionnez le texte")}return}
@@ -1603,6 +1663,7 @@ document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.val
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
   const el=e.target;
+  if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
   if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
     // curseur directement sous la photo pour la commenter (sans faire remonter la conversation)
