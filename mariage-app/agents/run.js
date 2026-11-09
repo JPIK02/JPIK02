@@ -3,10 +3,11 @@
 //   node agents/run.js mail       → force l'agent e-mails
 //   node agents/run.js analyse    → force l'agent d'analyse
 import { getMeta, listAll } from "./lib/firestore.js";
-import { DEFAULT_PLANS, shouldRun, profilDue, vendorsRequested } from "./lib/scheduler.js";
+import { DEFAULT_PLANS, shouldRun, profilDue, vendorsRequested, hebdoDue } from "./lib/scheduler.js";
 import { runMailAgent } from "./mail-agent.js";
 import { runAnalyseAgent, runProfil } from "./analyse-agent.js";
 import { ensureVapid } from "./lib/push.js";
+import { runHebdo, runVisitFollowups } from "./hebdo-agent.js";
 
 const forced = process.argv[2];
 const JOBS = { mail: { meta: "agent", run: runMailAgent }, analyse: { meta: "analyse", run: runAnalyseAgent } };
@@ -37,5 +38,11 @@ if (!forced && !ran.has("analyse")) {
     console.log("[profil] → mise à jour de la synthèse (envies ou réglages modifiés)");
     try { await runProfil(); } catch (e) { failed = true; console.error("[profil] échec :", e); }
   }
+}
+// Coach proactif : point du lundi (ou demandé depuis l'app) et relance le soir des visites.
+if (!forced || forced === "hebdo") {
+  try { if (forced === "hebdo" || hebdoDue(await getMeta("hebdo"))) { console.log("[hebdo] → point de la semaine"); await runHebdo(); } }
+  catch (e) { failed = true; console.error("[hebdo] échec :", e); }
+  try { await runVisitFollowups(); } catch (e) { console.error("[visites] échec :", e.message); }
 }
 process.exit(failed ? 1 : 0);

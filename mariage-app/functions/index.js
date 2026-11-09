@@ -7,7 +7,7 @@ import { getFirestore } from "firebase-admin/firestore";
 import Anthropic from "@anthropic-ai/sdk";
 import { TOOL_DEFS, makeTools } from "./tools.js";
 import { systemPrompt } from "./prompt.js";
-import { converse } from "./converse.js";
+import { converse, userContent } from "./converse.js";
 import { QCATS } from "./questions.js";
 
 initializeApp();
@@ -25,11 +25,14 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email))
     throw new HttpsError("permission-denied", "Coach réservé à Claire et Julien.");
-  const { message, mode = "chat", view = "", reset = false } = req.data || {};
+  const { message, mode = "chat", view = "", reset = false, attachment = null } = req.data || {};
   const chatRef = db.doc(`chats/${email}`);
   if (reset && !message) { await chatRef.set({ messages: [], updatedAt: Date.now() }); return { ok: true }; }
-  if (typeof message !== "string" || !message.trim() || message.length > 4000)
+  if (typeof message !== "string" || (!message.trim() && !attachment) || message.length > 4000)
     throw new HttpsError("invalid-argument", "Message vide ou trop long.");
+  let content;
+  try { content = userContent(message, attachment); } catch (e) { throw new HttpsError("invalid-argument", e.message); }
+  const shown = (message.trim() || "") + (attachment ? `${message.trim() ? " " : ""}[${attachment.media_type === "application/pdf" ? "PDF joint" : "photo jointe"}]` : "");
 
   // Garde-fou : nombre de messages par jour
   const today = new Date().toISOString().slice(0, 10);
@@ -41,7 +44,7 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   });
 
   const past = reset ? [] : ((await chatRef.get()).data()?.messages || []);
-  const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content: message.trim() }];
+  const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content }];
   const exec = makeTools(db, { qcats: QCATS });
   const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
@@ -49,7 +52,7 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const { text, actions } = await converse({ client, model: MODEL, system, tools: TOOL_DEFS, messages, exec, effort: mode === "brief" ? "medium" : "low" });
 
   // On garde de quoi annuler les 10 derniers messages ; au-delà, seulement le libellé des actions (taille du document).
-  const history = [...past, { role: "user", text: message.trim(), at: Date.now() }, { role: "assistant", text, actions, at: Date.now() }].slice(-60)
+  const history = [...past, { role: "user", text: shown, at: Date.now() }, { role: "assistant", text, actions, at: Date.now() }].slice(-60)
     .map((m, i, arr) => (i < arr.length - 10 && m.actions ? { ...m, actions: m.actions.map(({ label, undone }) => ({ label, ...(undone ? { undone } : {}) })) } : m));
   await chatRef.set({ messages: history, mode, updatedAt: Date.now() });
   return { text, actions };

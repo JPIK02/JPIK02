@@ -26,3 +26,19 @@ export async function converse({ client, model, system, tools, messages, exec, m
   if (!text) text = actions.length ? "C'est fait." : "Je n'ai pas réussi à répondre, pouvez-vous reformuler ?";
   return { text, actions };
 }
+
+// Pièce jointe (photo ou PDF d'un devis, d'une plaquette…) : bloc image ou document pour Claude.
+const MEDIA = { "image/jpeg": "image", "image/png": "image", "image/webp": "image", "image/gif": "image", "application/pdf": "document" };
+export const MAX_ATTACHMENT_B64 = 8_000_000; // ≈ 6 Mo une fois décodé
+export function userContent(message, attachment) {
+  const text = String(message || "").trim();
+  if (!attachment) return text;
+  const kind = MEDIA[attachment.media_type];
+  if (!kind) throw new Error("Format non pris en charge : photo (JPEG, PNG) ou PDF.");
+  if (typeof attachment.data !== "string" || !attachment.data || attachment.data.length > MAX_ATTACHMENT_B64)
+    throw new Error("Fichier trop lourd (6 Mo au plus).");
+  return [
+    { type: kind, source: { type: "base64", media_type: attachment.media_type, data: attachment.data } },
+    { type: "text", text: text || "Voici un document : dis-moi ce qu'il contient d'utile pour notre mariage." },
+  ];
+}
