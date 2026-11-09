@@ -25,3 +25,13 @@ test("refus : réponse polie, rien d'autre", async () => {
   const out = await converse({ client, model: "m", system: "s", tools: [], messages: [{ role: "user", content: "?" }], exec: async () => ({}) });
   assert.match(out.text, /ne peux pas/);
 });
+
+import { userContent } from "../converse.js";
+test("pièce jointe : image et PDF acceptés, autres formats refusés", () => {
+  assert.equal(userContent(" bonjour "), "bonjour");
+  const img = userContent("", { media_type: "image/jpeg", data: "AAAA" });
+  assert.equal(img[0].type, "image"); assert.equal(img[0].source.media_type, "image/jpeg"); assert.match(img[1].text, /document/);
+  assert.equal(userContent("devis", { media_type: "application/pdf", data: "AAAA" })[0].type, "document");
+  assert.throws(() => userContent("x", { media_type: "text/html", data: "AAAA" }), /Format/);
+  assert.throws(() => userContent("x", { media_type: "image/png", data: "A".repeat(8_000_001) }), /lourd/);
+});

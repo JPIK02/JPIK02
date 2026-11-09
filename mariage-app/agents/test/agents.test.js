@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shouldRun, slotMatches, parisClock, vendorsToAnalyse, profilDue, vendorsRequested } from "../lib/scheduler.js";
+import { shouldRun, slotMatches, parisClock, vendorsToAnalyse, profilDue, vendorsRequested, isoWeek, hebdoDue, visitsToFollow } from "../lib/scheduler.js";
 import { cleanPayload, cleanSubject } from "../lib/validate.js";
 import { extractText, stripHtml } from "../lib/mailtext.js";
 
@@ -84,4 +84,21 @@ test("notes de visite : seuls les prestataires modifiés sont réanalysés", () 
   ];
   assert.deepEqual(vendorsRequested(vs).map(v => v.id), ["a"]);
   assert.deepEqual(vendorsToAnalyse(vs, 0, now).map(v => v.id), ["a"]);
+});
+
+test("point de la semaine : lundi 8 h, une fois par semaine, ou sur demande", () => {
+  assert.equal(isoWeek(new Date("2026-11-09T10:00:00Z")), "2026-W46");
+  assert.equal(isoWeek(new Date("2027-01-01T10:00:00Z")), "2026-W53");
+  assert.equal(hebdoDue({}, mondayParis7), false);                                   // lundi 7 h : trop tôt
+  const monday9 = new Date("2026-11-09T08:10:00Z");
+  assert.equal(hebdoDue({}, monday9), true);
+  assert.equal(hebdoDue({ week: "2026-W46", at: 1 }, monday9), false);              // déjà fait
+  assert.equal(hebdoDue({ week: "2026-W46", at: 1, requestedAt: 2 }, monday9), true); // redemandé
+});
+
+test("relance après visite : le soir même, une fois, si un prestataire est reconnu", () => {
+  const vendors = [{ id: "v", name: "Au Petit Manoir" }];
+  const rdv = [{ id: "a", date: "2026-11-22", title: "Visite Au Petit Manoir" }, { id: "b", date: "2026-11-22", title: "Coiffeur" }, { id: "c", date: "2026-11-22", avec: "Au Petit Manoir", followupAt: 1 }];
+  assert.deepEqual(visitsToFollow(rdv, vendors, { hour: 19, isoDate: "2026-11-22" }).map(x => x.r.id), ["a"]);
+  assert.deepEqual(visitsToFollow(rdv, vendors, { hour: 12, isoDate: "2026-11-22" }), []);
 });

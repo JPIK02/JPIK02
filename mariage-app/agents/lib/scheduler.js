@@ -65,3 +65,30 @@ export function profilDue(analyse = {}, profil = {}, now = Date.now(), quiet = 5
   const req = +analyse.profilRequestedAt || 0;
   return req > (+profil.updatedAt || 0) && now - req >= quiet;
 }
+
+/** Semaine ISO, ex. « 2026-W46 » (heure de Paris). */
+export function isoWeek(date = new Date()) {
+  const { isoDate } = parisClock(date);
+  const d = new Date(isoDate + "T12:00:00Z"), day = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - day + 3);
+  const y = d.getUTCFullYear(), jan4 = new Date(Date.UTC(y, 0, 4));
+  const w = 1 + Math.round(((d - jan4) / 864e5 - 3 + ((jan4.getUTCDay() + 6) % 7)) / 7);
+  return `${y}-W${String(w).padStart(2, "0")}`;
+}
+
+/** Point de la semaine : le lundi à partir de 8 h (Paris) s'il n'est pas encore fait, ou sur demande depuis l'app. */
+export function hebdoDue(hebdo = {}, now = new Date()) {
+  if ((+hebdo.requestedAt || 0) > (+hebdo.at || 0)) return true;
+  const c = parisClock(now);
+  return c.dow === 1 && c.hour >= 8 && hebdo.week !== isoWeek(now);
+}
+
+/** Visites du jour liées à un prestataire, à relancer à partir de 18 h (une seule fois). */
+export function visitsToFollow(rdvs, vendors, clock) {
+  if (clock.hour < 18) return [];
+  const fold = s => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return rdvs.filter(r => r.date === clock.isoDate && !r.followupAt).map(r => {
+    const v = vendors.find(x => fold(x.name) && (fold(r.avec) === fold(x.name) || fold(r.title).includes(fold(x.name))));
+    return v ? { r, v } : null;
+  }).filter(Boolean);
+}
