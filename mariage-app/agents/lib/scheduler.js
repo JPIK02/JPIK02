@@ -51,3 +51,12 @@ export function vendorsToAnalyse(vendors, requestedAt = 0, now = Date.now()) {
   return vendors.filter(v => v.status !== "ecarte" &&
     (!v.fit || !v.fit.updatedAt || now - v.fit.updatedAt > MONTH || (requestedAt && v.fit.updatedAt < requestedAt)));
 }
+
+/**
+ * La synthèse des envies est-elle à refaire ? Oui si l'app a signalé un changement (envies ou réglages)
+ * après la dernière synthèse, et que ce changement date d'au moins `quiet` (on attend la fin de la saisie).
+ */
+export function profilDue(analyse = {}, profil = {}, now = Date.now(), quiet = 5 * 60 * 1000) {
+  const req = +analyse.profilRequestedAt || 0;
+  return req > (+profil.updatedAt || 0) && now - req >= quiet;
+}
