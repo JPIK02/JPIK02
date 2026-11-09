@@ -771,3 +771,20 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 /* Cartes chiffrées : les grands montants ne débordent plus sur les petits écrans */
 .kpi>div{min-width:0}
 @media (max-width:760px){.kpi{padding:14px 14px 12px}.kpi .v{font-size:clamp(20px,6.4vw,28px);overflow-wrap:anywhere}.kpi .k,.kpi .s{font-size:13px}}
+/* Photos dans la conversation */
+.atts{display:flex;flex-direction:column;gap:6px;margin:4px 0 8px}
+#chat-att .atts .att{margin:0}
+.att-more{align-self:flex-start;font-size:14px;color:var(--accent);font-weight:700;background:none;border:0;cursor:pointer;padding:4px 0}
+.cm-thumbs{display:flex;gap:6px;margin-bottom:4px;justify-content:flex-end}
+.cm-thumbs img{width:72px;height:72px;object-fit:cover;border-radius:12px}
+/* Inspirations (Nos envies) */
+.insp{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:16px}
+.insp-h{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.insp-h h3{margin:0;font-size:16px;font-weight:700}
+.insp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.insp-grid figure{margin:0;display:flex;flex-direction:column;gap:4px}
+.insp-grid img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;background:var(--surface-2)}
+.insp-grid figcaption{font-size:13px;color:var(--ink);line-height:1.35;overflow-wrap:anywhere}
+.insp-grid figcaption span{color:var(--muted)}
+.insp-grid .link{align-self:flex-start;font-size:13px;color:var(--muted);background:none;border:0;cursor:pointer;padding:2px 0}
+.insp-grid .link.armed{color:var(--bad);font-weight:700}

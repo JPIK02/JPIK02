@@ -74,3 +74,12 @@ test("rendez-vous : date obligatoire et valide", async () => {
   assert.match((await exec("ajouter_rendez_vous", { titre: "Dégustation", date: "demain" })).content, /AAAA-MM-JJ/);
   assert.ok((await exec("ajouter_rendez_vous", { titre: "Dégustation", date: "2026-12-01", heure: "25:00" })).action);
 });
+
+test("inspiration : la miniature de la photo jointe est gardée, annulable", async () => {
+  const db = base(); const exec = makeTools(db, { qcats: QCATS, now, thumbs: ["THUMB1"], author: "Julien" });
+  const r = await exec("noter_inspiration", { photo: 1, categorie: "lieu", description: "Orangerie lumineuse, verrière, plantes" });
+  const op = r.action.ops[0];
+  assert.equal(op.before, null); assert.equal(db.data[op.path].thumb, "THUMB1"); assert.equal(db.data[op.path].cat, "lieu");
+  assert.match((await exec("noter_inspiration", { photo: 2, categorie: "lieu", description: "x" })).content, /introuvable/);
+  assert.match((await makeTools(base(), { qcats: QCATS })("noter_inspiration", { photo: 1, categorie: "lieu", description: "x" })).content, /aucune photo/);
+});

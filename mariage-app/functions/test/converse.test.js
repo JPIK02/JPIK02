@@ -30,8 +30,15 @@ import { userContent } from "../converse.js";
 test("pièce jointe : image et PDF acceptés, autres formats refusés", () => {
   assert.equal(userContent(" bonjour "), "bonjour");
   const img = userContent("", { media_type: "image/jpeg", data: "AAAA" });
-  assert.equal(img[0].type, "image"); assert.equal(img[0].source.media_type, "image/jpeg"); assert.match(img[1].text, /document/);
+  assert.equal(img[0].type, "image"); assert.equal(img[0].source.media_type, "image/jpeg"); assert.match(img[1].text, /photo/);
+  assert.match(userContent("", { media_type: "application/pdf", data: "AAAA" })[1].text, /document/);
   assert.equal(userContent("devis", { media_type: "application/pdf", data: "AAAA" })[0].type, "document");
   assert.throws(() => userContent("x", { media_type: "text/html", data: "AAAA" }), /Format/);
   assert.throws(() => userContent("x", { media_type: "image/png", data: "A".repeat(8_000_001) }), /lourd/);
+});
+
+test("plusieurs photos : 3 au plus, numérotées pour le coach", () => {
+  const c = userContent("on aime ça", [{ media_type: "image/jpeg", data: "AA" }, { media_type: "image/png", data: "BB" }]);
+  assert.equal(c.length, 3); assert.match(c[2].text, /2 pièces jointes/);
+  assert.throws(() => userContent("x", [1, 2, 3, 4].map(() => ({ media_type: "image/jpeg", data: "A" }))), /3 pièces/);
 });

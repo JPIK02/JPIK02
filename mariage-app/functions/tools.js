@@ -75,6 +75,9 @@ export const TOOL_DEFS = [
     choix: { type: "array", items: { type: "string" }, description: "options choisies, telles qu'écrites dans la question" }, desaccord: { type: "boolean" } }, ["categorie", "question"]) },
   { name: "enregistrer_priorites", description: "Importance (1 à 5), budget cible, critère de réussite et rédhibitoire d'une catégorie de « Nos envies ».", input_schema: S({
     categorie: T(""), importance: { type: "integer", minimum: 1, maximum: 5 }, budget: N("€"), reussite: T(""), redhibitoire: T("") }, ["categorie"]) },
+  { name: "noter_inspiration", description: "Garde une photo jointe à ce message comme inspiration dans « Nos envies » (catégorie), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
+    photo: { type: "integer", minimum: 1, maximum: 3, description: "numéro de la photo jointe (1 si une seule)" }, categorie: T("clé de catégorie, ex. lieu, fleurs, tenues, vision"),
+    description: T("ce que montre la photo et ce qui leur plaît : style, couleurs, matières, ambiance (2 phrases)") }, ["photo", "categorie", "description"]) },
   { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) au prochain passage de l'agent (10 à 15 min). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
 ];
 
@@ -85,7 +88,7 @@ const docs = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
  * @param {*} db  Firestore (Admin SDK ou faux en test) : doc(path).get/set/update, collection(c).get/doc()
  * @param {{qcats:Array, now?:Date}} ctx
  */
-export function makeTools(db, { qcats, now = new Date() }) {
+export function makeTools(db, { qcats, now = new Date(), thumbs = [], author = "" }) {
   const get = async path => { const s = await db.doc(path).get(); return s.exists ? s.data() : null; };
   const all = async c => docs(await db.collection(c).get());
   const settings = async () => (await get("meta/settings")) || {};
@@ -261,6 +264,15 @@ export function makeTools(db, { qcats, now = new Date() }) {
       const op = await write(`brief/${c.k}--_meta`, data);
       await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
       return { result: { ok: true }, action: { label: `Priorités notées : ${c.label}`, ops: [op] } };
+    },
+    async noter_inspiration(i) {
+      const c = QC[i.categorie]; if (!c) throw new Error(`catégorie inconnue : ${i.categorie}`);
+      const n = Number.isInteger(i.photo) ? i.photo : 1, thumb = thumbs[n - 1];
+      if (!thumb) throw new Error(thumbs.length ? `photo ${n} introuvable : ${thumbs.length} photo(s) jointe(s) à ce message` : "aucune photo n'est jointe à ce message");
+      const description = str(i.description, 600); if (!description) throw new Error("description manquante");
+      const { op, id } = await create("inspirations", { cat: c.k, description, thumb, by: author });
+      await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
+      return { result: { ok: true, id }, action: { label: `Inspiration gardée (${c.label})`, ops: [op] } };
     },
     async demander_analyse() {
       const op = await write("meta/analyse", { requestedAt: Date.now(), status: "demandée" });

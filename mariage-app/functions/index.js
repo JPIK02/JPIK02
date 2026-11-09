@@ -27,13 +27,16 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email))
     throw new HttpsError("permission-denied", "Coach réservé à Claire et Julien.");
   const { message, mode = "chat", view = "", reset = false, attachment = null } = req.data || {};
+  const atts = (Array.isArray(req.data?.attachments) ? req.data.attachments : attachment ? [attachment] : []).slice(0, 4);
   const chatRef = db.doc(`chats/${email}`);
   if (reset && !message) { await chatRef.set({ messages: [], updatedAt: Date.now() }); return { ok: true }; }
-  if (typeof message !== "string" || (!message.trim() && !attachment) || message.length > 4000)
+  if (typeof message !== "string" || (!message.trim() && !atts.length) || message.length > 4000)
     throw new HttpsError("invalid-argument", "Message vide ou trop long.");
   let content;
-  try { content = userContent(message, attachment); } catch (e) { throw new HttpsError("invalid-argument", e.message); }
-  const shown = (message.trim() || "") + (attachment ? `${message.trim() ? " " : ""}[${attachment.media_type === "application/pdf" ? "PDF joint" : "photo jointe"}]` : "");
+  try { content = userContent(message, atts); } catch (e) { throw new HttpsError("invalid-argument", e.message); }
+  const nPdf = atts.filter(a => a.media_type === "application/pdf").length, nImg = atts.length - nPdf;
+  const tag = [nImg ? (nImg > 1 ? `${nImg} photos jointes` : "photo jointe") : "", nPdf ? (nPdf > 1 ? `${nPdf} PDF joints` : "PDF joint") : ""].filter(Boolean).join(", ");
+  const shown = (message.trim() + (tag ? `${message.trim() ? " " : ""}[${tag}]` : "")).trim();
 
   // Garde-fou : nombre de messages par jour
   const today = new Date().toISOString().slice(0, 10);
@@ -46,7 +49,9 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
 
   const past = reset ? [] : ((await chatRef.get()).data()?.messages || []);
   const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content }];
-  const exec = makeTools(db, { qcats: QCATS });
+  // Miniatures envoyées par l'app (480 px) : le coach peut garder une photo comme inspiration (noter_inspiration)
+  const thumbs = atts.map(a => (typeof a.thumb === "string" && a.thumb.length < 400_000 ? a.thumb : null));
+  const exec = makeTools(db, { qcats: QCATS, thumbs, author: PRENOMS[email] || "" });
   const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
