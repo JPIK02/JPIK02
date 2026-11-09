@@ -820,7 +820,7 @@ function chatMsgsHTML(){
       ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`).join("");
   const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`:"";
   const intro=!c.messages.length?`<div class="chat-intro"><b>${c.mode==="brief"?"Entretien « Nos envies »":"Bonjour !"}</b><p>${c.mode==="brief"?"Je vous pose les questions du questionnaire une par une, en langage naturel, et je note vos réponses au fur et à mesure.":"Posez une question sur votre organisation, ou demandez-moi d'agir : ajouter une tâche, ranger des invités, noter un devis, préparer une visite… Chaque action s'annule d'un toucher."}</p></div>`:"";
-  return intro+msgs+(c.busy?'<div class="cm a"><div class="bub typing" aria-label="L\'assistant réfléchit"><i></i><i></i><i></i></div></div>':"")+sugg;
+  return intro+msgs+(c.busy?`<div class="cm a"><div class="bub typing" role="status"><i></i><i></i><i></i><span class="typing-l">${esc(c.busyLabel||"Je regarde vos données…")}</span></div></div>`:"")+sugg;
 }
 function renderChat(){
   const box=document.getElementById("chat-msgs");if(!box)return;
@@ -842,7 +842,10 @@ async function openChat(mode){
 }
 async function sendChat(text){
   const c=S.chat;text=String(text||"").trim();if(!text||c.busy||!S.canWrite)return;
-  c.messages.push({role:"user",text});c.busy=true;renderChat();
+  c.messages.push({role:"user",text});c.busy=true;c.busyLabel="Je regarde vos données…";renderChat();
+  // Libellé d'attente qui évolue (la réponse prend souvent 10 à 20 secondes)
+  const steps=["Je regarde vos données…","Je prépare la réponse…","Encore un instant…"];let k=0;
+  const tick=setInterval(()=>{if(!c.busy){clearInterval(tick);return}k=Math.min(k+1,steps.length-1);c.busyLabel=steps[k];const l=document.querySelector(".typing-l");if(l)l.textContent=steps[k]},6000);
   try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL()});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[]})}
   catch(e){const msg=e&&e.code==="functions/resource-exhausted"?e.message:e&&e.code==="functions/permission-denied"?"Assistant réservé à Claire et Julien.":e&&/not-found|internal|unavailable/.test(e.code||"")?"L'assistant n'est pas encore disponible (en cours d'installation) ou ne répond pas. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
     c.messages.push({role:"assistant",text:msg,actions:[],error:true})}

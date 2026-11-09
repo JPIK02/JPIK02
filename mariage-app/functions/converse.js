@@ -1,11 +1,11 @@
 // Boucle de conversation : Claude appelle des outils jusqu'à donner sa réponse. Testable (client injecté).
-export async function converse({ client, model, system, tools, messages, exec, maxTurns = 12 }) {
+export async function converse({ client, model, system, tools, messages, exec, maxTurns = 12, effort = "low" }) {
   const actions = [];
   let text = "";
   for (let turn = 0; turn < maxTurns; turn++) {
     const res = await client.beta.messages.create({
       model, max_tokens: 8000, system, tools, messages,
-      output_config: { effort: "medium" },
+      output_config: { effort },
       cache_control: { type: "ephemeral" },
       // En cas de refus par un filtre de sécurité, l'API relance d'elle-même sur un modèle de repli.
       betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
