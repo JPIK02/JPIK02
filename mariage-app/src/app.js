@@ -90,6 +90,8 @@ const fold=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u03
 const MOIS=["janvier","fevrier","mars","avril","mai","juin","juillet","aout","septembre","octobre","novembre","decembre"];
 // Catégorie de prestataire → poste de budget (par mots-clés du libellé du poste)
 const CAT_BUDGET={Lieu:/lieu|salle|reception|domaine/,Traiteur:/traiteur|repas|boisson/,Photographe:/photo/,"Vidéaste":/video/,Musique:/musique|dj|orchestre/,Fleuriste:/fleur|deco/,Tenues:/tenue|robe|costume|costard/,Alliances:/alliance/,"Coiffure & maquillage":/coiff|maquill/,Papeterie:/papeterie|faire.?part/,Transport:/transport/,Officiant:/ceremonie|officiant/,"Hébergement":/heberg/,"Animation enfants":/enfant|animation/};
+// Les notes importées d'Excel contiennent un « 20 % du budget » figé : on l'enlève, la part est calculée en direct
+const budgetNote=n=>String(n||"").replace(/\s*·?\s*\d+(?:[.,]\d+)?\s*%\s*du budget\s*·?\s*/gi," ").replace(/^\s*·\s*|\s*·\s*$/g,"").trim();
 const budgetLineFor=cat=>{const re=CAT_BUDGET[cat];return re?S.budget.find(b=>re.test(fold(b.label))):null};
 const lastBriefAt=()=>S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0);
 async function mergeDoc(path,data){try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
@@ -459,17 +461,20 @@ function vBudget(){
     <div class="kpi ${marge!==null&&marge<0?"":"t4"}" style="${marge!==null&&marge<0?"background:var(--bad-soft)":""}"><div><div class="k">Marge</div><div class="v num" style="${marge!==null&&marge<0?"color:var(--bad)":""}">${marge===null?"—":eur(marge)}</div><div class="s">${marge===null?"Selon le budget total":marge<0?"Au-dessus du budget":"Encore disponible"}</div></div></div>
   </div>`;
   const gap=resv-engage;
+  const ref=tot||prevu;
+  // Liste (lisible sur téléphone) : poste, part du budget calculée en direct, prévu à droite, engagé/payé en dessous
   const body=rows.map(b=>{
-    const over=num(b.engage)>num(b.prevu)&&num(b.prevu)>0;
-    return `<tr data-edit="budget" data-id="${b.id}"><td><div style="font-weight:500">${esc(b.label)}</div>${b.note?`<div style="font-size:13px;color:var(--muted)">${esc(b.note)}</div>`:""}</td>
-      <td class="r">${b.prevu?eur(b.prevu):'<span style="color:var(--muted)">—</span>'}</td><td class="r ${over?"over":""}">${b.engage?eur(b.engage):"—"}</td><td class="r">${b.paye?eur(b.paye):"—"}</td><td class="r">${num(b.engage)-num(b.paye)>0?eur(num(b.engage)-num(b.paye)):"—"}</td></tr>`;
+    const p=num(b.prevu),e=num(b.engage),pa=num(b.paye),over=e>p&&p>0;
+    const note=budgetNote(b.note),share=ref&&p?`${Math.round(p/ref*100)} % du budget`:"";
+    return `<div class="brow" data-edit="budget" data-id="${b.id}" role="button" tabindex="0">
+      <div class="brow-main"><div class="brow-t">${esc(b.label)}</div>${share||note?`<div class="brow-s">${esc([share,note].filter(Boolean).join(" · "))}</div>`:""}</div>
+      <div class="brow-end"><b class="num">${p?eur(p):'<span class="na">—</span>'}</b>${e||pa?`<span class="num ${over?"over":""}">${e?"engagé "+eur(e):""}${e&&pa?" · ":""}${pa?"payé "+eur(pa):""}</span>`:""}</div></div>`;
   }).join("");
   return `<div class="vh"><div><h2>Budget</h2><p>Prévu = enveloppe du poste · Engagé = devis signés · Payé = acomptes et soldes versés.</p></div>
     <button class="btn primary" data-new="budget" ${S.canWrite?"":"disabled"}>Ajouter un poste</button></div>
   ${strip}
   ${gap>0?`<div class="banner warn">Les prestataires réservés totalisent ${eur(resv)}, soit ${eur(gap)} de plus que l'engagé du budget. Pensez à reporter les devis signés.</div>`:""}
-  ${rows.length?`<div class="tbl-wrap"><table><thead><tr><th>Poste</th><th class="r">Prévu</th><th class="r">Engagé</th><th class="r">Payé</th><th class="r">Reste à payer</th></tr></thead><tbody>${body}</tbody>
-    <tfoot><tr><td>Total</td><td class="r">${eur(prevu)}</td><td class="r">${eur(engage)}</td><td class="r">${eur(paye)}</td><td class="r">${eur(Math.max(0,engage-paye))}</td></tr></tfoot></table></div>`
+  ${rows.length?`<div class="list blist2">${body}<div class="brow total"><div class="brow-main"><div class="brow-t">Total</div>${tot?`<div class="brow-s">${eur(prevu)} prévus pour ${eur(tot)} de budget</div>`:""}</div><div class="brow-end"><b class="num ${tot&&prevu>tot?"over":""}">${eur(prevu)}</b>${engage||paye?`<span class="num">engagé ${eur(engage)} · payé ${eur(paye)}</span>`:""}</div></div></div>`
   :emptyBlock("Aucun poste de budget","Ajoutez vos postes : lieu, traiteur, photographe…")}`;
 }
 
@@ -949,7 +954,7 @@ function pdfReport(){
     if(Array.isArray(pr.divergences)&&pr.divergences.length)blocks.push({h3:"Points à aligner entre vous"},{ul:pr.divergences.map(x=>(x.sujet||"")+(x.conseil?" : "+x.conseil:""))})}
   if(al.length)blocks.push({h2:"À regarder"},{alerts:al.map(a=>[a.lvl,a.t,a.s])});
   blocks.push({h2:"Prochaines tâches"},{table:{head:["Tâche","Échéance","Qui"],widths:[null,28,24],body:next.map(t=>{const du=taskDue(t);return [t.title+(t.status==="doing"?" (en cours)":"")+(isLate(t)?" — en retard":""),du?fmtD(du):"—",OWNERS[t.owner||"deux"]]})}});
-  blocks.push({h2:"Budget"},{table:{head:["Poste","Prévu","Engagé","Payé"],widths:[null,26,26,26],right:[1,2,3],body:S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)).map(b=>[b.label,b.prevu?eur(b.prevu):"—",b.engage?eur(b.engage):"—",b.paye?eur(b.paye):"—"]),
+  blocks.push({h2:"Budget"},{table:{head:["Poste","Prévu","Engagé","Payé"],widths:[null,26,26,26],right:[1,2,3],body:S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)).map(b=>[b.label+((tot||prevu)&&num(b.prevu)?` (${Math.round(num(b.prevu)/(tot||prevu)*100)} %)`:""),b.prevu?eur(b.prevu):"—",b.engage?eur(b.engage):"—",b.paye?eur(b.paye):"—"]),
     foot:[`Total${tot?` (budget ${eur(tot)}, marge ${eur(tot-Math.max(prevu,engage))})`:""}`,eur(prevu),eur(engage),eur(paye)]}});
   blocks.push({h2:"Prestataires"});
   cats.forEach(c=>{blocks.push({h3:c},{table:{head:["Prestataire","Note","Avis du coach"],widths:[52,16,null],boldFirst:true,body:S.vendors.filter(v=>v.cat===c).sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1)).map(v=>{const f=v.fit||{};
