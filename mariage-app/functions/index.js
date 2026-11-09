@@ -24,7 +24,7 @@ let client;
 export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async req => {
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email))
-    throw new HttpsError("permission-denied", "Assistant réservé à Claire et Julien.");
+    throw new HttpsError("permission-denied", "Coach réservé à Claire et Julien.");
   const { message, mode = "chat", view = "", reset = false } = req.data || {};
   const chatRef = db.doc(`chats/${email}`);
   if (reset && !message) { await chatRef.set({ messages: [], updatedAt: Date.now() }); return { ok: true }; }
