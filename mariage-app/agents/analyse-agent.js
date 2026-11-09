@@ -67,7 +67,7 @@ async function writeProfil(context) {
     system: SYSTEM,
     user: `Écris la synthèse du brief (divergences : desaccord=true ou réponses claire/julien différentes).\n\n<donnees>${context}</donnees>`,
     output: PROFIL_OUT,
-    effort: "medium",
+    feature: "synthese",
   });
   await getDb().doc("meta/profil").set({ ...profil, updatedAt: Date.now() });
   return profil;
@@ -82,7 +82,7 @@ export async function runProfil({ log = console.log } = {}) {
 export async function runAnalyseAgent({ log = console.log, force = false } = {}) {
   const analyse = await getMeta("analyse");
   const vendors = await listAll("vendors");
-  const todo = vendorsToAnalyse(vendors, analyse.requestedAt);
+  const todo = vendorsToAnalyse(vendors, { requestedAt: analyse.requestedAt, changedAt: analyse.profilRequestedAt, fullAt: analyse.fullRequestedAt });
   const asked = analyse.requestedAt && analyse.requestedAt > (analyse.lastRunAt || analyse.lastRun || 0);
   if (!todo.length && !asked && !force) {
     log("Rien à analyser.");
@@ -93,26 +93,33 @@ export async function runAnalyseAgent({ log = console.log, force = false } = {})
 
   try {
     const context = await loadContext();
+    // Consignes + données communes en tête, marquées pour le cache : relues à ~5 % du prix par les fiches suivantes
+    const system = [{ type: "text", text: `${SYSTEM}\n\n<donnees>${context}</donnees>`, cache_control: { type: "ephemeral" } }];
 
     // Synthèse du brief et fiches prestataires en parallèle (4 à la fois) : quelques minutes de moins
     const scores = [];
     const analyseOne = async v => {
       const fit = await runForOutput({
-        system: SYSTEM,
-        user: `Analyse ce prestataire, recherche ses avis en ligne, puis appelle enregistrer_fit.\n\n<prestataire>${JSON.stringify(strip(v))}</prestataire>\n\n<donnees>${context}</donnees>`,
+        system,
+        user: `Analyse ce prestataire (données du couple dans <donnees>), recherche ses avis en ligne, puis appelle enregistrer_fit.\n\n<prestataire>${JSON.stringify(strip(v))}</prestataire>`,
         output: FIT_OUT,
-        webSearch: true, maxSearches: 4, effort: "medium",
+        webSearch: true, feature: "analyse",
       });
       if (fit.avis?.sources) fit.avis.sources = fit.avis.sources.filter(s => /^https?:\/\//.test(s.url || ""));
       // update avec un seul champ : on ne touche à rien d'autre sur le prestataire
       await getDb().doc(`vendors/${v.id}`).update({ fit: { ...fit, updatedAt: Date.now() } });
       scores.push(`${v.name} : ${Math.round(fit.score)}`);
     };
-    await Promise.all([writeProfil(context), mapPool(todo, 4, analyseOne)]);
+    // La synthèse n'est refaite que si les envies ou les réglages ont changé (ou « Tout réanalyser »)
+    const profil = await getMeta("profil");
+    const profilStale = !profil.updatedAt || (+analyse.profilRequestedAt || 0) > profil.updatedAt || (+analyse.fullRequestedAt || 0) > profil.updatedAt;
+    // une première fiche seule écrit le cache, les suivantes le relisent
+    if (todo.length > 1) await analyseOne(todo.shift());
+    await Promise.all([profilStale ? writeProfil(context) : null, mapPool(todo, 4, analyseOne)]);
     await mergeMeta("analyse", { status: "terminée", lastRun: Date.now(), lastRunAt: Date.now() });
-    log(`${todo.length} prestataire(s) analysé(s). ${scores.join(" · ")}`);
-    if (todo.length) await notify({ title: "Analyse des prestataires terminée", body: scores.join(" · "), url: "/#prestataires", tag: "analyse" }, { log });
-    return { analyses: todo.length, scores };
+    log(`${scores.length} prestataire(s) analysé(s). ${scores.join(" · ") || "Tout était déjà à jour."}`);
+    if (scores.length) await notify({ title: "Analyse des prestataires terminée", body: scores.join(" · "), url: "/#prestataires", tag: "analyse" }, { log });
+    return { analyses: scores.length, scores };
   } catch (e) {
     await mergeMeta("analyse", { status: "erreur", lastError: String(e.message || e).slice(0, 500), lastRunAt: Date.now() });
     throw e;

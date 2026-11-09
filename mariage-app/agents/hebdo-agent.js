@@ -54,7 +54,7 @@ export async function buildContext(now = new Date()) {
 
 export async function runHebdo({ log = console.log, now = new Date() } = {}) {
   const ctx = await buildContext(now);
-  const out = await runForOutput({ system: SYSTEM, user: `<donnees>${JSON.stringify(ctx)}</donnees>`, output: OUT, effort: "medium" });
+  const out = await runForOutput({ system: SYSTEM, user: `<donnees>${JSON.stringify(ctx)}</donnees>`, output: OUT, feature: "synthese" });
   const week = isoWeek(now);
   await getDb().doc("meta/hebdo").set({ week, titre: String(out.titre || "Votre point de la semaine").slice(0, 120),
     points: (out.points || []).map(p => String(p).slice(0, 400)).slice(0, 5), question: String(out.question || "").slice(0, 300), at: Date.now() });

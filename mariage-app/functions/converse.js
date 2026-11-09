@@ -1,5 +1,5 @@
 // Boucle de conversation : Claude appelle des outils jusqu'à donner sa réponse. Testable (client injecté).
-export async function converse({ client, model, system, tools, messages, exec, maxTurns = 12, effort = "low" }) {
+export async function converse({ client, model, system, tools, messages, exec, maxTurns = 12, effort = "low", onUsage = () => {} }) {
   const actions = [];
   let text = "";
   for (let turn = 0; turn < maxTurns; turn++) {
@@ -10,6 +10,7 @@ export async function converse({ client, model, system, tools, messages, exec, m
       // En cas de refus par un filtre de sécurité, l'API relance d'elle-même sur un modèle de repli.
       betas: ["server-side-fallback-2026-07-01"], fallbacks: "default",
     });
+    await onUsage(res);
     if (res.stop_reason === "refusal") return { text: "Je ne peux pas répondre à cette demande.", actions };
     messages.push({ role: "assistant", content: res.content });
     const calls = res.content.filter(b => b.type === "tool_use");

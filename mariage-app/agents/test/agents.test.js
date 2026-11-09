@@ -123,3 +123,32 @@ test("analyse en parallèle : tout est traité, n à la fois au plus", async () 
   await mapPool([1, 2, 3, 4, 5, 6], 4, async x => { cur++; peak = Math.max(peak, cur); await new Promise(r => setTimeout(r, 10)); done.push(x); cur--; });
   assert.equal(done.length, 6); assert.equal(peak, 4);
 });
+
+test("analyse demandée : seulement ce qui a changé ; « tout réanalyser » refait tout", () => {
+  const now = Date.now(), t = now - 10_000;
+  const vs = [
+    { id: "a", status: "devis", fit: { updatedAt: t } },                       // rien de neuf
+    { id: "b", status: "devis", fit: { updatedAt: t }, updatedAt: t + 1000 },  // fiche modifiée depuis
+    { id: "c", status: "repere" },                                             // jamais analysé
+  ];
+  assert.deepEqual(vendorsToAnalyse(vs, { requestedAt: now }, now).map(v => v.id), ["b", "c"]);
+  assert.deepEqual(vendorsToAnalyse(vs, { requestedAt: now, changedAt: t + 500 }, now).map(v => v.id), ["a", "b", "c"]);
+  assert.deepEqual(vendorsToAnalyse(vs, { fullAt: now }, now).map(v => v.id), ["a", "b", "c"]);
+});
+
+test("coût : tarifs, cache, recherches, niveaux et budget", async () => {
+  const { costOf, profileFor, overBudget, usagePatch } = await import("../lib/usage.js");
+  // Opus 5.5 : 1 M entrée = 4 $, 1 M sortie = 20 $, 1 M lus en cache = 0,20 $, écriture = 1,25 × entrée
+  assert.equal(costOf("claude-opus-5-5", { input_tokens: 1e6 }), 4);
+  assert.equal(costOf("claude-opus-5-5", { output_tokens: 1e6 }), 20);
+  assert.equal(Math.round(costOf("claude-sonnet-5-5", { cache_read_input_tokens: 1e6, cache_creation_input_tokens: 1e6 }) * 100) / 100, 2.7);
+  assert.equal(costOf("claude-sonnet-5-5", { server_tool_use: { web_search_requests: 3 } }), 0.03);
+  assert.equal(profileFor({}, "analyse").model, "claude-sonnet-5-5");
+  assert.equal(profileFor({ niveaux: { analyse: "max" } }, "analyse").model, "claude-opus-5-5");
+  assert.equal(profileFor({ niveaux: { coach: "nimporte" } }, "coach").niveau, "equilibre");
+  assert.equal(overBudget({ budget: 10 }, { usd: 11 }), true);
+  assert.equal(overBudget({ budget: 10 }, { usd: 5 }), false);
+  const p = usagePatch("coach", { model: "claude-opus-5-5", usage: { input_tokens: 1000, output_tokens: 100 } }, x => x);
+  assert.equal(p.f.coach.calls, 1);
+  assert.equal(Math.round(p.usd * 1e4) / 1e4, 0.006);
+});

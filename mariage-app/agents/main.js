@@ -8,6 +8,8 @@ import { runAnalyseAgent, runProfil } from "./analyse-agent.js";
 import { ensureVapid } from "./lib/push.js";
 import { runHebdo, runVisitFollowups } from "./hebdo-agent.js";
 import { withLock } from "./lib/lock.js";
+import { overBudget, monthKey } from "./lib/usage.js";
+import { getDb } from "./lib/firestore.js";
 
 
 /** @returns {Promise<boolean>} true si un agent a échoué */
@@ -15,6 +17,11 @@ export async function runAll({ forced } = {}) {
   const JOBS = { mail: { meta: "agent", run: runMailAgent }, analyse: { meta: "analyse", run: runAnalyseAgent } };
 
   const planning = await getMeta("planning");
+  // Budget du mois atteint (Réglages → Coût de l'IA) : plus de passages automatiques ; les boutons de l'app restent actifs.
+  if (!forced) {
+    const [ia, usage] = await Promise.all([getMeta("ia"), getDb().doc(`usage/${monthKey()}`).get().then(s => s.data() || {})]);
+    if (overBudget(ia, usage)) { console.log("[budget] budget du mois atteint : passages automatiques suspendus"); return false; }
+  }
   // Clés des notifications push : créées au premier passage (l'app en a besoin pour s'abonner).
   try { await ensureVapid(); } catch (e) { console.error("[push] clés indisponibles :", e.message); }
   let failed = false;

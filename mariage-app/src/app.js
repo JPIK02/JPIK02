@@ -1,5 +1,6 @@
 import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
 import {QCATS} from "./questions.js";
+import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
 const setHTML=(el,h)=>{if(el&&el._h!==h){el._h=h;el.innerHTML=h}};
@@ -54,7 +55,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -628,9 +629,9 @@ function analyseBar(ctx){
   const todo=S.vendors.filter(v=>v.status!=="ecarte"&&!(v.fit&&v.fit.score!=null)).length;
   const profilPending=ctx==="envies"&&(a.profilRequestedAt||0)>(S.profil.updatedAt||0);
   return `<div class="ai-bar"><div style="min-width:0"><b>${ctx==="envies"?"Synthèse du coach":"Analyse IA des prestataires"}</b>
-    <p>${esc(label)}${ctx!=="envies"&&todo?` · ${todo} prestataire${todo>1?"s":""} à analyser`:""}. ${ctx==="envies"?"L'agent relit vos réponses, repère vos priorités et les points où vous n'êtes pas alignés.":"L'agent cherche les avis en ligne, croise chaque offre avec vos envies et attribue une note de fit sur 100."} Passage automatique ${esc(planLabel("analyse"))}.</p></div>
+    <p>${esc(label)}${ctx!=="envies"&&todo?` · ${todo} prestataire${todo>1?"s":""} à analyser`:""}. ${ctx==="envies"?"L'agent relit vos réponses, repère vos priorités et les points où vous n'êtes pas alignés.":"L'agent cherche les avis en ligne, croise chaque offre avec vos envies et attribue une note de fit sur 100. Il ne refait que les fiches nouvelles ou modifiées (ou toutes si vos envies ont changé)."} Passage automatique ${esc(planLabel("analyse"))}.</p></div>
     ${profilPending?`<p class="ai-pending">Vos réponses ont changé : la synthèse se met à jour toute seule, environ 15 minutes après votre dernière modification.</p>`:""}
-    <button class="btn primary" data-act="fire" ${S.canWrite&&!agentBusy("analyse")?"":"disabled"}>${busyLabel("analyse")||"Demander une analyse"}</button></div>`;
+    <div class="ai-acts"><button class="btn primary" data-act="fire" ${S.canWrite&&!agentBusy("analyse")?"":"disabled"}>${busyLabel("analyse")||"Demander une analyse"}</button>${ctx!=="envies"&&S.canWrite&&!agentBusy("analyse")?`<button class="link" data-act="fireall">Tout réanalyser</button>`:""}</div></div>`;
 }
 
 /* ---------- Annuaire ---------- */
@@ -886,6 +887,29 @@ async function acceptSug(id,quiet){
 }
 
 /* ---------- Settings ---------- */
+const IA_FEAT={coach:["Coach","Vos conversations au quotidien"],brief:["Entretien Nos envies","Questions sur vos goûts, photos d'inspiration"],mail:["Lecture des mails","Tri de la boîte, devis et pièces jointes"],analyse:["Analyse des prestataires","Avis en ligne et note de fit"],synthese:["Synthèse et point de la semaine","Résumé de vos envies, point du lundi"]};
+const IA_LVL=[["eco","Éco"],["equilibre","Équilibré"],["max","Max"]];
+const IA_EFF={low:"réflexion courte",medium:"réflexion moyenne",high:"réflexion poussée"};
+const euro=usd=>(usd*USD_EUR).toLocaleString("fr-FR",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:2});
+function iaPanel(){
+  const ia=S.ia||{},u=S.usage.cur||{},prev=S.usage.prev||{},budget=+ia.budget||DEFAULT_BUDGET_EUR,dis=S.canWrite?"":"disabled";
+  const spent=(u.usd||0)*USD_EUR,pct=Math.min(100,Math.round(spent/budget*100)),tone=pct>=100?"bad":pct>=80?"warn":"ok";
+  const rows=FEATURES.map(f=>{
+    const lvl=PROFILES[f][(ia.niveaux||{})[f]]?(ia.niveaux||{})[f]:"equilibre",p=PROFILES[f][lvl],st=(u.f||{})[f]||{};
+    const hint=`${/opus/.test(p.model)?"Opus 5.5":"Sonnet 5.5"} · ${IA_EFF[p.effort]||p.effort}${p.maxSearches?` · ${p.maxSearches} recherches web`:""}`;
+    return `<div class="ia-row"><div class="ia-t"><b>${IA_FEAT[f][0]}</b><span>${IA_FEAT[f][1]}</span></div>
+      <div class="ia-c"><b class="num">${euro(st.usd||0)}</b><span>${st.calls||0} appel${(st.calls||0)>1?"s":""}</span></div>
+      <div class="ia-l"><div class="seg" role="group" aria-label="Niveau pour ${IA_FEAT[f][0]}">${IA_LVL.map(([k,l])=>`<button type="button" data-act="ialvl" data-feat="${f}" data-v="${k}" aria-pressed="${k===lvl}" ${dis}>${l}</button>`).join("")}</div><span class="ia-h">${hint}</span></div></div>`}).join("");
+  const resetDay=new Date(new Date().getFullYear(),new Date().getMonth()+1,1).toLocaleDateString("fr-FR",{day:"numeric",month:"long"});
+  return `<div class="formpanel" style="margin-top:28px" id="ia"><div class="panel-h" style="margin-bottom:6px"><h3>Coût de l'IA</h3><span class="chip ${tone==="ok"?"ok":""}">${pct} % du budget</span></div>
+    ${pct>=100?`<div class="banner warn" style="margin:6px 0 12px">Budget du mois atteint : les passages automatiques des agents sont suspendus jusqu'au ${resetDay}. Le coach et les boutons « maintenant » restent disponibles.</div>`:""}
+    <div class="ia-sum"><div><span class="ia-k">Ce mois-ci</span><b class="num">${euro(u.usd||0)}</b><span class="ia-k">sur ${budget.toLocaleString("fr-FR")} €</span></div><div><span class="ia-k">Mois dernier</span><b class="num ia-prev">${euro(prev.usd||0)}</b></div></div>
+    <div class="ia-bar ${tone}" role="progressbar" aria-label="Budget du mois utilisé" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+    <div class="ia-rows">${rows}</div>
+    <p class="plan-when" style="margin:14px 0 10px"><b>Éco</b> : le modèle Sonnet, environ deux fois moins cher, très bien pour trier des mails ou les questions simples. <b>Équilibré</b> (recommandé) : Opus là où le jugement compte (coach, entretien, synthèse), Sonnet pour les tâches répétitives. <b>Max</b> : Opus partout, avec une réflexion plus poussée.</p>
+    <form class="ia-budget" id="ia-form"><label for="search-ia-budget">Budget mensuel (€)</label><input type="number" inputmode="numeric" min="1" step="1" id="search-ia-budget" name="budget" value="${esc(budget)}" ${dis}><button class="btn sm" type="submit" ${dis}>Enregistrer</button></form>
+    <p class="plan-when" style="margin:10px 0 0">Estimation calculée à partir des tokens consommés (tarifs publics, 1 $ ≈ ${String(USD_EUR).replace(".",",")} €). La facture exacte est sur console.anthropic.com, où vous pouvez aussi fixer une limite de dépense stricte.</p></div>`;
+}
 function vReglages(){
   const s=S.settings,dis=S.canWrite?"":"disabled";
   if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported";render()}),0);
@@ -905,6 +929,7 @@ function vReglages(){
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
     <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes s'ils ont du travail et tournent selon le planning ci-dessous. Un passage demandé depuis l'app démarre tout de suite.</p>
     <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
+  ${iaPanel()}
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Photo du couple</h3></div>
     <div class="photo-row">${coupleAvatar()}<div><p class="plan-when" style="margin:0 0 10px">Affichée sur l'accueil, à côté du « Bonjour ». La même pour vous deux.</p>
     ${S.canWrite?`<button class="btn sm" data-act="couplephoto">${S.photo&&S.photo.data?"Changer":"Ajouter une photo"}</button>${S.photo&&S.photo.data?` <button class="btn sm" data-act="couplephotox">Retirer</button>`:""}`:""}</div></div></div>
@@ -1328,6 +1353,7 @@ function openEditor(col,id){
     });
     delete out._ev;delete out.template;
     if(col==="tasks"&&isNew){const same=S.tasks.filter(t=>t.phase===out.phase);out.order=same.reduce((m,t)=>Math.max(m,t.order||0),0)+1}
+    if(col==="vendors")out.updatedAt=Date.now();
     if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim())out.fitRequestedAt=Date.now();
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
@@ -1421,6 +1447,9 @@ document.addEventListener("click",async e=>{
     if(await patch("tasks",A.id,{status:st,note,due:A.due||B.due||null})&&await remove("tasks",B.id))toast("Tâches fusionnées");return}
   if(a==="dupkeep"){if(S.canWrite&&await mergeDoc("meta/prefs",{notDupes:[...(S.prefs.notDupes||[]),t.dataset.k]}))toast("C'est noté");return}
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
+  if(a==="ialvl"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{niveaux:{[t.dataset.feat]:t.dataset.v},updatedAt:Date.now()}))toast("Réglage enregistré : appliqué dès le prochain appel");return}
+  if(a==="fireall"){if(!S.canWrite||agentBusy("analyse"))return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer : refaire toutes les fiches";return}
+    const now=Date.now();if(await mergeDoc("meta/analyse",{requestedAt:now,fullRequestedAt:now,status:"demandée"})){kick("analyse");toast("Toutes les fiches sont refaites : quelques minutes");render()}return}
   if(a==="theme"){applyTheme(t.dataset.v);S.view==="reglages"&&(document.getElementById("main")._h=null);render();return}
   if(a==="unseat"){if(S.canWrite)await patch("guests",id,{table:""});return}
   if(a==="bulk"){if(S.canWrite)openBulk();return}
@@ -1494,6 +1523,8 @@ document.addEventListener("submit",async e=>{
   const f=e.target;
   if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-text");const v=inp.value.trim();if(!v)return;inp.value="";openChat("chat");await sendChat(v);return}
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
+  if(f.id==="ia-form"){e.preventDefault();const v=num(f.elements.budget.value);if(!(v>0)){toast("Indiquez un budget en euros");return}
+    if(await mergeDoc("meta/ia",{budget:v,updatedAt:Date.now()})){document.activeElement&&document.activeElement.blur();toast("Budget enregistré")}return}
   if(f.id==="settings-form"){
     e.preventDefault();
     const d={updatedAt:Date.now()};["date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
@@ -1565,7 +1596,9 @@ function boot(){
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
-    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");
+    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");
+    { const d=new Date(),prev=monthKey(new Date(d.getFullYear(),d.getMonth()-1,15));
+      for(const [k,m] of [["cur",monthKey(d)],["prev",prev]])unsubs.push(db.doc("usage/"+m).onSnapshot(LIVE,x=>{S.usage[k]=x.exists?x.data():{};later()},()=>{})); }
     db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});
     COLS.forEach(c=>{
       unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));

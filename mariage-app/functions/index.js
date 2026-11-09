@@ -10,12 +10,14 @@ import { TOOL_DEFS, makeTools } from "./tools.js";
 import { systemPrompt } from "./prompt.js";
 import { converse, userContent } from "./converse.js";
 import { QCATS } from "./questions.js";
+import { FieldValue } from "firebase-admin/firestore";
+import { profileFor, recordUsage } from "./agents/lib/usage.js";
 
 initializeApp();
 const db = getFirestore();
 setGlobalOptions({ region: "europe-west1", maxInstances: 3 });
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+const MODEL = process.env.ANTHROPIC_MODEL || ""; // vide : modèle choisi dans Réglages → Coût de l'IA (meta/ia)
 const ALLOWED = String(process.env.ALLOWED_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
 const PRENOMS = { "julienpicquet@gmail.com": "Julien", "duquesne.claire@yahoo.fr": "Claire", "claiire.duquesne59@gmail.com": "Claire" };
 const DAILY_LIMIT = 150;   // messages par jour, à vous deux (garde-fou de coût)
@@ -48,15 +50,21 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   });
 
   const past = reset ? [] : ((await chatRef.get()).data()?.messages || []);
-  const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content }];
+  // La section ouverte va dans le message (pas dans les consignes) : les consignes restent identiques et en cache.
+  const where = `[Section ouverte : ${String(view || "Accueil").slice(0, 60)}]`;
+  const withView = typeof content === "string" ? `${where} ${content}` : [...content.slice(0, -1), { ...content.at(-1), text: `${where} ${content.at(-1).text}` }];
+  const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content: withView }];
   // Miniatures envoyées par l'app (480 px) : le coach peut garder une photo comme inspiration (noter_inspiration)
   const thumbs = atts.map(a => (typeof a.thumb === "string" && a.thumb.length < 400_000 ? a.thumb : null));
   const exec = makeTools(db, { qcats: QCATS, thumbs, author: PRENOMS[email] || "" });
   const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
+  const feature = mode === "brief" ? "brief" : "coach";
+  const prof = profileFor((await db.doc("meta/ia").get()).data() || {}, feature);
   let text, actions;
-  try { ({ text, actions } = await converse({ client, model: MODEL, system, tools: TOOL_DEFS, messages, exec, effort: mode === "brief" ? "medium" : "low" })); }
+  try { ({ text, actions } = await converse({ client, model: MODEL || prof.model, system, tools: TOOL_DEFS, messages, exec, effort: prof.effort,
+    onUsage: res => recordUsage(db, FieldValue.increment, feature, res) })); }
   catch (e) { throw claudeError(e); }
 
   // On garde de quoi annuler les 10 derniers messages ; au-delà, seulement le libellé des actions (taille du document).

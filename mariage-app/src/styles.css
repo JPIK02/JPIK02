@@ -819,3 +819,24 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .chat-new{white-space:nowrap}
 /* Coach sur téléphone : en-tête compact, plus de place pour lire */
 @media (max-width:640px){.chat-h h3{font-size:22px;margin:0 0 2px}.chat-mode{min-height:28px;margin-bottom:2px}}
+/* Coût de l'IA (Réglages) */
+.ia-sum{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-end;margin:4px 0 10px}
+.ia-sum>div{display:flex;flex-direction:column;gap:2px}
+.ia-sum b{font-size:30px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;color:var(--ink)}
+.ia-sum .ia-prev{font-size:20px;color:var(--muted)}
+.ia-k{font-size:14px;color:var(--muted);font-weight:600}
+.ia-bar{height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-bottom:16px}
+.ia-bar i{display:block;height:100%;border-radius:6px;background:var(--ok)}
+.ia-bar.warn i{background:var(--warn)}.ia-bar.bad i{background:var(--bad)}
+.ia-rows{display:grid;gap:0;border-top:1px solid var(--line)}
+.ia-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 14px;padding:12px 0;border-bottom:1px solid var(--line);align-items:center}
+.ia-t{display:flex;flex-direction:column;min-width:0}.ia-t span,.ia-c span,.ia-h{font-size:13.5px;color:var(--muted)}
+.ia-c{text-align:right;display:flex;flex-direction:column}.ia-c b{font-variant-numeric:tabular-nums}
+.ia-l{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ia-l .seg button{padding:6px 12px}
+.ia-budget{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ia-budget label{font-weight:600}
+.ia-budget input{width:110px;min-height:40px;border:1px solid var(--line-strong);border-radius:10px;padding:6px 10px;font-size:16px;background:var(--bg);color:var(--ink)}
+.ai-acts{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.ai-acts .link{color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0;font-size:14.5px}
+.ai-acts .link.armed{color:var(--bad)}
