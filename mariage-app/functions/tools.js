@@ -78,7 +78,7 @@ export const TOOL_DEFS = [
   { name: "noter_inspiration", description: "Garde une photo jointe à ce message comme inspiration dans « Nos envies » (catégorie), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
     photo: { type: "integer", minimum: 1, maximum: 3, description: "numéro de la photo jointe (1 si une seule)" }, categorie: T("clé de catégorie, ex. lieu, fleurs, tenues, vision"),
     description: T("ce que montre la photo et ce qui leur plaît : style, couleurs, matières, ambiance (2 phrases)") }, ["photo", "categorie", "description"]) },
-  { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) au prochain passage de l'agent (10 à 15 min). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
+  { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) qui démarre aussitôt (résultats en 2 à 3 minutes). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
 ];
 
 // ---------- Exécution ----------
@@ -276,7 +276,7 @@ export function makeTools(db, { qcats, now = new Date(), thumbs = [], author = "
     },
     async demander_analyse() {
       const op = await write("meta/analyse", { requestedAt: Date.now(), status: "demandée" });
-      return { result: { ok: true, delai: "10 à 15 minutes" }, action: { label: "Analyse des prestataires demandée", ops: [op] } };
+      return { result: { ok: true, delai: "2 à 3 minutes" }, action: { label: "Analyse des prestataires lancée", ops: [op], kick: "analyse" } };
     },
   };
 

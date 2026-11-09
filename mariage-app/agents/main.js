@@ -7,6 +7,7 @@ import { runMailAgent } from "./mail-agent.js";
 import { runAnalyseAgent, runProfil } from "./analyse-agent.js";
 import { ensureVapid } from "./lib/push.js";
 import { runHebdo, runVisitFollowups } from "./hebdo-agent.js";
+import { withLock } from "./lib/lock.js";
 
 
 /** @returns {Promise<boolean>} true si un agent a échoué */
@@ -29,7 +30,7 @@ export async function runAll({ forced } = {}) {
     console.log(`[${k}] ${d.run ? "→ lancement" : "→ ignoré"} (${d.reason})`);
     if (!d.run) continue;
     ran.add(k);
-    try { await job.run({ force: forced === k }); }
+    try { await withLock(k, 25 * 60 * 1000, () => job.run({ force: forced === k })); }
     catch (e) { failed = true; console.error(`[${k}] échec :`, e); }
   }
   // Synthèse des envies seule, quand l'app a signalé un changement (l'analyse complète la refait déjà).
@@ -42,7 +43,7 @@ export async function runAll({ forced } = {}) {
   }
   // Coach proactif : point du lundi (ou demandé depuis l'app) et relance le soir des visites.
   if (!forced || forced === "hebdo") {
-    try { if (forced === "hebdo" || hebdoDue(await getMeta("hebdo"))) { console.log("[hebdo] → point de la semaine"); await runHebdo(); } }
+    try { if (forced === "hebdo" || hebdoDue(await getMeta("hebdo"))) { console.log("[hebdo] → point de la semaine"); await withLock("hebdo", 10 * 60 * 1000, () => runHebdo()); } }
     catch (e) { failed = true; console.error("[hebdo] échec :", e); }
     try { await runVisitFollowups(); } catch (e) { console.error("[visites] échec :", e.message); }
   }

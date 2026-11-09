@@ -1,4 +1,4 @@
-import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant} from "./firebase.js";
+import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
 import {QCATS} from "./questions.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
@@ -196,7 +196,7 @@ async function runQr(dd){
   if(k==="chat")return openChat();
   if(k==="chatbrief")return openChat("brief");
   if(k==="compare"){const [cat,id]=[rest[0],rest[1]];return openCompare(cat,id)}
-  if(k==="hebdo"){if(await mergeDoc("meta/hebdo",{requestedAt:Date.now()}))toast("Le coach prépare votre point : il arrive d'ici 15 minutes");return}
+  if(k==="hebdo"){if(await mergeDoc("meta/hebdo",{requestedAt:Date.now()})){kick("hebdo");toast("Le coach prépare votre point : il arrive dans une minute environ")}return}
   if(!S.canWrite)return;
   if(k==="vstatus"){const [id,st]=rest,v=S.vendors.find(x=>x.id===id);if(!v)return;const prev=v.status;if(await patch("vendors",id,{status:st}))toastUndo(`${v.name} : ${VSTAT[st]}`,()=>patch("vendors",id,{status:prev}));return}
   if(k==="budgetset"){const [id,amt]=rest,b=S.budget.find(x=>x.id===id);if(!b)return;const prev=b.prevu??null;if(await patch("budget",id,{prevu:num(amt)}))toastUndo(`${b.label} : enveloppe à ${eur(num(amt))}`,()=>patch("budget",id,{prevu:prev}));return}
@@ -565,7 +565,7 @@ const fitBadge=(v,big)=>{const f=v.fit;return f&&f.score!=null?`<div class="fit 
 /* ---------- Planning des agents ----------
    Les agents tournent dans GitHub Actions (agents/, .github/workflows/agents.yml), toutes les 10 minutes.
    À chaque passage, agents/scheduler.js lit meta/planning et décide si l'agent est dû.
-   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : pris en compte au prochain passage (10 à 15 min). */
+   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : lancé tout de suite par la fonction runAgent (repli : prochain réveil, 10 min). */
 const hh=(h)=>`${h}h`;
 function planOf(k){return Object.assign({},JOBS[k].def,S.planning[k]||{})}
 function planLabel(k){
@@ -581,8 +581,10 @@ async function runNow(k){
   if(!S.canWrite)return;
   const [path,cur]=metaOf(k);
   const ok=await setDoc(path,cur,k==="analyse"?{requestedAt:Date.now(),status:"demandée"}:{requestedAt:Date.now()});
-  if(ok)toast(k==="mail"?"Demande enregistrée : lecture dans les 10 à 15 minutes":"Analyse demandée : elle démarre dans les 10 à 15 minutes");
+  if(ok){kick(k);toast(k==="mail"?"Lecture de la boîte lancée : propositions dans 1 à 2 minutes":"Analyse lancée : résultats dans 2 à 3 minutes")}
 }
+// Lancement immédiat côté serveur ; si l'appel échoue, la demande enregistrée est prise au prochain réveil (10 min).
+function kick(job){runAgentNow(job).catch(e=>console.warn("[agents] lancement immédiat impossible, prochain réveil :",e&&e.message))}
 async function savePlan(k,form){
   const fd=new FormData(form);
   const p={enabled:fd.get("enabled")==="on",mode:fd.get("mode")||"daily",h1:+fd.get("h1"),h2:+fd.get("h2"),day:+fd.get("day")};
@@ -607,7 +609,7 @@ function planForm(k){
       <div class="field only-twice"><label for="p-${k}-h2">Deuxième passage</label>${hours("h2",p.h2)}</div>
       <div class="field only-weekly"><label for="p-${k}-day">Jour</label><select name="day" id="p-${k}-day" ${dis}>${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${d===p.day?"selected":""}>${JOURS[d]}</option>`).join("")}</select></div>
     </div>
-    <div class="plan-acts"><button class="btn primary" type="submit" ${dis}>Enregistrer le planning</button><button class="btn" type="button" data-act="runnow" data-job="${k}" ${dis}>${k==="mail"?"Lire la boîte au prochain passage":"Lancer l'analyse au prochain passage"}</button></div>
+    <div class="plan-acts"><button class="btn primary" type="submit" ${dis}>Enregistrer le planning</button><button class="btn" type="button" data-act="runnow" data-job="${k}" ${dis}>${k==="mail"?"Lire la boîte maintenant":"Lancer l'analyse maintenant"}</button></div>
   </form>`;
 }
 async function fireAnalysis(){return runNow("analyse")}
@@ -717,7 +719,7 @@ function openFiche(id){
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
     <div class="fsec"><h4>Notes de visite</h4>${v.visitNotes?`<p class="vnotes">${esc(v.visitNotes)}</p>`:`<p class="plan-when" style="margin:0 0 8px">Après une visite ou un échange, notez vos impressions : l'IA recalcule la note avec ces informations de première main.</p>`}
-      ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (d'ici 15 minutes environ).</p>`:""}
+      ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (1 à 2 minutes).</p>`:""}
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
@@ -821,7 +823,7 @@ function vAssistant(){
     <div style="min-width:0"><span class="pill-live ${on?"on":""}"><i></i>${on?"Actif":"Non connecté"}</span><h3 style="margin-top:10px">Assistant e-mails</h3>
       <p>${on?`Lit la boîte ${esc(ag.mailbox||"dédiée")} ${esc(planLabel("mail"))}. Dernier passage ${ag.lastRun?esc(relDay(pd(ag.lastRun))):"inconnu"}.`:"Il lira la boîte mail dédiée au mariage et vous proposera les prestataires, devis, échéances, rendez-vous et réponses d'invités qu'il y trouve."}</p></div>
     <div style="display:grid;gap:14px;justify-items:end"><div class="ag-stat"><div><b class="num">${ps.length}</b><span>à valider</span></div><div><b class="num">${acc}</b><span>ajoutés</span></div><div><b class="num">${S.inbox.length}</b><span>mails analysés</span></div></div>
-      <button class="btn" data-act="runnow" data-job="mail" ${S.canWrite?"":"disabled"}>Lire la boîte au prochain passage</button></div>
+      <button class="btn" data-act="runnow" data-job="mail" ${S.canWrite?"":"disabled"}>Lire la boîte maintenant</button></div>
   </div>
   <div class="grid2">
     <section>
@@ -893,7 +895,7 @@ function vReglages(){
     <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
   </form>
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
-    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes (GitHub Actions) s'ils ont du travail et ne tournent que selon le planning ci-dessous. Un passage demandé démarre dans les 10 à 15 minutes.</p>
+    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes s'ils ont du travail et tournent selon le planning ci-dessous. Un passage demandé depuis l'app démarre tout de suite.</p>
     <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Photo du couple</h3></div>
     <div class="photo-row">${coupleAvatar()}<div><p class="plan-when" style="margin:0 0 10px">Affichée sur l'accueil, à côté du « Bonjour ». La même pour vous deux.</p>
@@ -1059,7 +1061,7 @@ async function sendChat(text){
   // Libellé d'attente qui évolue (la réponse prend souvent 10 à 20 secondes)
   const steps=["Je regarde vos données…","Je prépare la réponse…","Encore un instant…"];let k=0;
   const tick=setInterval(()=>{if(!c.busy){clearInterval(tick);return}k=Math.min(k+1,steps.length-1);c.busyLabel=steps[k];const l=document.querySelector(".typing-l");if(l)l.textContent=steps[k]},6000);
-  try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(atts.length?{attachments:atts.map(a=>({media_type:a.media_type,data:a.data,...(a.thumb?{thumb:a.thumb}:{})}))}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[]})}
+  try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(atts.length?{attachments:atts.map(a=>({media_type:a.media_type,data:a.data,...(a.thumb?{thumb:a.thumb}:{})}))}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[]});(r.actions||[]).forEach(a=>a.kick&&kick(a.kick))}
   catch(e){const msg=e&&e.code==="functions/resource-exhausted"?e.message:e&&e.code==="functions/permission-denied"?"Coach réservé à Claire et Julien.":e&&/not-found|internal|unavailable/.test(e.code||"")?"Le coach ne répond pas pour l'instant. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
     c.messages.push({role:"assistant",text:msg,actions:[],error:true})}
   c.busy=false;renderChat();
@@ -1269,7 +1271,8 @@ function openEditor(col,id){
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
     const ok=await save(col,id,out);
-    if(ok){closeModal();toast(out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000?"Enregistré : la note sera recalculée d'ici 15 minutes":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
+    const refit=out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000;
+    if(ok){closeModal();if(refit)kick("analyse");toast(refit?"Enregistré : la note est recalculée (1 à 2 minutes)":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
   });
   const del=form.querySelector('[data-act="del"]');
   if(del)del.addEventListener("click",async ev=>{

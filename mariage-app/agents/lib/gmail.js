@@ -29,7 +29,7 @@ export async function recentThreads(gmail, { query, max = 200 }) {
     out.push({
       id,
       messages: (t.data.messages || []).map(m => {
-        const { text, attachments } = extractText(m.payload);
+        const { text, attachments, files } = extractText(m.payload);
         return {
           id: m.id,
           labelIds: m.labelIds || [],
@@ -38,9 +38,16 @@ export async function recentThreads(gmail, { query, max = 200 }) {
           subject: header(m, "Subject"),
           text: text.slice(0, 20000),
           attachments,
+          files,
         };
       }),
     });
   }
   return out;
+}
+
+/** Contenu d'une pièce jointe en base64 standard (lecture seule). */
+export async function attachmentData(gmail, messageId, attachmentId) {
+  const r = await gmail.users.messages.attachments.get({ userId: "me", messageId, id: attachmentId });
+  return String(r.data.data || "").replace(/-/g, "+").replace(/_/g, "/");
 }

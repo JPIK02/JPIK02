@@ -51,6 +51,14 @@ const FIT_OUT = {
 
 const strip = ({ fit, ...v }) => v; // on n'envoie pas l'ancienne fiche à Claude
 
+/** Exécute fn sur chaque élément, `n` à la fois ; la première erreur est remontée après la fin des autres. */
+export async function mapPool(items, n, fn) {
+  let i = 0, err = null;
+  const worker = async () => { while (i < items.length) { const it = items[i++]; try { await fn(it); } catch (e) { err ||= e; } } };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  if (err) throw err;
+}
+
 async function loadContext() {
   const [settings, brief, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("inbox")]);
   return JSON.stringify({
@@ -92,23 +100,21 @@ export async function runAnalyseAgent({ log = console.log, force = false } = {})
   try {
     const context = await loadContext();
 
-    // 1. Synthèse du brief
-    await writeProfil(context);
-
-    // 2. Fiches prestataires
+    // Synthèse du brief et fiches prestataires en parallèle (4 à la fois) : quelques minutes de moins
     const scores = [];
-    for (const v of todo) {
+    const analyseOne = async v => {
       const fit = await runForOutput({
         system: SYSTEM,
         user: `Analyse ce prestataire, recherche ses avis en ligne, puis appelle enregistrer_fit.\n\n<prestataire>${JSON.stringify(strip(v))}</prestataire>\n\n<donnees>${context}</donnees>`,
         output: FIT_OUT,
-        webSearch: true,
+        webSearch: true, maxSearches: 4, effort: "medium",
       });
       if (fit.avis?.sources) fit.avis.sources = fit.avis.sources.filter(s => /^https?:\/\//.test(s.url || ""));
       // update avec un seul champ : on ne touche à rien d'autre sur le prestataire
       await getDb().doc(`vendors/${v.id}`).update({ fit: { ...fit, updatedAt: Date.now() } });
       scores.push(`${v.name} : ${Math.round(fit.score)}`);
-    }
+    };
+    await Promise.all([writeProfil(context), mapPool(todo, 4, analyseOne)]);
     await mergeMeta("analyse", { status: "terminée", lastRun: Date.now(), lastRunAt: Date.now() });
     log(`${todo.length} prestataire(s) analysé(s). ${scores.join(" · ")}`);
     if (todo.length) await notify({ title: "Analyse des prestataires terminée", body: scores.join(" · "), url: "/#prestataires", tag: "analyse" }, { log });

@@ -74,3 +74,15 @@ export const agents = onSchedule(
     const failed = await runAll({});
     if (failed) console.error("[agents] au moins un agent a échoué (voir les lignes ci-dessus)");
   });
+
+// Lancement immédiat depuis l'app (« Demander une analyse », « Lire la boîte », point de la semaine, notes de visite),
+// sans attendre le prochain réveil. Un verrou (agents/lib/lock.js) évite les doubles passages.
+export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstances: 2 }, async req => {
+  const email = String(req.auth?.token?.email || "").toLowerCase();
+  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé à Claire et Julien.");
+  const job = req.data?.job;
+  if (!["mail", "analyse", "hebdo"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
+  const { runAll } = await import("./agents/main.js");
+  const failed = await runAll({ forced: job });
+  return { ok: !failed };
+});

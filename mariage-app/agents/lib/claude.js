@@ -24,9 +24,10 @@ const api = () => (client ||= new Anthropic()); // lit ANTHROPIC_API_KEY
 export async function runForOutput({ system, user, output, webSearch = false, maxSearches = 6, maxTokens = 16000, effort = "high" }) {
   const tools = [output];
   if (webSearch) tools.push({ type: "web_search_20260209", name: "web_search", max_uses: maxSearches });
+  const ask = `Quand tu as fini, rends ton résultat en appelant l'outil ${output.name}.`;
   const messages = [{
     role: "user",
-    content: `${user}\n\nQuand tu as fini, rends ton résultat en appelant l'outil ${output.name}.`,
+    content: Array.isArray(user) ? [...user, { type: "text", text: ask }] : `${user}\n\n${ask}`,
   }];
 
   for (let turn = 0; turn < 8; turn++) {

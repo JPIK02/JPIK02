@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { shouldRun, slotMatches, parisClock, vendorsToAnalyse, profilDue, vendorsRequested, isoWeek, hebdoDue, visitsToFollow } from "../lib/scheduler.js";
 import { cleanPayload, cleanSubject } from "../lib/validate.js";
-import { extractText, stripHtml } from "../lib/mailtext.js";
+import { extractText, stripHtml, readableFiles } from "../lib/mailtext.js";
+import { mapPool } from "../analyse-agent.js";
 
 // 2026-11-09 07:10 à Paris = 06:10 UTC (heure d'hiver), un lundi
 const mondayParis7 = new Date("2026-11-09T06:10:00Z");
@@ -63,7 +64,7 @@ test("lecture du corps des mails", () => {
     { mimeType: "text/plain", body: { data: enc("Bonjour ! Tarif 4 850 €") } },
     { mimeType: "application/pdf", filename: "plaquette.pdf", body: {} },
   ] };
-  assert.deepEqual(extractText(payload), { text: "Bonjour ! Tarif 4 850 €", attachments: ["plaquette.pdf"] });
+  assert.deepEqual(extractText(payload), { text: "Bonjour ! Tarif 4 850 €", attachments: ["plaquette.pdf"], files: [] });
   assert.equal(stripHtml("<div>A<br>B</div><style>x{}</style>"), "A\nB");
 });
 
@@ -101,4 +102,24 @@ test("relance après visite : le soir même, une fois, si un prestataire est rec
   const rdv = [{ id: "a", date: "2026-11-22", title: "Visite Au Petit Manoir" }, { id: "b", date: "2026-11-22", title: "Coiffeur" }, { id: "c", date: "2026-11-22", avec: "Au Petit Manoir", followupAt: 1 }];
   assert.deepEqual(visitsToFollow(rdv, vendors, { hour: 19, isoDate: "2026-11-22" }).map(x => x.r.id), ["a"]);
   assert.deepEqual(visitsToFollow(rdv, vendors, { hour: 12, isoDate: "2026-11-22" }), []);
+});
+
+test("pièces jointes des mails : PDF et photos lisibles, 3 au plus, taille limitée", () => {
+  const payload = { mimeType: "multipart/mixed", parts: [
+    { mimeType: "text/plain", body: { data: Buffer.from("Voir devis").toString("base64url") } },
+    { mimeType: "application/pdf", filename: "devis.pdf", body: { attachmentId: "A1", size: 120000 } },
+    { mimeType: "application/octet-stream", filename: "tarifs.PDF", body: { attachmentId: "A2", size: 1000 } },
+    { mimeType: "image/jpeg", filename: "salle.jpg", body: { attachmentId: "A3", size: 9_000_000 } },
+    { mimeType: "application/zip", filename: "photos.zip", body: { attachmentId: "A4", size: 1000 } },
+  ] };
+  const { files } = extractText(payload);
+  assert.equal(files.length, 4);
+  const ok = readableFiles(files);
+  assert.deepEqual(ok.map(f => [f.filename, f.kind, f.mimeType]), [["devis.pdf", "document", "application/pdf"], ["tarifs.PDF", "document", "application/pdf"]]);
+});
+
+test("analyse en parallèle : tout est traité, n à la fois au plus", async () => {
+  let cur = 0, peak = 0; const done = [];
+  await mapPool([1, 2, 3, 4, 5, 6], 4, async x => { cur++; peak = Math.max(peak, cur); await new Promise(r => setTimeout(r, 10)); done.push(x); cur--; });
+  assert.equal(done.length, 6); assert.equal(peak, 4);
 });
