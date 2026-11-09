@@ -56,10 +56,20 @@ https://console.anthropic.com → API Keys → créer une clé. Vérifier le nom
 3. Les secrets ne sont jamais visibles, même dans un dépôt public. Mais dans un dépôt public, n'importe qui peut lire les journaux des Actions : les agents n'y écrivent qu'un résumé (nombre de mails, noms et notes des prestataires).
 4. Onglet **Actions** → « Agents mariage » → **Run workflow** avec `mail` pour un premier essai.
 
-### 6. Couper les anciennes tâches planifiées
+### 6. Assistant IA intégré (offre Blaze)
+L'assistant de l'app (bouton ✦) répond en quelques secondes et agit dans l'app : il lui faut un petit serveur (Cloud Functions), disponible avec l'offre **Blaze** de Firebase (paiement à l'usage, gratuit à ce volume).
+1. Console Firebase → ⚙️ **Utilisation et facturation** → **Détails et paramètres du forfait** → **Modifier le forfait** → **Blaze**, puis une **alerte de budget** (ex. 1 €).
+2. Google Cloud → **IAM** (https://console.cloud.google.com/iam-admin/iam?project=mariageapp-a2ffe) → crayon sur `firebase-adminsdk-…` → ajouter le rôle **Éditeur** (nécessaire pour publier la fonction).
+3. GitHub → Actions → « Assistant IA (Cloud Functions) » → **Run workflow** (ou il part tout seul à la prochaine modification du dossier `functions/`).
+
+La clé Claude utilisée est le secret `ANTHROPIC_API_KEY` déjà en place. Coût Claude : quelques centimes par échange ; garde-fou de 150 messages par jour.
+
+### 7. Couper les anciennes tâches planifiées
 Une fois que tout tourne ici, mettre en pause les deux tâches planifiées « Assistant e-mails du mariage » et « Analyse des prestataires du mariage » dans Claude, pour éviter que deux agents écrivent en parallèle.
 
 ## Au quotidien
+- **Assistant ✦** (en bas à droite) : posez une question ou demandez une action (« ajoute… », « mets X dans le groupe Amis », « note le devis de… »). Chaque action s'annule d'un toucher. Il ne supprime jamais rien. Dans *Nos envies*, « Commencer l'entretien » remplit le questionnaire en discutant.
+- **Notifications** : Réglages → Notifications (sur iPhone, depuis l'app ajoutée à l'écran d'accueil).
 - Les agents passent selon le planning réglé dans **Réglages** (par défaut 7 h pour les mails, 8 h pour l'analyse).
 - « Lire la boîte au prochain passage » / « Demander une analyse » : pris en compte dans les 10 à 15 minutes.
 - Rien n'entre dans le planning, le budget ou les invités sans votre validation dans l'onglet **E-mails**.

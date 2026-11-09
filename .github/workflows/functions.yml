@@ -1,0 +1,51 @@
+name: Assistant IA (Cloud Functions)
+
+# Déploie la fonction « assistant » quand son code change. Nécessite l'offre Blaze de Firebase.
+# La clé Claude vient du secret ANTHROPIC_API_KEY : elle est écrite dans functions/.env au moment
+# du déploiement (variable d'environnement de la fonction), jamais dans le dépôt.
+on:
+  push:
+    branches: [main, claude/cool-cori-ipe48i]
+    paths:
+      - "mariage-app/functions/**"
+      - "mariage-app/src/questions.js"
+      - ".github/workflows/functions.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: functions
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mariage-app/functions
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - name: Questionnaire partagé avec l'app
+        run: cp ../src/questions.js questions.js
+      - run: npm test
+      - name: Configuration de la fonction
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_MODEL: ${{ vars.ANTHROPIC_MODEL }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          {
+            echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY"
+            echo "ALLOWED_EMAILS=julienpicquet@gmail.com,duquesne.claire@yahoo.fr"
+            if [ -n "$ANTHROPIC_MODEL" ]; then echo "ANTHROPIC_MODEL=$ANTHROPIC_MODEL"; fi
+          } > .env
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/sa.json"
+      - name: Déploiement
+        working-directory: mariage-app
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx --yes firebase-tools@15.34.1 deploy --only functions --project mariageapp-a2ffe --non-interactive --force
