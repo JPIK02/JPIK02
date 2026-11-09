@@ -15,11 +15,11 @@ jobs:
     timeout-minutes: 3
     steps:
       - env:
-          URL: ${{ inputs.url || 'https://www.pinterest.com/pinterest/official-news.rss' }}
+          URL: ${{ inputs.url || 'https://pin.it/2lx22Nnec' }}
         run: |
           for u in "$URL" "https://www.pinterest.com/pinterest/feed.rss"; do
             echo "== $u"
-            curl -sSL -m 30 -A "Mozilla/5.0 (compatible; MariageApp/1.0)" -o f.xml -w "HTTP %{http_code} %{content_type}\n" "$u" || true
+            curl -sSL -m 30 -A "Mozilla/5.0 (compatible; MariageApp/1.0)" -o f.xml -w "HTTP %{http_code} %{content_type} → %{url_effective}\n" "$u" || true
             head -c 1500 f.xml | sed 's/></>\n</g' | head -40; echo
             echo "items: $(grep -o '<item>' f.xml | wc -l)  images: $(grep -o 'i.pinimg.com[^"]*' f.xml | head -3)"
           done
