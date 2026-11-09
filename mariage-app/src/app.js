@@ -7,14 +7,14 @@ const setHTML=(el,h)=>{if(el&&el._h!==h){el._h=h;el.innerHTML=h}};
 
 
 /* ---------- Constants ---------- */
-// Navigation : 4 sections principales (Coach, Planning, Prestataires, Invités) ; Agenda et Plan de table
-// sont des sous-onglets de Planning et d'Invités ; le reste est dans « Plus ».
+// Navigation : 4 sections principales (Coach, Planning, Prestataires, Nos envies) ; Agenda et Plan de table
+// sont des sous-onglets de Planning et d'Invités ; le reste (dont Invités) est dans « Plus ».
 const VIEWS=[
-  ["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["invites","Invités"],
-  ["budget","Budget"],["jour-j","Jour J"],["envies","Nos envies"],["assistant","E-mails"],["reglages","Réglages"]
+  ["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["envies","Nos envies"],
+  ["invites","Invités"],["budget","Budget"],["jour-j","Jour J"],["assistant","E-mails"],["reglages","Réglages"]
 ];
-const VIEW_NAMES=Object.assign(Object.fromEntries(VIEWS),{agenda:"Agenda",tables:"Plan de table"});
-const PARENT_VIEW={agenda:"planning",tables:"invites"};
+const VIEW_NAMES=Object.assign(Object.fromEntries(VIEWS),{agenda:"Agenda",tables:"Plan de table","reglages-ia":"Agents IA"});
+const PARENT_VIEW={agenda:"planning",tables:"invites","reglages-ia":"reglages"};
 const subnav=(items)=>`<div class="seg subnav" role="tablist">${items.map(([k,l])=>`<button role="tab" data-go="${k}" aria-selected="${S.view===k}" aria-pressed="${S.view===k}">${l}</button>`).join("")}</div>`;
 const JOBS={
   mail:{label:"Lecture de la boîte mail",intro:"L'assistant lit les nouveaux mails et prépare des propositions à valider.",def:{enabled:true,mode:"daily",h1:7,h2:19,day:1}},
@@ -55,7 +55,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -277,8 +277,8 @@ function renderHero(){
   const fill=ci/PHASES.length*100+1;
   setHTML(fr,`<div class="fr-track" role="list" aria-label="Étapes de la préparation"><div class="fr-fill" style="width:${Math.min(100,fill).toFixed(1)}%"></div>${PHASES.map((p,i)=>`<div class="fr-step ${i<ci?"past":i===ci?"now":""}" role="listitem"><span class="fr-dot"></span><span class="fr-lab">${p.short}${i===ci?" · en cours":""}</span></div>`).join("")}</div>`);
 }
-const ICON={coach:'<path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/>',apercu:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',prestataires:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',plus:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'};
-const BNAV=[["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["invites","Invités"]];
+const ICON={envies:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',coach:'<path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/>',apercu:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',prestataires:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',plus:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'};
+const BNAV=[["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["envies","Nos envies"]];
 function renderBnav(){
   const late=S.tasks.filter(isLate).length,sug=pendingSugs().length;
   const cur=PARENT_VIEW[S.view]||S.view,inMain=BNAV.some(b=>b[0]===cur);
@@ -456,7 +456,7 @@ function vBudget(){
   const marge=tot?tot-Math.max(prevu,engage):null;
   const resv=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
   const strip=`<div class="strip">
-    <div class="kpi t1"><div><div class="k">Budget total</div><div class="v num">${tot?eur(tot):"—"}</div><div class="s">${tot?"Fixé dans Réglages":`<button class="chip acc" data-go="reglages">Le fixer</button>`}</div></div></div>
+    <div class="kpi t1"><div><div class="k">Budget total</div><div class="v num">${tot?eur(tot):"—"}</div><div class="s">${S.canWrite?`<button class="chip acc" data-act="budgettot">${tot?"Modifier":"Le fixer"}</button>`:""}</div></div></div>
     <div class="kpi t2"><div><div class="k">Prévu</div><div class="v num">${eur(prevu)}</div><div class="s">Somme des postes</div></div></div>
     <div class="kpi t3"><div><div class="k">Engagé</div><div class="v num">${eur(engage)}</div><div class="s">Payé ${eur(paye)} · reste ${eur(Math.max(0,engage-paye))}</div></div></div>
     <div class="kpi ${marge!==null&&marge<0?"":"t4"}" style="${marge!==null&&marge<0?"background:var(--bad-soft)":""}"><div><div class="k">Marge</div><div class="v num" style="${marge!==null&&marge<0?"color:var(--bad)":""}">${marge===null?"—":eur(marge)}</div><div class="s">${marge===null?"Selon le budget total":marge<0?"Au-dessus du budget":"Encore disponible"}</div></div></div>
@@ -741,7 +741,7 @@ function inspGallery(c){
   const list=S.inspirations.filter(x=>x.cat===c).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   if(!list.length&&!S.canWrite)return "";
   return `<div class="insp"><div class="insp-h"><h3>Inspirations</h3>${S.canWrite?`<button class="btn sm" data-act="inspadd">Montrer une photo au coach</button>`:""}</div>
-    ${list.length?`<div class="insp-grid">${list.map(x=>`<figure><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description)}" loading="lazy"><figcaption>${esc(x.description)}${x.by?` <span>· ${esc(x.by)}</span>`:""}</figcaption>${S.canWrite?`<button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button>`:""}</figure>`).join("")}</div>`
+    ${list.length?`<div class="insp-grid">${list.map(x=>`<figure><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description)}" loading="lazy"><figcaption>${esc(x.description)}${x.pinUrl?` <a href="${esc(x.pinUrl)}" target="_blank" rel="noopener noreferrer">· Pinterest</a>`:x.by?` <span>· ${esc(x.by)}</span>`:""}</figcaption>${S.canWrite?`<button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button>`:""}</figure>`).join("")}</div>`
       :`<p class="plan-when" style="margin:0">Une photo vaut mieux qu'un long discours : montrez au coach un lieu, une déco ou une tenue qui vous plaît, il en tirera vos goûts et la gardera ici.</p>`}</div>`;
 }
 /* Briefs prestataires : fil rouge commun + un brief par métier, rédigés par l'agent (meta/briefs), exportés en PDF */
@@ -898,7 +898,7 @@ function vAssistant(){
       <form class="panel form" id="agent-form">
         <div class="panel-h" style="margin-bottom:0"><h3>Réglages de l'assistant</h3></div>
         <div class="field"><label for="a-mailbox">Adresse de la boîte dédiée</label><input type="email" id="a-mailbox" name="mailbox" value="${esc(ag.mailbox||"")}" placeholder="adresse@gmail.com" ${dis}></div>
-        <p class="plan-when" style="margin:0">Lecture automatique : <b>${esc(planLabel("mail"))}</b>. <button type="button" class="btn ghost sm" data-go="reglages" style="padding:0 4px;min-height:0">Modifier dans Réglages</button></p>
+        <p class="plan-when" style="margin:0">Lecture automatique : <b>${esc(planLabel("mail"))}</b>. <button type="button" class="btn ghost sm" data-go="reglages-ia" style="padding:0 4px;min-height:0">Modifier dans Réglages</button></p>
         <div class="field"><span class="lab">Ce qu'il doit repérer</span><div class="checks">${Object.entries(SUGTYPE).map(([k,[l]])=>`<label><input type="checkbox" id="a-t-${k}" name="t-${k}" ${types[k]!==false?"checked":""} ${dis}> ${l}</label>`).join("")}</div></div>
         <div class="field"><label for="a-notes">Consignes particulières</label><textarea autocomplete="off" id="a-notes" name="consignes" placeholder="Ex. ignorer les newsletters, toujours attribuer les tenues à la bonne personne…" ${dis}>${esc(ag.consignes||"")}</textarea></div>
         <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
@@ -959,14 +959,38 @@ function iaPanel(){
     <form class="ia-budget" id="ia-form"><label for="search-ia-budget">Budget mensuel (€)</label><input type="number" inputmode="numeric" min="1" step="1" id="search-ia-budget" name="budget" value="${esc(budget)}" ${dis}><button class="btn sm" type="submit" ${dis}>Enregistrer</button></form>
     <p class="plan-when" style="margin:10px 0 0">Estimation calculée à partir des tokens consommés (tarifs publics, 1 $ ≈ ${String(USD_EUR).replace(".",",")} €). La facture exacte est sur console.anthropic.com, où vous pouvez aussi fixer une limite de dépense stricte.</p></div>`;
 }
+/* Tableaux Pinterest publics → inspirations (agent pinterest-agent.js, meta/pinterest) */
+const pinBoard=u=>{try{const x=new URL(String(u||"").trim());if(!/(^|\.)pinterest\.[a-z.]+$/i.test(x.hostname))return null;const p=x.pathname.split("/").filter(Boolean);return p.length>=2&&p[0]!=="pin"?`https://www.pinterest.com/${p[0]}/${p[1].replace(/\.rss$/i,"")}/`:null}catch(e){return null}};
+const pinName=u=>{const p=new URL(u).pathname.split("/").filter(Boolean),n=decodeURIComponent(p[1]||"").replace(/-/g," ");return n.charAt(0).toUpperCase()+n.slice(1)+" · "+p[0]};
+function pinterestPanel(){
+  const m=S.pinterest||{},boards=m.boards||[],dis=S.canWrite?"":"disabled",running=(S.locks.pinterest||0)>Date.now()||((m.requestedAt||0)>(m.lastSyncAt||0)&&Date.now()-(m.requestedAt||0)<10*60000);
+  const n=S.inspirations.filter(x=>x.source==="pinterest").length;
+  const last=m.lastSyncAt?`Dernière synchronisation ${relDay(new Date(m.lastSyncAt))} à ${new Date(m.lastSyncAt).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}${m.lastImported!=null?` · ${m.lastImported} nouvelle${m.lastImported>1?"s":""} épingle${m.lastImported>1?"s":""}`:""}${m.remaining?` · ${m.remaining} en attente (prochain passage)`:""}.`:"Jamais synchronisé.";
+  const opts=c=>`<option value="auto" ${!c||c==="auto"?"selected":""}>Rangement automatique</option>${QCATS.map(q=>`<option value="${q.k}" ${c===q.k?"selected":""}>${esc(q.label)}</option>`).join("")}`;
+  return `<div class="formpanel" style="margin-top:8px" id="pinterest"><div class="panel-h" style="margin-bottom:6px"><h3>Tableaux Pinterest</h3>${n?`<span class="chip ok">${n} épingle${n>1?"s":""} importée${n>1?"s":""}</span>`:""}</div>
+    <p class="plan-when" style="margin:0 0 12px">Collez le lien d'un tableau <b>public</b>. Ses nouvelles épingles arrivent dans vos inspirations (Nos envies), décrites et rangées par catégorie par le coach, puis nourrissent votre fil rouge et vos briefs. Synchronisation chaque jour, 12 épingles au plus par passage.</p>
+    ${boards.length?`<div class="pin-list">${boards.map((b,i)=>`<div class="pin-row"><div class="pin-t"><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(pinName(b.url))}</a></div>
+      <label class="sr" for="search-pin-cat-${i}">Catégorie de ce tableau</label><select id="search-pin-cat-${i}" data-pincat="${i}" ${dis}>${opts(b.cat)}</select>
+      ${S.canWrite?`<button type="button" class="link" data-act="pindel" data-i="${i}">Retirer</button>`:""}</div>`).join("")}</div>`:""}
+    ${S.canWrite?`<form class="pin-add" id="pin-form"><label class="sr" for="search-pin-url">Lien du tableau Pinterest</label><input type="url" inputmode="url" autocomplete="off" id="search-pin-url" name="url" placeholder="https://www.pinterest.fr/compte/tableau/"><button class="btn sm" type="submit">Ajouter</button></form>`:""}
+    <div class="pin-foot"><span class="plan-when" style="margin:0">${running?"Synchronisation en cours…":esc(last)}${m.status==="erreur"&&m.lastError?` <b style="color:var(--bad)">Problème : ${esc(m.lastError)}</b>`:""}</span>
+      ${boards.length&&S.canWrite?`<button class="btn sm primary" data-act="pinsync" ${running?"disabled":""}>${running?"Synchronisation…":"Synchroniser maintenant"}</button>`:""}</div></div>`;
+}
+function vReglagesIA(){
+  return `${subnav([["reglages","Général"],["reglages-ia","Agents IA"]])}<div class="vh"><div><h2>Agents IA</h2><p>Ce que font le coach et les agents, quand ils tournent, ce qu'ils coûtent et ce qu'ils peuvent consulter.</p></div></div>
+  ${pinterestPanel()}
+  <div style="margin-top:28px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Planning des agents</h3>
+    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes s'ils ont du travail et tournent selon le planning ci-dessous. Un passage demandé depuis l'app démarre tout de suite.</p>
+    <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
+  ${iaPanel()}`;
+}
 function vReglages(){
   const s=S.settings,dis=S.canWrite?"":"disabled";
   if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported";render()}),0);
-  return `<div class="vh"><div><h2>Réglages</h2><p>Les infos de base qui alimentent le compte à rebours, les échéances et le budget.</p></div></div>
+  return `${subnav([["reglages","Général"],["reglages-ia","Agents IA"]])}<div class="vh"><div><h2>Réglages</h2><p>Les infos de base qui alimentent le compte à rebours et les échéances. Le budget total se règle dans Budget.</p></div></div>
   <form class="formpanel form" id="settings-form">
     <div class="cols2">
       <div class="field"><label for="search-s-date">Date du mariage</label><input type="date" id="search-s-date" name="date" value="${esc(s.date||"")}" ${dis}></div>
-      <div class="field"><label for="search-s-budget">Budget total (€)</label><input type="number" inputmode="numeric" min="0" step="100" id="search-s-budget" name="budgetTotal" value="${esc(s.budgetTotal??"")}" ${dis}></div>
       <div class="field"><label for="search-s-lieu">Lieu de réception</label><input type="text" autocomplete="off" id="search-s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
       <div class="field"><label for="search-s-ville">Ville</label><input type="text" autocomplete="off" id="search-s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
       <div class="field"><label for="search-s-mairie">Mairie</label><input type="text" autocomplete="off" id="search-s-mairie" name="mairie" value="${esc(s.mairie||"")}" placeholder="Commune où le mariage est célébré" ${dis}></div>
@@ -975,10 +999,7 @@ function vReglages(){
     <div class="field"><label for="search-s-notes">Notes communes</label><textarea autocomplete="off" id="search-s-notes" name="notes" ${dis}>${esc(s.notes||"")}</textarea></div>
     <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
   </form>
-  <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
-    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes s'ils ont du travail et tournent selon le planning ci-dessous. Un passage demandé depuis l'app démarre tout de suite.</p>
-    <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
-  ${iaPanel()}
+
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Photo du couple</h3></div>
     <div class="photo-row">${coupleAvatar()}<div><p class="plan-when" style="margin:0 0 10px">Affichée sur l'accueil, à côté du « Bonjour ». La même pour vous deux.</p>
     ${S.canWrite?`<button class="btn sm" data-act="couplephoto">${S.photo&&S.photo.data?"Changer":"Ajouter une photo"}</button>${S.photo&&S.photo.data?` <button class="btn sm" data-act="couplephotox">Retirer</button>`:""}`:""}</div></div></div>
@@ -1239,7 +1260,7 @@ function onboarding(){
   const s=S.settings,g=S.guests;
   const other=Object.keys(S.presence||{}).filter(k=>k!==presKey());
   return [
-    ["Date du mariage",!!s.date,"reglages"],["Budget total",!!num(s.budgetTotal),"reglages"],
+    ["Date du mariage",!!s.date,"reglages"],["Budget total",!!num(s.budgetTotal),"budget"],
     ["Ville et nombre d'invités visé",!!(s.ville&&num(s.invitesCible)),"reglages"],
     ["Invités rangés par groupe",g.length>0&&g.filter(x=>!x.group).length<=g.length*.2,"invites"],
     ["Nos envies remplies (70 %)",allProg()>=.7,"brief"],
@@ -1305,7 +1326,7 @@ function applyTheme(t){
 function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t)}</b>${esc(s)}</div></div>`}
 
 /* ---------- Render ---------- */
-const VIEWFN={apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
+const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
 function render(){
   renderHero();renderTabs();
   const main=document.getElementById("main");
@@ -1507,6 +1528,14 @@ document.addEventListener("click",async e=>{
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
   if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
+  if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
+    document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Budget total"><h3>Budget total</h3>
+      <form class="form" id="budget-total-form"><div class="field"><label for="search-b-total">Budget total du mariage (€)</label><input type="number" inputmode="numeric" min="0" step="100" id="search-b-total" name="budgetTotal" value="${tot||""}"></div>
+      <p class="plan-when" style="margin:0 0 12px">Sert à calculer la marge et la part de chaque poste.</p>
+      <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Annuler</button> <button class="btn primary" type="submit">Enregistrer</button></div></div></form></div></div>`;return}
+  if(a==="pinsync"){if(!S.canWrite)return;if(await mergeDoc("meta/pinterest",{requestedAt:Date.now()})){kick("pinterest");toast("Synchronisation lancée : vos épingles arrivent dans Nos envies");render()}return}
+  if(a==="pindel"){if(!S.canWrite)return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer";return}
+    const b=(S.pinterest.boards||[]).slice();b.splice(+t.dataset.i,1);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Tableau retiré (les épingles déjà importées restent)");return}
   if(a==="iaweb"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{web:t.dataset.v,updatedAt:Date.now()}))toast("Réglage enregistré");return}
   if(a==="ialvl"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{niveaux:{[t.dataset.feat]:t.dataset.v},updatedAt:Date.now()}))toast("Réglage enregistré : appliqué dès le prochain appel");return}
   if(a==="fireall"){if(!S.canWrite||agentBusy("analyse"))return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer : refaire toutes les fiches";return}
@@ -1574,6 +1603,7 @@ document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.val
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
   const el=e.target;
+  if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
     // curseur directement sous la photo pour la commenter (sans faire remonter la conversation)
     const ta=document.getElementById("chat-text");if(ta&&(S.chat.atts||[]).length){ta.focus({preventScroll:true});ta.setSelectionRange(ta.value.length,ta.value.length);ta.scrollIntoView({block:"nearest"})}return}
@@ -1587,12 +1617,18 @@ document.addEventListener("submit",async e=>{
   const f=e.target;
   if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-text");const v=inp.value.trim();if(!v)return;inp.value="";openChat("chat");await sendChat(v);return}
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
+  if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
+    if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
+  if(f.id==="pin-form"){e.preventDefault();const u=pinBoard(f.elements.url.value);
+    if(!u){toast("Lien de tableau non reconnu : ouvrez le tableau sur Pinterest et copiez son lien (…/compte/tableau/)");return}
+    const b=(S.pinterest.boards||[]).slice();if(b.some(x=>x.url===u)){toast("Ce tableau est déjà ajouté");return}
+    b.push({url:u,cat:"auto"});if(await mergeDoc("meta/pinterest",{boards:b,requestedAt:Date.now()})){kick("pinterest");f.reset();document.activeElement&&document.activeElement.blur();toast("Tableau ajouté : première synchronisation lancée")}return}
   if(f.id==="ia-form"){e.preventDefault();const v=num(f.elements.budget.value);if(!(v>0)){toast("Indiquez un budget en euros");return}
     if(await mergeDoc("meta/ia",{budget:v,updatedAt:Date.now()})){document.activeElement&&document.activeElement.blur();toast("Budget enregistré")}return}
   if(f.id==="settings-form"){
     e.preventDefault();
     const d={updatedAt:Date.now()};["date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
-    ["budgetTotal","invitesCible"].forEach(k=>{const v=f.elements[k].value;d[k]=v===""?null:num(v)});
+    ["invitesCible"].forEach(k=>{const v=f.elements[k].value;d[k]=v===""?null:num(v)});
     if(await setDoc("meta/settings",S.settings,d)){mergeDoc("meta/analyse",{profilRequestedAt:Date.now()});document.activeElement&&document.activeElement.blur();toast("Réglages enregistrés");render()}
     return;
   }
@@ -1660,7 +1696,7 @@ function boot(){
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
-    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");meta("briefs","briefs");
+    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");meta("briefs","briefs");meta("pinterest","pinterest");
     { const d=new Date(),prev=monthKey(new Date(d.getFullYear(),d.getMonth()-1,15));
       for(const [k,m] of [["cur",monthKey(d)],["prev",prev]])unsubs.push(db.doc("usage/"+m).onSnapshot(LIVE,x=>{S.usage[k]=x.exists?x.data():{};later()},()=>{})); }
     db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});

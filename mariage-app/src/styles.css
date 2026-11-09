@@ -858,3 +858,13 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .srcs a{color:var(--accent);overflow-wrap:anywhere}
 .ia-web{display:flex;flex-direction:column;gap:8px;margin:4px 0 16px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .ia-web>div:first-child{display:flex;flex-direction:column}.ia-web span{font-size:13.5px;color:var(--muted)}
+/* Tableaux Pinterest (Réglages > Agents IA) */
+.pin-list{display:grid;border-top:1px solid var(--line);margin-bottom:12px}
+.pin-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.pin-t{grid-column:1/-1;min-width:0}.pin-t a{color:var(--accent);font-weight:600;overflow-wrap:anywhere}
+.pin-row select{min-height:40px;border:1px solid var(--line-strong);border-radius:10px;padding:6px 10px;font-size:15px;background:var(--bg);color:var(--ink);max-width:100%}
+.pin-row .link{color:var(--muted);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0}.pin-row .link.armed{color:var(--bad)}
+.pin-add{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.pin-add input{flex:1;min-width:200px;min-height:42px;border:1px solid var(--line-strong);border-radius:10px;padding:8px 12px;font-size:16px;background:var(--bg);color:var(--ink)}
+.pin-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.insp-grid figcaption a{color:var(--accent);font-weight:600}

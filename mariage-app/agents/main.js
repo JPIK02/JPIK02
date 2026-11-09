@@ -9,6 +9,7 @@ import { ensureVapid } from "./lib/push.js";
 import { runHebdo, runVisitFollowups } from "./hebdo-agent.js";
 import { withLock } from "./lib/lock.js";
 import { runBriefs, briefsDue } from "./briefs-agent.js";
+import { runPinterest, pinterestDue } from "./pinterest-agent.js";
 import { overBudget, monthKey } from "./lib/usage.js";
 import { getDb } from "./lib/firestore.js";
 
@@ -54,6 +55,11 @@ export async function runAll({ forced } = {}) {
     try { if (forced === "hebdo" || hebdoDue(await getMeta("hebdo"))) { console.log("[hebdo] → point de la semaine"); await withLock("hebdo", 10 * 60 * 1000, () => runHebdo()); } }
     catch (e) { failed = true; console.error("[hebdo] échec :", e); }
     try { await runVisitFollowups(); } catch (e) { console.error("[visites] échec :", e.message); }
+  }
+  // Tableaux Pinterest → inspirations : sur demande, sinon une fois par jour
+  if (!forced || forced === "pinterest") {
+    try { if (forced === "pinterest" || pinterestDue(await getMeta("pinterest"))) { console.log("[pinterest] → synchronisation"); await withLock("pinterest", 10 * 60 * 1000, () => runPinterest()); } }
+    catch (e) { failed = true; console.error("[pinterest] échec :", e); await getDb().doc("meta/pinterest").set({ status: "erreur", lastError: String(e.message || e).slice(0, 300), lastSyncAt: Date.now() }, { merge: true }).catch(() => {}); }
   }
   // Briefs prestataires : sur demande depuis l'app (meta/briefs.requestedAt)
   if (!forced || forced === "briefs") {

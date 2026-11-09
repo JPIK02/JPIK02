@@ -152,3 +152,23 @@ test("coût : tarifs, cache, recherches, niveaux et budget", async () => {
   assert.equal(p.f.coach.calls, 1);
   assert.equal(Math.round(p.usd * 1e4) / 1e4, 0.006);
 });
+
+test("Pinterest : lien de tableau → flux RSS, lecture des épingles, rythme", async () => {
+  const { rssUrl, parseRss, pinterestDue } = await import("../pinterest-agent.js").catch(() => ({}));
+  if (!rssUrl) return; // firebase-admin absent (CI de l'app) : test lancé en local, avec les dépendances des agents
+  assert.equal(rssUrl("https://fr.pinterest.com/claire/mariage-champetre/"), "https://www.pinterest.com/claire/mariage-champetre.rss");
+  assert.equal(rssUrl("https://www.pinterest.com/claire/deco.rss"), "https://www.pinterest.com/claire/deco.rss");
+  assert.equal(rssUrl("https://www.pinterest.com/pin/123/"), null);
+  assert.equal(rssUrl("https://exemple.fr/claire/deco"), null);
+  const xml = `<rss><channel><item><title>Arche fleurie</title><link>https://www.pinterest.com/pin/42/</link><description>&lt;a href=&quot;x&quot;&gt;&lt;img src=&quot;https://i.pinimg.com/236x/aa/bb/cc/abc.jpg&quot;&gt;&lt;/a&gt;Arche &amp;amp; eucalyptus</description><guid>https://www.pinterest.com/pin/42/</guid></item>
+    <item><title>Sans image</title><link>x</link><description>rien</description><guid>y</guid></item></channel></rss>`;
+  const pins = parseRss(xml);
+  assert.equal(pins.length, 1);
+  assert.equal(pins[0].img, "https://i.pinimg.com/474x/aa/bb/cc/abc.jpg");
+  assert.equal(pins[0].title, "Arche fleurie");
+  const now = Date.now();
+  assert.equal(pinterestDue({}, now), false);
+  assert.equal(pinterestDue({ boards: [{ url: "u" }], lastSyncAt: now - 3600_000 }, now), false);
+  assert.equal(pinterestDue({ boards: [{ url: "u" }], lastSyncAt: now - 3600_000, requestedAt: now }, now), true);
+  assert.equal(pinterestDue({ boards: [{ url: "u" }], lastSyncAt: now - 3600_000, remaining: 5 }, now), true);
+});
