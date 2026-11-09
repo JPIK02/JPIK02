@@ -1,0 +1,1700 @@
+{
+ "name": "excel-2026-11",
+ "source": "Orga Mariage Claire X Julien - 2028.xlsx",
+ "ops": [
+  {
+   "op": "merge",
+   "path": "meta/settings",
+   "data": {
+    "date": "2028-05-20",
+    "budgetTotal": 20000
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t01",
+   "data": {
+    "status": "todo",
+    "phase": "m12",
+    "due": "2027-05-21",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t03",
+   "data": {
+    "status": "done",
+    "phase": "m12",
+    "due": "2027-05-21",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "set",
+   "path": "tasks/xl-t01",
+   "data": {
+    "status": "todo",
+    "phase": "m12",
+    "due": "2027-05-21",
+    "owner": "deux",
+    "title": "Décider du voyage de noces",
+    "note": "",
+    "order": 101,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t05",
+   "data": {
+    "status": "doing",
+    "phase": "m12",
+    "due": "2027-05-21",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t06",
+   "data": {
+    "status": "todo",
+    "phase": "m12",
+    "due": "2027-06-20",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t08",
+   "data": {
+    "status": "todo",
+    "phase": "m12",
+    "due": "2027-07-21",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t09",
+   "data": {
+    "status": "todo",
+    "phase": "m12",
+    "due": "2027-07-21",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t10",
+   "data": {
+    "status": "todo",
+    "phase": "m12",
+    "due": "2027-07-21",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t11",
+   "data": {
+    "status": "todo",
+    "phase": "m9",
+    "due": "2027-08-20",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t13",
+   "data": {
+    "status": "todo",
+    "phase": "m9",
+    "due": "2027-09-19",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t16",
+   "data": {
+    "status": "todo",
+    "phase": "m9",
+    "due": "2027-09-19",
+    "owner": "julien"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t15",
+   "data": {
+    "status": "todo",
+    "phase": "m9",
+    "due": "2027-09-19",
+    "owner": "claire"
+   }
+  },
+  {
+   "op": "set",
+   "path": "tasks/xl-t02",
+   "data": {
+    "status": "todo",
+    "phase": "m9",
+    "due": "2027-09-19",
+    "owner": "deux",
+    "title": "Réserver l'église",
+    "note": "",
+    "order": 102,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "tasks/xl-t03",
+   "data": {
+    "status": "todo",
+    "phase": "m9",
+    "due": "2027-10-20",
+    "owner": "deux",
+    "title": "Réserver le voyage de noces",
+    "note": "",
+    "order": 103,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t14",
+   "data": {
+    "status": "todo",
+    "phase": "m9",
+    "due": "2027-10-20",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t17",
+   "data": {
+    "status": "todo",
+    "phase": "m6",
+    "due": "2027-11-19",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t23",
+   "data": {
+    "status": "todo",
+    "phase": "m6",
+    "due": "2027-12-20",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t22",
+   "data": {
+    "status": "todo",
+    "phase": "m4",
+    "due": "2028-01-19",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t24",
+   "data": {
+    "status": "todo",
+    "phase": "m4",
+    "due": "2028-01-19",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t26",
+   "data": {
+    "status": "todo",
+    "phase": "m4",
+    "due": "2028-01-19",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t28",
+   "data": {
+    "status": "todo",
+    "phase": "m4",
+    "due": "2028-02-19",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t21",
+   "data": {
+    "status": "todo",
+    "phase": "m4",
+    "due": "2028-02-19",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "set",
+   "path": "tasks/xl-t04",
+   "data": {
+    "status": "todo",
+    "phase": "m4",
+    "due": "2028-02-19",
+    "owner": "deux",
+    "title": "Commander le gâteau",
+    "note": "",
+    "order": 104,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t27",
+   "data": {
+    "status": "todo",
+    "phase": "m2",
+    "due": "2028-03-20",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t34",
+   "data": {
+    "status": "todo",
+    "phase": "m2",
+    "due": "2028-03-20",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t31",
+   "data": {
+    "status": "todo",
+    "phase": "m2",
+    "due": "2028-04-04",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t36",
+   "data": {
+    "status": "todo",
+    "phase": "m1",
+    "due": "2028-04-20",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t35",
+   "data": {
+    "status": "todo",
+    "phase": "m1",
+    "due": "2028-05-05",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "set",
+   "path": "tasks/xl-t05",
+   "data": {
+    "status": "todo",
+    "phase": "m1",
+    "due": "2028-05-05",
+    "owner": "deux",
+    "title": "Envoyer le déroulé du jour J aux prestataires et témoins",
+    "note": "",
+    "order": 105,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t45",
+   "data": {
+    "status": "todo",
+    "phase": "m1",
+    "due": "2028-05-05",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t42",
+   "data": {
+    "status": "todo",
+    "phase": "s1",
+    "due": "2028-05-12",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "merge",
+   "path": "tasks/t51",
+   "data": {
+    "status": "todo",
+    "phase": "apres",
+    "due": "2028-07-05",
+    "owner": "deux"
+   }
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b01",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b02",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b03",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b04",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b05",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b06",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b07",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b08",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b09",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b10",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b11",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b12",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b13",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b14",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b15",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "deleteIfEmpty",
+   "path": "budget/b16",
+   "fields": [
+    "prevu",
+    "engage",
+    "paye"
+   ]
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b01",
+   "data": {
+    "label": "Lieu de réception",
+    "prevu": 4000,
+    "engage": null,
+    "paye": null,
+    "note": "Statut : Devis demandé · 20 % du budget",
+    "order": 1,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b02",
+   "data": {
+    "label": "Traiteur & boissons",
+    "prevu": 7000,
+    "engage": null,
+    "paye": null,
+    "note": "35 % du budget",
+    "order": 2,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b03",
+   "data": {
+    "label": "Tenues/Maquillage etc..",
+    "prevu": 1600,
+    "engage": null,
+    "paye": null,
+    "note": "8 % du budget",
+    "order": 3,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b04",
+   "data": {
+    "label": "Photographe / vidéaste",
+    "prevu": 1600,
+    "engage": null,
+    "paye": null,
+    "note": "8 % du budget",
+    "order": 4,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b05",
+   "data": {
+    "label": "Musique",
+    "prevu": 1000,
+    "engage": null,
+    "paye": null,
+    "note": "5 % du budget",
+    "order": 5,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b06",
+   "data": {
+    "label": "Fleurs & décoration",
+    "prevu": 1200,
+    "engage": null,
+    "paye": null,
+    "note": "6 % du budget",
+    "order": 6,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b07",
+   "data": {
+    "label": "Alliances",
+    "prevu": 800,
+    "engage": null,
+    "paye": null,
+    "note": "4 % du budget",
+    "order": 7,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b08",
+   "data": {
+    "label": "Cérémonie (officiant, décor)",
+    "prevu": 400,
+    "engage": null,
+    "paye": null,
+    "note": "2 % du budget",
+    "order": 8,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b09",
+   "data": {
+    "label": "Faire part",
+    "prevu": 400,
+    "engage": null,
+    "paye": null,
+    "note": "2 % du budget",
+    "order": 9,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b10",
+   "data": {
+    "label": "Transport",
+    "prevu": 400,
+    "engage": null,
+    "paye": null,
+    "note": "2 % du budget",
+    "order": 10,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b11",
+   "data": {
+    "label": "Hébergement si pas inclus dans lieu",
+    "prevu": 400,
+    "engage": null,
+    "paye": null,
+    "note": "2 % du budget",
+    "order": 11,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b12",
+   "data": {
+    "label": "Animations, enfants & cadeaux invités",
+    "prevu": 400,
+    "engage": null,
+    "paye": null,
+    "note": "2 % du budget",
+    "order": 12,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "budget/xl-b13",
+   "data": {
+    "label": "Gestion du risque (Case spécial Ju)",
+    "prevu": 800,
+    "engage": null,
+    "paye": null,
+    "note": "4 % du budget",
+    "order": 13,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g01",
+   "data": {
+    "name": "Claire",
+    "side": "commun",
+    "group": "",
+    "rsvp": "oui",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g02",
+   "data": {
+    "name": "Julien",
+    "side": "commun",
+    "group": "",
+    "rsvp": "oui",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g03",
+   "data": {
+    "name": "Juliette",
+    "side": "commun",
+    "group": "",
+    "rsvp": "oui",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": true,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g04",
+   "data": {
+    "name": "Vanessa",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g05",
+   "data": {
+    "name": "Fabien",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g06",
+   "data": {
+    "name": "Raphaelle",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g07",
+   "data": {
+    "name": "Elena",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": true,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g08",
+   "data": {
+    "name": "Maxime",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g09",
+   "data": {
+    "name": "Loana",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g10",
+   "data": {
+    "name": "Franck",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g11",
+   "data": {
+    "name": "Muriel",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g12",
+   "data": {
+    "name": "Fred",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g13",
+   "data": {
+    "name": "Carole",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g14",
+   "data": {
+    "name": "Pépé",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g15",
+   "data": {
+    "name": "Mamie",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g16",
+   "data": {
+    "name": "Camille",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g17",
+   "data": {
+    "name": "Carine",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g18",
+   "data": {
+    "name": "Cécile",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g19",
+   "data": {
+    "name": "Luc",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g20",
+   "data": {
+    "name": "Muriel",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g21",
+   "data": {
+    "name": "Christophe G",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g22",
+   "data": {
+    "name": "Alex",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g23",
+   "data": {
+    "name": "Leopold",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g24",
+   "data": {
+    "name": "Faustine",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": true,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g25",
+   "data": {
+    "name": "Audrey",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g26",
+   "data": {
+    "name": "Daniel",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g27",
+   "data": {
+    "name": "Alejandra",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g28",
+   "data": {
+    "name": "Chloé",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g29",
+   "data": {
+    "name": "Alex",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g30",
+   "data": {
+    "name": "Xavier",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g31",
+   "data": {
+    "name": "Gérard",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g32",
+   "data": {
+    "name": "Valérie",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g33",
+   "data": {
+    "name": "Peach",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "À préciser : ni adulte ni enfant dans le fichier Excel",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g34",
+   "data": {
+    "name": "Prixie",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "À préciser : ni adulte ni enfant dans le fichier Excel",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g35",
+   "data": {
+    "name": "Manon",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g36",
+   "data": {
+    "name": "Lola",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g37",
+   "data": {
+    "name": "Lucie",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g38",
+   "data": {
+    "name": "Copain Lucie",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g39",
+   "data": {
+    "name": "Quentin",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g40",
+   "data": {
+    "name": "Tante Ju",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g41",
+   "data": {
+    "name": "Tonton Ju",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g42",
+   "data": {
+    "name": "Monique",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g43",
+   "data": {
+    "name": "Nasser",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g44",
+   "data": {
+    "name": "Papi",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g45",
+   "data": {
+    "name": "Mamie",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g46",
+   "data": {
+    "name": "Papy Claire",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g47",
+   "data": {
+    "name": "Antoine",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g48",
+   "data": {
+    "name": "Amélie",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g49",
+   "data": {
+    "name": "Omérine",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": false,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "guests/xl-g50",
+   "data": {
+    "name": "Ylhan",
+    "side": "commun",
+    "group": "",
+    "rsvp": "attente",
+    "regime": "",
+    "ceremonie": true,
+    "vin": true,
+    "diner": true,
+    "enfant": true,
+    "table": "",
+    "note": "",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "vendors/xl-v01",
+   "data": {
+    "name": "Domaine WE",
+    "cat": "Lieu",
+    "status": "ecarte",
+    "note": "Wierre-Effroy\nCapacité : 200\nInclus : Du vendredi midi au dimanche soir + l'orangerie\nCouchages : 60\n+ Orangerie, proche de la maison\n− Trop cher\nhttps://ledomainewe.com/",
+    "prix": 17000.0,
+    "contact": "",
+    "tel": "",
+    "acompte": null,
+    "acomptePaye": false,
+    "dateAcompte": "",
+    "dateSolde": "",
+    "soldePaye": false,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "merge",
+   "path": "vendors/1crg0k25x547sx833y2p",
+   "data": {
+    "status": "ecarte",
+    "note": "Le Touquet\n− Les chevaux"
+   }
+  },
+  {
+   "op": "set",
+   "path": "vendors/xl-v02",
+   "data": {
+    "name": "Le Clos Barthélemy Château d'Eterpigny",
+    "cat": "Lieu",
+    "status": "ecarte",
+    "note": "Eterpigny (à l'est d'Arras)\nCapacité : 80-250\nInclus : Du vendredi matin au dimanche soir + accès jardin et espace vin d'honneur (Orangerie)\nCouchages : 37\n+ Orangerie, traiteur libre (1500€ de frais)\n− Trop cher + Orangerie trop grande\nhttps://closbarthelemy.fr/",
+    "prix": 15000.0,
+    "contact": "",
+    "tel": "",
+    "acompte": null,
+    "acomptePaye": false,
+    "dateAcompte": "",
+    "dateSolde": "",
+    "soldePaye": false,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "vendors/xl-v03",
+   "data": {
+    "name": "Château de Couturelle",
+    "cat": "Lieu",
+    "status": "devis",
+    "note": "(à l'ouest d'Arras)\nCapacité : 100-200\nInclus : Du vendredi 13h au lundi 9h + Orangerie + Salle de réception avec parc + Service de nettoyage\nExtras : chambres en option (15 chambres)\nCouchages : 30\n+ Orangerie vin d'honneur, veranda \n− 4 traiteurs possibles\nhttps://chateaudecouturelle.fr/\ncomplet mai, juin juillet, reste 5 août et septembre",
+    "prix": 4850.0,
+    "contact": "",
+    "tel": "",
+    "acompte": null,
+    "acomptePaye": false,
+    "dateAcompte": "",
+    "dateSolde": "",
+    "soldePaye": false,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "vendors/xl-v04",
+   "data": {
+    "name": "Au Petit Manoir",
+    "cat": "Lieu",
+    "status": "devis",
+    "note": "Socx (sud de Dunkerque)\nCapacité : 100\nInclus : Manoir, orangerie, parc avant et arrière\nExtras : SPA le dimanche de 10h à 12h pour les invités qui dorment sur place + pack Sérénité en option si mauvaise météo avec tente étoile\nCouchages : 22\n+ Aucun droit de bouchon, ni droit d’entrée traiteur + SPA + Orangerie\n− Rebond en option le dimanche midi (mais pas de traiteur imposé)\nVisite le 22/11/2026\nhttps://au-petit-manoir.fr/",
+    "prix": 6500.0,
+    "contact": "",
+    "tel": "",
+    "acompte": null,
+    "acomptePaye": false,
+    "dateAcompte": "",
+    "dateSolde": "",
+    "soldePaye": false,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "rdv/xl-r01",
+   "data": {
+    "title": "Visite Au Petit Manoir",
+    "date": "2026-11-22",
+    "avec": "Au Petit Manoir",
+    "lieu": "Socx (sud de Dunkerque)",
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "vendors/xl-v05",
+   "data": {
+    "name": "Domaine d'Arondeau",
+    "cat": "Lieu",
+    "status": "repere",
+    "note": "Capacité : 500\nhttps://www.domainedarondeau.com/",
+    "prix": null,
+    "contact": "",
+    "tel": "",
+    "acompte": null,
+    "acomptePaye": false,
+    "dateAcompte": "",
+    "dateSolde": "",
+    "soldePaye": false,
+    "createdAt": 0
+   }
+  },
+  {
+   "op": "set",
+   "path": "vendors/xl-v06",
+   "data": {
+    "name": "PBI - Location Orangerie",
+    "cat": "Lieu",
+    "status": "repere",
+    "note": "Où on veut\nInclus : Orangerie sur mesure à louer\n+ Unique + où on veut\nhttps://www.pbi.be/realisations/",
+    "prix": null,
+    "contact": "",
+    "tel": "",
+    "acompte": null,
+    "acomptePaye": false,
+    "dateAcompte": "",
+    "dateSolde": "",
+    "soldePaye": false,
+    "createdAt": 0
+   }
+  }
+ ]
+}
