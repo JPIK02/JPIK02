@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // Outils de l'assistant IA : ce qu'il peut lire et faire dans l'app.
 // Règles : aucune suppression ; chaque écriture renvoie l'état d'avant pour pouvoir l'annuler depuis l'app ;
 // les valeurs sont nettoyées ici, quoi que Claude envoie. Indépendant de Firebase : `db` est injecté (testable).
@@ -75,7 +76,7 @@ export const TOOL_DEFS = [
     choix: { type: "array", items: { type: "string" }, description: "options choisies, telles qu'écrites dans la question" }, desaccord: { type: "boolean" } }, ["categorie", "question"]) },
   { name: "enregistrer_priorites", description: "Importance (1 à 5), budget cible, critère de réussite et rédhibitoire d'une catégorie de « Nos envies ».", input_schema: S({
     categorie: T(""), importance: { type: "integer", minimum: 1, maximum: 5 }, budget: N("€"), reussite: T(""), redhibitoire: T("") }, ["categorie"]) },
-  { name: "noter_inspiration", description: "Garde une photo jointe à ce message comme inspiration dans « Nos envies » (catégorie), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
+  { name: "noter_inspiration", description: "Garde une photo jointe à ce message, ou au dernier message qui contenait des photos (par ex. après leur « oui »), comme inspiration dans « Nos envies » (catégorie), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
     photo: { type: "integer", minimum: 1, maximum: 3, description: "numéro de la photo jointe (1 si une seule)" }, categorie: T("clé de catégorie, ex. lieu, fleurs, tenues, vision"),
     description: T("ce que montre la photo et ce qui leur plaît : style, couleurs, matières, ambiance (2 phrases)") }, ["photo", "categorie", "description"]) },
   { name: "demander_recherche_web", description: "Tu n'as pas accès à internet sans accord. Quand une recherche aiderait vraiment (inspiration, tendances, idées de déco ou de menu, infos ou avis sur un lieu ou un prestataire), propose-la avec une requête précise. Claire ou Julien l'autorise ou non dans l'app : arrête-toi ensuite et dis en une phrase ce que tu veux chercher et pourquoi.", input_schema: S({
@@ -270,9 +271,15 @@ export function makeTools(db, { qcats, now = new Date(), thumbs = [], author = "
     async noter_inspiration(i) {
       const c = QC[i.categorie]; if (!c) throw new Error(`catégorie inconnue : ${i.categorie}`);
       const n = Number.isInteger(i.photo) ? i.photo : 1, thumb = thumbs[n - 1];
-      if (!thumb) throw new Error(thumbs.length ? `photo ${n} introuvable : ${thumbs.length} photo(s) jointe(s) à ce message` : "aucune photo n'est jointe à ce message");
+      if (!thumb) throw new Error(thumbs.length ? `photo ${n} introuvable : ${thumbs.length} photo(s) disponible(s)` : "aucune photo récente : demande-leur de la renvoyer avec le bouton photo");
+      // pas de doublon si la même photo est gardée deux fois
+      const thumbHash = createHash("sha1").update(thumb).digest("hex");
+      if (db.collection("inspirations").where) {
+        const dup = await db.collection("inspirations").where("thumbHash", "==", thumbHash).limit(1).get();
+        if (!dup.empty) { await db.doc(`inspirations/${dup.docs[0].id}`).update({ cat: c.k, description: str(i.description, 600) || dup.docs[0].data().description }); return { result: { ok: true, id: dup.docs[0].id, note: "photo déjà gardée : description mise à jour" } }; }
+      }
       const description = str(i.description, 600); if (!description) throw new Error("description manquante");
-      const { op, id } = await create("inspirations", { cat: c.k, description, thumb, by: author });
+      const { op, id } = await create("inspirations", { cat: c.k, description, thumb, thumbHash, by: author });
       await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
       return { result: { ok: true, id }, action: { label: `Inspiration gardée (${c.label})`, ops: [op] } };
     },

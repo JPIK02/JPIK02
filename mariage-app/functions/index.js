@@ -49,13 +49,18 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
     tx.set(ref, { day: today, count: count + 1 }, { merge: true });
   });
 
-  const past = reset ? [] : ((await chatRef.get()).data()?.messages || []);
+  const chatDoc = reset ? {} : ((await chatRef.get()).data() || {});
+  const past = chatDoc.messages || [];
   // La section ouverte va dans le message (pas dans les consignes) : les consignes restent identiques et en cache.
   const where = `[Section ouverte : ${String(view || "Accueil").slice(0, 60)}]`;
   const withView = typeof content === "string" ? `${where} ${content}` : [...content.slice(0, -1), { ...content.at(-1), text: `${where} ${content.at(-1).text}` }];
   const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content: withView }];
   // Miniatures envoyées par l'app (480 px) : le coach peut garder une photo comme inspiration (noter_inspiration)
-  const thumbs = atts.map(a => (typeof a.thumb === "string" && a.thumb.length < 400_000 ? a.thumb : null));
+  // Photos jointes à ce message, sinon celles du dernier message avec photo (24 h) : le coach décrit d'abord
+  // la photo, demande « c'est bien ça ? », et l'enregistre au message suivant (« Oui ! »), qui n'a plus la photo.
+  const fresh = atts.map(a => (typeof a.thumb === "string" && a.thumb.length < 400_000 ? a.thumb : null));
+  const pending = chatDoc.pendingThumbs && Date.now() - (chatDoc.pendingThumbs.at || 0) < 24 * 3600_000 ? chatDoc.pendingThumbs.list || [] : [];
+  const thumbs = fresh.some(Boolean) ? fresh : pending;
   const exec = makeTools(db, { qcats: QCATS, thumbs, author: PRENOMS[email] || "" });
   const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
@@ -76,7 +81,8 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   // On garde de quoi annuler les 10 derniers messages ; au-delà, seulement le libellé des actions (taille du document).
   const history = [...past, { role: "user", text: shown, at: Date.now() }, { role: "assistant", text, actions, ...(sources?.length ? { sources } : {}), at: Date.now() }].slice(-60)
     .map((m, i, arr) => (i < arr.length - 10 && m.actions ? { ...m, actions: m.actions.map(({ label, undone }) => ({ label, ...(undone ? { undone } : {}) })) } : m));
-  await chatRef.set({ messages: history, mode, updatedAt: Date.now() });
+  await chatRef.set({ messages: history, mode, updatedAt: Date.now(),
+    pendingThumbs: fresh.some(Boolean) ? { list: fresh, at: Date.now() } : pending.length ? chatDoc.pendingThumbs : null });
   return { text, actions, sources };
 });
 
