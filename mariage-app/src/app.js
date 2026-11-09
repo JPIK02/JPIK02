@@ -54,7 +54,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},cmp:{cat:null,ids:[]},hebdo:{},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -157,23 +157,32 @@ function visitsToTell(){
     const v=findVendor(r.avec)||S.vendors.find(x=>fold(r.title).includes(fold(x.name)));
     return v&&!((v.fitRequestedAt||0)>=+pd(r.date)-43200000)?{r,v}:null}).filter(Boolean);
 }
+function coupleAvatar(){
+  const ph=S.photo&&S.photo.data;
+  return `<button class="ch-photo ${ph?"has":""}" data-act="couplephoto" aria-label="${ph?"Changer la photo du couple":"Ajouter une photo du couple"}" ${S.canWrite?"":"disabled"}>${ph?`<img src="data:image/jpeg;base64,${ph}" alt="Claire et Julien">`:`<span>C&amp;J</span><i aria-hidden="true">+</i>`}</button>`;
+}
+// Une carte « point du jour » : titre, une phrase, UN bouton principal ; les autres options à la demande
+function dayCard(id,lvl,title,text,qr){
+  const open=!!S.ui.opts[id],[first,...more]=qr;
+  return `<div class="dc ${lvl||""}"><span class="dc-dot" aria-hidden="true"></span><div class="dc-body"><b>${title}</b>${text?`<p>${text}</p>`:""}
+    ${first?`<div class="dc-acts"><button class="btn sm primary" data-act="qr" data-do="${esc(first[1])}">${esc(first[0])}</button>${more.length?`<button class="link" data-act="uiopts" data-id="${esc(id)}" aria-expanded="${open}">${open?"Moins":"Autres options"}</button>`:""}</div>
+    ${open&&more.length?`<div class="dc-more">${more.map(([l,d])=>`<button class="btn sm" data-act="qr" data-do="${esc(d)}">${esc(l)}</button>`).join("")}</div>`:""}`:""}</div></div>`;
+}
 function coachHome(al){
-  const d=wDate(),cur=currentPhase(),n=d?days(today(),d):null,hb=S.hebdo||{};
+  const d=wDate(),n=d?days(today(),d):null,hb=S.hebdo||{},ui=S.ui;
   const hbFresh=hb.at&&Date.now()-hb.at<8*864e5;
-  const msgs=[];
-  if(hbFresh)msgs.push(`<div class="ch-msg hebdo"><div class="ch-k">Point de la semaine</div><b>${esc(hb.titre||"")}</b>${Array.isArray(hb.points)&&hb.points.length?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}${hb.question?`<p class="ch-q">${esc(hb.question)}</p>`:""}${qrBtns([...(hb.question?[["Répondre",`prefill:`]]:[]),["Refaire le point","hebdo"]])}</div>`);
-  visitsToTell().forEach(({r,v})=>msgs.push(chMsg("info",`<b>Comment s'est passée la visite de ${esc(v.name)} ?</b> Racontez-moi en deux phrases : je mets la fiche à jour et je recalcule la note.`,[["Raconter la visite",`prefill:Visite de ${v.name} : `]])));
-  al.slice(0,4).forEach(a=>msgs.push(chMsg(a.lvl,`<b>${esc(a.t)}</b> ${esc(a.s)}`,qrFor(a))));
-  if(al.length>4)msgs.push(`<p class="more-note">et ${al.length-4} autre${al.length-4>1?"s":""} point${al.length-4>1?"s":""} · <button class="link" data-act="qr" data-do="ask:Quels sont tous les points d'attention de notre organisation en ce moment ?">demander au coach</button></p>`);
-  if(!al.length)msgs.push(chMsg("ok","<b>Tout est cohérent de mon côté.</b> C'est le bon moment pour avancer sur la suite.",[["Que faire ensuite ?","ask:Que devons-nous faire ensuite, concrètement ?"]]));
-  if(!hbFresh)msgs.push(`<div class="qr solo"><button data-act="qr" data-do="hebdo">Faire le point de la semaine</button></div>`);
-  return `<section class="coach-home c12" aria-label="Votre coach">
-    <div class="ch-head"><span class="ch-av">${SPARK}</span><div><b>Bonjour${prenom()?" "+esc(prenom()):""} !</b><span>${d?`J-${n}${cur?" · "+esc(cur.label):""}`:"Donnez-moi votre date pour que je planifie avec vous"} · ${al.length?`${al.length} point${al.length>1?"s":""} à voir`:"rien d'urgent"}</span></div></div>
-    <div class="ch-msgs">${msgs.join("")}</div>
-    <form class="ch-ask" id="home-ask"><label class="sr" for="home-text">Écrire au coach</label><input id="home-text" type="text" placeholder="Demandez ou dites quelque chose au coach…" autocomplete="off" ${S.canWrite?"":"disabled"}>
-      <button type="button" class="ch-ic" data-act="homephoto" aria-label="Envoyer la photo ou le PDF d'un devis"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
-      <button class="btn primary" type="submit">Envoyer</button></form>
-    <div class="chip-row ch-sugg">${[["Que faire cette semaine ?","ask:Que devons-nous faire cette semaine ?"],["Comparer nos lieux","ask:Compare nos lieux et dis-nous lequel tu choisirais."],["Remplir nos envies","chatbrief"],["Ouvrir la conversation","chat"]].map(([l,dd])=>`<button class="chip" data-act="qr" data-do="${esc(dd)}">${l}</button>`).join("")}</div>
+  const cards=[];
+  visitsToTell().forEach(({r,v})=>cards.push(dayCard("visit-"+r.id,"info",`Comment s'est passée la visite de ${esc(v.name)} ?`,"Racontez-la en deux phrases : je mets la fiche à jour.",[["Raconter la visite",`prefill:Visite de ${v.name} : `]])));
+  al.forEach((a,i)=>cards.push(dayCard("al-"+(a.k||"")+"-"+(a.v?a.v.id:i),a.lvl,esc(a.t),esc(a.s),qrFor(a))));
+  const shown=ui.more?cards:cards.slice(0,3),rest=cards.length-shown.length;
+  const hebdoH=hbFresh?`<div class="hb ${ui.hebdo?"open":""}"><button class="hb-h" data-act="uihebdo" aria-expanded="${!!ui.hebdo}"><span class="ch-k">Point de la semaine</span><b>${esc(hb.titre||"")}</b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+      ${ui.hebdo?`<div class="hb-b">${Array.isArray(hb.points)?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}${hb.question?`<p class="ch-q">${esc(hb.question)}</p>`:""}<div class="dc-acts">${hb.question?`<button class="btn sm primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:""}<button class="link" data-act="qr" data-do="hebdo">Refaire le point</button></div></div>`:""}</div>`:"";
+  return `<section class="coach-home c12" aria-label="Aujourd'hui">
+    <div class="ch-head">${coupleAvatar()}<div class="ch-hi"><h2>Bonjour${prenom()?" "+esc(prenom()):""}</h2><span>${d?`${esc(fmtLong(d).replace(/^./,c=>c.toUpperCase()))} · <b>J-${n}</b>`:`<button class="link" data-go="reglages">Fixer la date du mariage</button>`}</span></div></div>
+    ${hebdoH}
+    <div class="ch-sec"><h3>${cards.length?`Aujourd'hui · ${cards.length} point${cards.length>1?"s":""}`:"Aujourd'hui"}</h3>${!hbFresh?`<button class="link" data-act="qr" data-do="hebdo">Point de la semaine</button>`:""}</div>
+    ${cards.length?`<div class="dcs">${shown.join("")}</div>${rest>0||ui.more&&cards.length>3?`<button class="link more-pts" data-act="uimore">${ui.more?"Afficher moins":`Voir les ${rest} autre${rest>1?"s":""} point${rest>1?"s":""}`}</button>`:""}`
+      :`<div class="dc ok"><span class="dc-dot" aria-hidden="true"></span><div class="dc-body"><b>Rien d'urgent : tout est cohérent.</b><p>Le coach (bouton en bas à droite) peut vous aider à avancer sur la suite.</p></div></div>`}
   </section>`;
 }
 async function runQr(dd){
@@ -380,7 +389,7 @@ function vApercu(){
     :`<p style="margin:0;color:var(--muted);font-size:14px">${ag.status==="actif"?"Aucune nouvelle proposition. Dernier passage "+(ag.lastRun?relDay(pd(ag.lastRun)):"inconnu")+".":"Branchez la boîte mail dédiée : les devis, échéances et réponses d'invités arriveront ici, prêts à être validés."}</p>
       <div style="margin-top:14px"><button class="btn sm" data-go="assistant">Voir l'assistant</button></div>`}</div>`;
 
-  return `<div class="dash">${coachHome(al)}${onboardH()}${focusH}${rdvH}${S.f.overview?`<div class="c12 ov-h"><h3 class="sec dash-sec">Vue d'ensemble</h3><button class="link" data-act="overview">Masquer</button></div>${kpis}${milesH}${payH}${whoH}${budH}${agH}`
+  return `<div class="dash">${coachHome(al)}${focusH}${rdvH}${onboardH()}${S.f.overview?`<div class="c12 ov-h"><h3 class="sec dash-sec">Vue d'ensemble</h3><button class="link" data-act="overview">Masquer</button></div>${kpis}${milesH}${payH}${whoH}${budH}${agH}`
     :`<button class="ov-open c12" data-act="overview"><span><b>Vue d'ensemble</b><span>Avancement, jalons, paiements, budget par poste, qui fait quoi</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>`}</div>`;
 }
 
@@ -648,10 +657,11 @@ const cmpCats=()=>VCATS.filter(c=>S.vendors.filter(v=>v.cat===c).length>=2);
 function openCompare(cat,id){
   const cats=cmpCats();if(!cats.length){toast("Il faut au moins 2 prestataires dans une catégorie pour comparer");return}
   const c=S.cmp;c.cat=cat&&cats.includes(cat)?cat:(c.cat&&cats.includes(c.cat)?c.cat:cats[0]);
-  const pool=S.vendors.filter(v=>v.cat===c.cat).sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1));
+  const pool=S.vendors.filter(v=>v.cat===c.cat).sort((a,b)=>(a.status==="ecarte")-(b.status==="ecarte")||((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1));
   c.ids=c.ids.filter(x=>pool.some(v=>v.id===x));
   if(id&&!c.ids.includes(id))c.ids=[id,...c.ids].slice(0,3);
-  if(c.ids.length<2)c.ids=[...new Set([...c.ids,...pool.filter(v=>v.status!=="ecarte").map(v=>v.id),...pool.map(v=>v.id)])].slice(0,3);
+  // Présélection uniquement à l'ouverture d'une catégorie ; ensuite, la sélection est libre (même une seule)
+  if(c.seeded!==c.cat){c.seeded=c.cat;if(c.ids.length<2)c.ids=[...new Set([...c.ids,...pool.filter(v=>v.status!=="ecarte").map(v=>v.id)])].slice(0,Math.max(2,c.ids.length))}
   if(!document.querySelector(".cmp-modal")){
     document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal cmp-modal" role="dialog" aria-modal="true" aria-label="Comparer des prestataires"><h3>Comparer</h3><div id="cmp-body"></div></div></div>`;
   }
@@ -660,9 +670,9 @@ function openCompare(cat,id){
 function cmpBody(pool){
   const c=S.cmp,cats=cmpCats(),vs=c.ids.map(x=>pool.find(v=>v.id===x)).filter(Boolean);
   const pick=`<div class="cmp-pick"><div class="chip-row" role="group" aria-label="Catégorie">${cats.map(k=>`<button class="chip ${k===c.cat?"on":""}" data-act="cmpcat" data-cat="${esc(k)}" aria-pressed="${k===c.cat}">${esc(k)}</button>`).join("")}</div>
-    <p class="plan-when" style="margin:10px 0 6px">Choisissez 2 ou 3 prestataires à comparer :</p>
-    <div class="chip-row" role="group" aria-label="Prestataires">${pool.map(v=>{const on=c.ids.includes(v.id);return `<button class="chip pick ${on?"on":""}" data-act="cmpv" data-id="${v.id}" aria-pressed="${on}">${on?"✓ ":""}${esc(v.name)}${v.status==="ecarte"?" · écarté":""}</button>`}).join("")}</div></div>`;
-  if(vs.length<2)return pick+`<div class="empty">Sélectionnez au moins deux prestataires.</div>`;
+    <div class="pick-h"><span>À comparer : <b class="num">${c.ids.length}</b>/3</span>${c.ids.length?`<button class="link" data-act="cmpnone">Tout décocher</button>`:""}</div>
+    <div class="pick-list" role="group" aria-label="Prestataires à comparer">${pool.map(v=>{const on=c.ids.includes(v.id),f=v.fit||{};return `<button class="pick-row ${on?"on":""} ${v.status==="ecarte"?"off":""}" data-act="cmpv" data-id="${v.id}" role="checkbox" aria-checked="${on}"><span class="gcheck" aria-hidden="true" aria-checked="${on}"></span><span class="pr-n">${esc(v.name)}</span><span class="pr-m">${[v.prix?eur(v.prix):"",f.score!=null?Math.round(f.score)+"/100":"",v.status==="ecarte"?"écarté":""].filter(Boolean).join(" · ")}</span></button>`}).join("")}</div></div>`;
+  if(vs.length<2)return pick+`<div class="empty">${vs.length?"Cochez un deuxième prestataire pour lancer la comparaison.":"Cochez 2 ou 3 prestataires."}</div>`;
   const line=budgetLineFor(c.cat),env=line?num(line.prevu):0,guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
   // Un bloc par critère, une ligne par prestataire : lisible sur téléphone
   const block=(label,hint,get,fmt,dir)=>{const vals=vs.map(get),ns=vals.filter(x=>x!=null);const best=dir&&ns.length>1?(dir>0?Math.max(...ns):Math.min(...ns)):null;
@@ -873,6 +883,9 @@ function vReglages(){
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
     <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes (GitHub Actions) s'ils ont du travail et ne tournent que selon le planning ci-dessous. Un passage demandé démarre dans les 10 à 15 minutes.</p>
     <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
+  <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Photo du couple</h3></div>
+    <div class="photo-row">${coupleAvatar()}<div><p class="plan-when" style="margin:0 0 10px">Affichée sur l'accueil, à côté du « Bonjour ». La même pour vous deux.</p>
+    ${S.canWrite?`<button class="btn sm" data-act="couplephoto">${S.photo&&S.photo.data?"Changer":"Ajouter une photo"}</button>${S.photo&&S.photo.data?` <button class="btn sm" data-act="couplephotox">Retirer</button>`:""}`:""}</div></div></div>
   ${pushPanel()}
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Apparence</h3></div>
     <p class="plan-when" style="margin:0 0 12px">Choix propre à cet appareil. « Automatique » suit le réglage clair ou sombre du téléphone.</p>
@@ -1029,6 +1042,19 @@ async function undoChat(i){
   }catch(e){writeErr(e)}
 }
 
+/* ---------- Photo du couple (commune aux deux, stockée réduite dans meta/photo) ---------- */
+async function setCouplePhoto(file){
+  if(!file||!/^image\//.test(file.type)){toast("Choisissez une photo");return}
+  try{
+    const img=await loadImage(file),side=Math.min(img.naturalWidth,img.naturalHeight),S0=320;
+    const cv=document.createElement("canvas");cv.width=cv.height=S0;
+    cv.getContext("2d").drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,S0,S0);
+    const blob=await new Promise(ok=>cv.toBlob(ok,"image/jpeg",.85));
+    if(await setDoc("meta/photo",{},{data:await b64Of(blob),updatedAt:Date.now()}))toast("Photo du couple enregistrée");
+  }catch(e){toast("Impossible de lire cette photo")}
+}
+function pickCouplePhoto(){let i=document.getElementById("couple-file");if(!i){i=document.createElement("input");i.type="file";i.accept="image/*";i.id="couple-file";i.hidden=true;document.body.appendChild(i);i.addEventListener("change",()=>{setCouplePhoto(i.files&&i.files[0]);i.value=""})}i.click()}
+
 /* ---------- Démarrage guidé ---------- */
 function onboarding(){
   const s=S.settings,g=S.guests;
@@ -1047,10 +1073,10 @@ function onboardH(){
   let hidden=false;try{hidden=localStorage.getItem("mariage-onboard-off")==="1"}catch(e){}
   const items=onboarding(),done=items.filter(x=>x[1]).length;
   if(hidden||done===items.length)return "";
-  return `<div class="panel c12 onboard"><div class="panel-h"><h3>Bien démarrer</h3><span class="chip acc num">${done} / ${items.length}</span></div>
-    <div class="ob-bar"><i style="width:${done/items.length*100}%"></i></div>
-    <ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec le coach</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:'<span class="ob-hint">Claire et Julien se connectent chacun une fois</span>'}</li>`).join("")}</ul>
-    <button class="link ob-off" data-act="onboardoff">Masquer</button></div>`;
+  const open=S.ui.onb;
+  return `<div class="panel c12 onboard ${open?"open":""}"><button class="ob-h" data-act="uionb" aria-expanded="${!!open}"><b>Bien démarrer</b><span class="ob-bar"><i style="width:${done/items.length*100}%"></i></span><span class="num ob-n">${done}/${items.length}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    ${open?`<ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec le coach</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:'<span class="ob-hint">Claire et Julien se connectent chacun une fois</span>'}</li>`).join("")}</ul>
+    <button class="link ob-off" data-act="onboardoff">Ne plus afficher</button>`:""}</div>`;
 }
 
 /* ---------- Notifications push ---------- */
@@ -1302,6 +1328,13 @@ document.addEventListener("click",async e=>{
   if(a==="bulk"){if(S.canWrite)openBulk();return}
   if(a==="csv"){exportCSV();return}
   if(a==="qr"){await runQr(t.dataset.do);return}
+  if(a==="uiopts"){const k=t.dataset.id;S.ui.opts[k]=!S.ui.opts[k];render();return}
+  if(a==="uimore"){S.ui.more=!S.ui.more;render();return}
+  if(a==="uihebdo"){S.ui.hebdo=!S.ui.hebdo;render();return}
+  if(a==="uionb"){S.ui.onb=!S.ui.onb;render();return}
+  if(a==="couplephoto"){if(S.canWrite)pickCouplePhoto();return}
+  if(a==="couplephotox"){if(S.canWrite&&await setDoc("meta/photo",{},{data:"",updatedAt:Date.now()}))toast("Photo retirée");return}
+  if(a==="cmpnone"){S.cmp.ids=[];openCompare(S.cmp.cat);return}
   if(a==="homephoto"){openChat("chat");setTimeout(()=>document.getElementById("chat-file")?.click(),50);return}
   if(a==="chatfile"){document.getElementById("chat-file")?.click();return}
   if(a==="chatattx"){S.chat.att=null;renderAtt();return}
@@ -1428,7 +1461,7 @@ function boot(){
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
-    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");
+    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");
     db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});
     COLS.forEach(c=>{
       unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));
