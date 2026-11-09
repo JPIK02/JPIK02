@@ -711,6 +711,33 @@ function cmpBody(pool){
   ].join("")+`</div><div class="cmp-foot">${vs.map(v=>`<button class="btn sm" data-fiche="${v.id}">Fiche ${esc(v.name.length>18?v.name.slice(0,17)+"…":v.name)}</button>`).join("")}</div>
   ${S.canWrite?`<button class="btn primary cmp-ask" data-act="cmpask">Demander l'avis du coach sur ce choix</button>`:""}`;
 }
+/* Devis de la fiche : le dernier en détail (écart avec le précédent, validité, prix par invité, inclus, options,
+   conditions, lien vers le mail), les précédents repliés. Alimenté par l'agent mail (acceptSug) et le coach (enregistrer_devis). */
+function devisSection(v){
+  const list=Array.isArray(v.devis)?v.devis:[];
+  const add=S.canWrite?`<button class="btn sm" data-act="devisadd" data-id="${v.id}">${list.length?"Ajouter un nouveau devis":"Ajouter le devis"}</button>`:"";
+  if(!list.length)return `<div class="fsec"><h4>Devis</h4><p class="plan-when" style="margin:0 0 10px">Aucun devis enregistré. Les devis reçus par mail s'ajoutent ici quand vous les validez ; vous pouvez aussi photographier ou joindre le PDF : le coach le lit et le range sur cette fiche.</p>${add}</div>`;
+  const d=list[0],prev=list[1],t=today();
+  const delta=prev&&num(prev.montant)?num(d.montant)-num(prev.montant):null;
+  const val=d.validite?pd(d.validite):null,left=val?days(t,val):null;
+  const valChip=val?(left<0?`<span class="chip bad">Expiré le ${fmtD(val)}</span>`:left<=14?`<span class="chip warn">Valable jusqu'au ${fmtD(val)}</span>`:`<span class="chip">Valable jusqu'au ${fmtD(val)}</span>`):"";
+  const kv=[["Acompte",num(d.acompte)?eur(d.acompte)+(d.dateAcompte?" avant le "+fmtD(pd(d.dateAcompte)):""):""],["Solde",d.dateSolde?"avant le "+fmtD(pd(d.dateSolde)):""],
+    ["Invités prévus",d.invites?String(d.invites):""],["Par invité",d.invites&&num(d.montant)?"≈ "+eur(Math.round(num(d.montant)/d.invites)):""]].filter(x=>x[1]);
+  const src=d.source==="mail"?"reçu par mail":d.source==="coach"?`ajouté avec le coach${d.par?" par "+esc(d.par):""}`:"";
+  const mail=d.mailUrl&&/^https:\/\/mail\.google\.com\//.test(d.mailUrl)?`<a class="link" href="${esc(d.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail${d.fichier?" et le devis joint":""}</a>`:d.fichier?`<span class="plan-when" style="margin:0">Fichier : ${esc(d.fichier)}</span>`:"";
+  return `<div class="fsec devis"><h4>Devis${list.length>1?` · ${list.length} versions`:""}</h4>
+    <div class="devis-card"><div class="devis-top"><div><b class="num devis-m">${eur(d.montant)}</b>${delta!=null&&delta!==0?`<span class="devis-d ${delta<0?"ok":"bad"}">${delta<0?"−":"+"}${eur(Math.abs(delta))} vs devis précédent</span>`:""}</div>${valChip}</div>
+      <p class="devis-src">Devis du ${fmtD(pd(d.recuLe))}${src?` · ${src}`:""}</p>
+      ${d.resume?`<p class="devis-r">${esc(d.resume)}</p>`:""}
+      ${kv.length?`<div class="kv">${kv.map(([k,x])=>`<div><span>${k}</span><b>${esc(x)}</b></div>`).join("")}</div>`:""}
+      ${d.inclus&&d.inclus.length?`<h5>Inclus</h5><ul class="blist">${d.inclus.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
+      ${d.options&&d.options.length?`<h5>Options</h5><ul class="blist">${d.options.map(o=>`<li>${esc(o.label)}${num(o.prix)?` · <b class="num">${eur(o.prix)}</b>`:""}</li>`).join("")}</ul>`:""}
+      ${d.conditions?`<h5>Conditions</h5><p class="devis-r">${esc(d.conditions)}</p>`:""}
+      ${mail}</div>
+    ${list.length>1?`<details class="devis-old"><summary>Devis précédents (${list.length-1})</summary>${list.slice(1).map((x,i)=>{const nx=list[i+2],dd=nx&&num(nx.montant)?num(x.montant)-num(nx.montant):null;
+      return `<div class="hb-row"><span class="lab">${fmtD(pd(x.recuLe))}${x.source==="mail"?" · mail":""}${x.resume?` — ${esc(x.resume.slice(0,90))}${x.resume.length>90?"…":""}`:""}</span><span class="amt num">${eur(x.montant)}${dd?` <small class="${dd<0?"ok":"bad"}">${dd<0?"−":"+"}${eur(Math.abs(dd))}</small>`:""}</span></div>`}).join("")}</details>`:""}
+    <div style="margin-top:10px">${add}</div></div>`;
+}
 function openFiche(id){
   const v=S.vendors.find(x=>x.id===id);if(!v)return;
   const fi=v.fit||{},av=fi.avis||{};
@@ -724,6 +751,7 @@ function openFiche(id){
     <div class="fiche-top">${fitBadge(v,true)}<div style="min-width:0"><h3>${esc(v.name)}</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">${esc(v.cat||"")}</span><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${fi.confiance?`<span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span>`:""}</div></div></div>
     ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'annuaire, ou attendez le passage de demain matin.${qk&&catProg(qk).p<.5?" Remplissez aussi la partie « "+esc(QC[qk].label)+" » de Nos envies pour une note plus juste.":""}</div>`}
     ${offre.length?`<div class="fsec"><h4>L'offre</h4><div class="kv">${offre.map(([k,val])=>`<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div>${v.note?`<p style="font-size:14px;color:var(--muted);margin:10px 0 0;white-space:pre-line;overflow-wrap:anywhere">${esc(v.note)}</p>`:""}</div>`:""}
+    ${devisSection(v)}
     ${crit}
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
@@ -960,6 +988,12 @@ function vAssistant(){
     </section>
   </div>`;
 }
+function devisFromMail(s,p){
+  const e={id:s.id,montant:num(p.prix),recuLe:String(s.receivedAt||new Date().toISOString()).slice(0,10),source:"mail",resume:s.summary||""};
+  if(p.acompte!=null)e.acompte=num(p.acompte);["dateAcompte","dateSolde","validite","conditions","fichier"].forEach(k=>{if(p[k])e[k]=p[k]});
+  if(p.invites)e.invites=num(p.invites);if(Array.isArray(p.inclus)&&p.inclus.length)e.inclus=p.inclus;if(Array.isArray(p.options)&&p.options.length)e.options=p.options;
+  if(s.threadUrl)e.mailUrl=s.threadUrl;return e;
+}
 async function acceptSug(id,quiet){
   const s=S.inbox.find(x=>x.id===id);if(!s)return false;
   const p=Object.assign({},s.payload||{});let ok=true;
@@ -968,8 +1002,11 @@ async function acceptSug(id,quiet){
     const v=findVendor(p.name||p.vendorName);
     const data={name:p.name||p.vendorName||"Sans nom",cat:VCATS.includes(p.cat)?p.cat:"Autre",contact:p.contact||"",tel:p.tel||""};
     if(p.prix!=null)data.prix=num(p.prix);if(p.acompte!=null)data.acompte=num(p.acompte);if(p.dateAcompte)data.dateAcompte=p.dateAcompte;if(p.dateSolde)data.dateSolde=p.dateSolde;
-    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&VSTAT_RANK[v.status]<3)upd.status="devis";ok=await patch("vendors",v.id,upd)}
-    else ok=await save("vendors",null,Object.assign({status:s.type==="quote"?"devis":"contacte",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,stamp));
+    // un devis reçu rejoint l'historique des devis de la fiche (le plus récent en premier)
+    const entry=s.type==="quote"&&p.prix!=null?devisFromMail(s,p):null;
+    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&VSTAT_RANK[v.status]<3)upd.status="devis";
+      if(entry){upd.devis=[entry,...(v.devis||[]).filter(d=>d.id!==entry.id)].slice(0,12);upd.updatedAt=Date.now()}ok=await patch("vendors",v.id,upd)}
+    else ok=await save("vendors",null,Object.assign({status:s.type==="quote"?"devis":"contacte",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,entry?{devis:[entry]}:{},stamp));
   }else if(s.type==="task"){
     ok=await save("tasks",null,Object.assign({title:p.title||s.subject||"Tâche",phase:PH[p.phase]?p.phase:(currentPhase()||PHASES[0]).k,owner:OWNERS[p.owner]?p.owner:"deux",status:"todo",due:p.due||"",note:p.note||s.summary||"",order:999},stamp));
   }else if(s.type==="payment"){
@@ -1583,6 +1620,8 @@ document.addEventListener("click",async e=>{
   if(a==="envtab"){S.f.envTab=t.dataset.v;if(t.dataset.v==="quest")S.f.bcatOpen=false;saveF();render();return}
   if(a==="envgrid"){S.f.bcatOpen=false;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView();return}
   if(a==="moodcat"){S.f.moodCat=t.dataset.v;saveF();render();return}
+  if(a==="devisadd"){const v=S.vendors.find(x=>x.id===t.dataset.id);if(!v||!S.canWrite)return;closeModal();S.chat.mode="chat";
+    await openChat(undefined,`Voici le devis de ${v.name} (id ${v.id}) : lis-le et enregistre-le sur sa fiche. `);setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
   if(a==="inspopen"){openInsp(t.dataset.id,t.dataset.scope);return}
   if(a==="inspask"){const x=S.inspirations.find(y=>y.id===t.dataset.id);if(!x)return;
     S.chat.atts=[{media_type:"image/jpeg",data:x.thumb,name:"inspiration.jpg",preview:"data:image/jpeg;base64,"+x.thumb}];

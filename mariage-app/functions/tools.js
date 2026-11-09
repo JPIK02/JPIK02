@@ -64,6 +64,12 @@ export const TOOL_DEFS = [
   { name: "modifier_prestataire", description: "Modifie un prestataire. notes_visite : impressions après visite ou échange (l'analyse IA les prend en compte et recalcule la note).", input_schema: S({
     id: T(""), statut: E(VSTAT), prix: N("€"), acompte: N("€"), date_acompte: T("AAAA-MM-JJ"), date_solde: T("AAAA-MM-JJ"),
     acompte_paye: { type: "boolean" }, solde_paye: { type: "boolean" }, contact: T(""), tel: T(""), note: T("remplace les notes"), notes_visite: T("remplace les notes de visite") }, ["id"]) },
+  { name: "enregistrer_devis", description: "Enregistre un devis sur la fiche d'un prestataire (photo ou PDF joint, ou montants dictés) : il s'ajoute à l'historique des devis de la fiche et met à jour le prix, l'acompte et les échéances. Donne l'id d'un prestataire existant ; sinon nom et catégorie pour le créer. Ne remplis que ce qui figure sur le devis.", input_schema: S({
+    id: T("id du prestataire s'il existe"), nom: T("si nouveau"), categorie: E(VCATS, "si nouveau"),
+    montant: N("total TTC en €"), acompte: N("€"), date_acompte: T("AAAA-MM-JJ"), date_solde: T("AAAA-MM-JJ"), validite: T("date limite AAAA-MM-JJ"),
+    invites: N("invités ou couverts prévus"), inclus: { type: "array", items: { type: "string" }, description: "ce que comprend le prix" },
+    options: { type: "array", items: { type: "object", properties: { label: T(""), prix: N("€") }, required: ["label"], additionalProperties: false } },
+    conditions: T("acompte, annulation, frais… en une phrase"), resume: T("2 phrases : ce qu'on retient du devis"), fichier: T("nom du fichier joint") }, ["montant"]) },
   { name: "ajouter_rendez_vous", description: "Ajoute un rendez-vous à l'agenda.", input_schema: S({
     titre: T(""), date: T("AAAA-MM-JJ"), heure: T("HH:MM"), avec: T(""), lieu: T(""), qui: E(OWNERS) }, ["titre", "date"]) },
   { name: "definir_poste_budget", description: "Crée ou modifie un poste de budget (id pour modifier un poste existant).", input_schema: S({
@@ -222,6 +228,27 @@ export function makeTools(db, { qcats, now = new Date(), thumbs = [], author = "
       if (!Object.keys(upd).length) throw new Error("aucun changement valide");
       const op = await write(`vendors/${i.id}`, upd);
       return { result: { ok: true, reanalyse: !!upd.visitNotes }, action: { label: `Prestataire modifié : ${v.name}`, ops: [op] } };
+    },
+    async enregistrer_devis(i) {
+      const montant = num(i.montant); if (montant == null) throw new Error("montant manquant");
+      let id = i.id, v = id ? await need("vendors", id) : null;
+      const ops = [];
+      if (!v) {
+        const nom = str(i.nom, 200); if (!nom) throw new Error("donne l'id du prestataire, ou son nom et sa catégorie");
+        const c = await create("vendors", { name: nom, cat: oneOf(i.categorie, VCATS) || "Autre", status: "devis", acomptePaye: false, note: "", source: "coach" });
+        id = c.id; ops.push(c.op); v = { name: nom, status: "devis", devis: [] };
+      }
+      const list = (a, n = 200) => (Array.isArray(a) ? a.map(x => str(x, n)).filter(Boolean).slice(0, 15) : []);
+      const entry = clean({
+        id: `c${Date.now().toString(36)}`, montant, acompte: num(i.acompte), dateAcompte: isDate(i.date_acompte) ? i.date_acompte : undefined, dateSolde: isDate(i.date_solde) ? i.date_solde : undefined,
+        validite: isDate(i.validite) ? i.validite : undefined, invites: num(i.invites) > 0 ? Math.round(num(i.invites)) : undefined, inclus: list(i.inclus),
+        options: (Array.isArray(i.options) ? i.options : []).map(o => o && str(o.label, 200) ? clean({ label: str(o.label, 200), prix: num(o.prix) }) : null).filter(Boolean).slice(0, 15),
+        conditions: str(i.conditions, 500), resume: str(i.resume, 600), fichier: str(i.fichier, 200), recuLe: new Date().toISOString().slice(0, 10), source: "coach", par: author || undefined,
+      });
+      const upd = clean({ devis: [entry, ...(v.devis || [])].slice(0, 12), prix: montant, acompte: entry.acompte, dateAcompte: entry.dateAcompte, dateSolde: entry.dateSolde,
+        status: ["repere", "contacte"].includes(v.status) ? "devis" : undefined, updatedAt: Date.now() }); // updatedAt : la note de fit sera recalculée
+      ops.push(await write(`vendors/${id}`, upd));
+      return { result: { ok: true, id, devisPrecedents: (v.devis || []).length }, action: { label: `Devis enregistré : ${v.name} (${montant} €)`, ops } };
     },
     async ajouter_rendez_vous(i) {
       const titre = str(i.titre, 200); if (!titre) throw new Error("titre manquant");

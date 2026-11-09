@@ -955,3 +955,14 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .brief-err{flex-basis:100%;margin:0;color:var(--bad);font-weight:600;font-size:14.5px}
 .briefs-acts .link:disabled,.ai-acts .link:disabled{color:var(--muted);opacity:.6;cursor:default}
 .btn:disabled{opacity:.55;cursor:default}
+/* Devis de la fiche prestataire */
+.devis-card{border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:12px;padding:12px 14px;background:var(--surface)}
+.devis-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.devis-m{font-size:26px;font-weight:700;display:block;line-height:1.1}
+.devis-d{display:block;font-size:13.5px;font-weight:700;margin-top:2px}.devis-d.ok,.devis-old small.ok{color:var(--ok)}.devis-d.bad,.devis-old small.bad{color:var(--bad)}
+.devis-src{margin:6px 0 0;font-size:13.5px;color:var(--muted)}
+.devis-r{margin:8px 0 0;font-size:15px}
+.devis-card h5{margin:12px 0 4px;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.devis-card .kv{margin-top:10px}
+.devis-card .link{display:inline-block;margin-top:10px;color:var(--accent);font-weight:600}
+.devis-old{margin-top:10px}.devis-old summary{cursor:pointer;font-weight:600;color:var(--accent);padding:6px 0}

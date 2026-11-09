@@ -83,3 +83,16 @@ test("inspiration : la miniature de la photo jointe est gardée, annulable", asy
   assert.match((await exec("noter_inspiration", { photo: 2, categorie: "lieu", description: "x" })).content, /introuvable/);
   assert.match((await makeTools(base(), { qcats: QCATS })("noter_inspiration", { photo: 1, categorie: "lieu", description: "x" })).content, /aucune photo/);
 });
+
+test("enregistrer_devis : ajouté à l'historique de la fiche, prix mis à jour, annulable", async () => {
+  const db = base(); const exec = makeTools(db, { qcats: QCATS, now, author: "Julien" });
+  const r = await exec("enregistrer_devis", { id: "v1", montant: 4500, acompte: 1350, validite: "2026-12-31", invites: 70, inclus: ["Salle", "Parc"], options: [{ label: "Nuit sur place", prix: 600 }], resume: "Remise de 350 €." });
+  const v = db.data["vendors/v1"];
+  assert.equal(v.prix, 4500); assert.equal(v.devis.length, 1); assert.equal(v.devis[0].invites, 70); assert.deepEqual(v.devis[0].options, [{ label: "Nuit sur place", prix: 600 }]);
+  assert.equal(r.action.ops[0].before.prix, 4850);
+  await exec("enregistrer_devis", { id: "v1", montant: 4300 });
+  assert.equal(db.data["vendors/v1"].devis.length, 2); assert.equal(db.data["vendors/v1"].devis[0].montant, 4300);
+  const n = await exec("enregistrer_devis", { nom: "Fleurs Martin", categorie: "Fleuriste", montant: 900 });
+  assert.equal(JSON.parse(n.content).ok, true);
+  assert.equal(Object.values(db.data).find(x => x.name === "Fleurs Martin").status, "devis");
+});
