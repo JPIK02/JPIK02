@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { shouldRun, slotMatches, parisClock, vendorsToAnalyse, profilDue, vendorsRequested, isoWeek, hebdoDue, visitsToFollow } from "../lib/scheduler.js";
 import { cleanPayload, cleanSubject } from "../lib/validate.js";
 import { extractText, stripHtml, readableFiles } from "../lib/mailtext.js";
-import { mapPool } from "../analyse-agent.js";
+import { mapPool } from "../lib/pool.js";
 
 // 2026-11-09 07:10 à Paris = 06:10 UTC (heure d'hiver), un lundi
 const mondayParis7 = new Date("2026-11-09T06:10:00Z");

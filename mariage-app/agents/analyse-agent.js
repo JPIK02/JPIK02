@@ -1,4 +1,5 @@
 // Agent d'analyse : synthèse du brief (meta/profil) et note de fit de chaque prestataire (vendors/<id>.fit).
+import { mapPool } from "./lib/pool.js";
 import { readFileSync } from "node:fs";
 import { getDb, getMeta, listAll, mergeMeta } from "./lib/firestore.js";
 import { runForOutput } from "./lib/claude.js";
@@ -51,13 +52,6 @@ const FIT_OUT = {
 
 const strip = ({ fit, ...v }) => v; // on n'envoie pas l'ancienne fiche à Claude
 
-/** Exécute fn sur chaque élément, `n` à la fois ; la première erreur est remontée après la fin des autres. */
-export async function mapPool(items, n, fn) {
-  let i = 0, err = null;
-  const worker = async () => { while (i < items.length) { const it = items[i++]; try { await fn(it); } catch (e) { err ||= e; } } };
-  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
-  if (err) throw err;
-}
 
 async function loadContext() {
   const [settings, brief, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("inbox")]);
