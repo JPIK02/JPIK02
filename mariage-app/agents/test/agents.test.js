@@ -160,6 +160,10 @@ test("Pinterest : lien de tableau → flux RSS, lecture des épingles, rythme", 
   assert.equal(rssUrl("https://www.pinterest.com/claire/deco.rss"), "https://www.pinterest.com/claire/deco.rss");
   assert.equal(rssUrl("https://www.pinterest.com/pin/123/"), null);
   assert.equal(rssUrl("https://exemple.fr/claire/deco"), null);
+  const { isShort } = await import("../pinterest-agent.js");
+  assert.equal(isShort("https://pin.it/2lx22Nnec"), true);
+  assert.equal(isShort("https://fr.pinterest.com/jpicquet0021/claire-et-julien-mariage-2028/?invite_code=x"), false);
+  assert.equal(rssUrl("https://fr.pinterest.com/jpicquet0021/claire-et-julien-mariage-2028/?invite_code=x&sender=1"), "https://www.pinterest.com/jpicquet0021/claire-et-julien-mariage-2028.rss");
   const xml = `<rss><channel><item><title>Arche fleurie</title><link>https://www.pinterest.com/pin/42/</link><description>&lt;a href=&quot;x&quot;&gt;&lt;img src=&quot;https://i.pinimg.com/236x/aa/bb/cc/abc.jpg&quot;&gt;&lt;/a&gt;Arche &amp;amp; eucalyptus</description><guid>https://www.pinterest.com/pin/42/</guid></item>
     <item><title>Sans image</title><link>x</link><description>rien</description><guid>y</guid></item></channel></rss>`;
   const pins = parseRss(xml);

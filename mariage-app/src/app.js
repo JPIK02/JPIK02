@@ -960,19 +960,19 @@ function iaPanel(){
     <p class="plan-when" style="margin:10px 0 0">Estimation calculée à partir des tokens consommés (tarifs publics, 1 $ ≈ ${String(USD_EUR).replace(".",",")} €). La facture exacte est sur console.anthropic.com, où vous pouvez aussi fixer une limite de dépense stricte.</p></div>`;
 }
 /* Tableaux Pinterest publics → inspirations (agent pinterest-agent.js, meta/pinterest) */
-const pinBoard=u=>{try{const x=new URL(String(u||"").trim());if(!/(^|\.)pinterest\.[a-z.]+$/i.test(x.hostname))return null;const p=x.pathname.split("/").filter(Boolean);return p.length>=2&&p[0]!=="pin"?`https://www.pinterest.com/${p[0]}/${p[1].replace(/\.rss$/i,"")}/`:null}catch(e){return null}};
-const pinName=u=>{const p=new URL(u).pathname.split("/").filter(Boolean),n=decodeURIComponent(p[1]||"").replace(/-/g," ");return n.charAt(0).toUpperCase()+n.slice(1)+" · "+p[0]};
+const pinBoard=u=>{try{const x=new URL(String(u||"").trim());if(/^pin\.it$/i.test(x.hostname)&&x.pathname.length>2)return `https://pin.it${x.pathname}`;if(!/(^|\.)pinterest\.[a-z.]+$/i.test(x.hostname))return null;const p=x.pathname.split("/").filter(Boolean);return p.length>=2&&p[0]!=="pin"?`https://www.pinterest.com/${p[0]}/${p[1].replace(/\.rss$/i,"")}/`:null}catch(e){return null}};
+const pinName=u=>{if(/^https:\/\/pin\.it\//.test(u))return "Lien partagé (le nom s'affiche après la synchronisation)";const p=new URL(u).pathname.split("/").filter(Boolean),n=decodeURIComponent(p[1]||"").replace(/-/g," ");return n.charAt(0).toUpperCase()+n.slice(1)+" · "+p[0]};
 function pinterestPanel(){
   const m=S.pinterest||{},boards=m.boards||[],dis=S.canWrite?"":"disabled",running=(S.locks.pinterest||0)>Date.now()||((m.requestedAt||0)>(m.lastSyncAt||0)&&Date.now()-(m.requestedAt||0)<10*60000);
   const n=S.inspirations.filter(x=>x.source==="pinterest").length;
   const last=m.lastSyncAt?`Dernière synchronisation ${relDay(new Date(m.lastSyncAt))} à ${new Date(m.lastSyncAt).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}${m.lastImported!=null?` · ${m.lastImported} nouvelle${m.lastImported>1?"s":""} épingle${m.lastImported>1?"s":""}`:""}${m.remaining?` · ${m.remaining} en attente (prochain passage)`:""}.`:"Jamais synchronisé.";
   const opts=c=>`<option value="auto" ${!c||c==="auto"?"selected":""}>Rangement automatique</option>${QCATS.map(q=>`<option value="${q.k}" ${c===q.k?"selected":""}>${esc(q.label)}</option>`).join("")}`;
   return `<div class="formpanel" style="margin-top:8px" id="pinterest"><div class="panel-h" style="margin-bottom:6px"><h3>Tableaux Pinterest</h3>${n?`<span class="chip ok">${n} épingle${n>1?"s":""} importée${n>1?"s":""}</span>`:""}</div>
-    <p class="plan-when" style="margin:0 0 12px">Collez le lien d'un tableau <b>public</b>. Ses nouvelles épingles arrivent dans vos inspirations (Nos envies), décrites et rangées par catégorie par le coach, puis nourrissent votre fil rouge et vos briefs. Synchronisation chaque jour, 12 épingles au plus par passage.</p>
+    <p class="plan-when" style="margin:0 0 12px">Sur Pinterest, ouvrez un tableau <b>public</b>, touchez « Partager » puis « Copier le lien » et collez-le ici. Ses nouvelles épingles arrivent dans vos inspirations (Nos envies), décrites et rangées par catégorie par le coach, puis nourrissent votre fil rouge et vos briefs. Synchronisation chaque jour, 12 épingles au plus par passage.</p>
     ${boards.length?`<div class="pin-list">${boards.map((b,i)=>`<div class="pin-row"><div class="pin-t"><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(pinName(b.url))}</a></div>
       <label class="sr" for="search-pin-cat-${i}">Catégorie de ce tableau</label><select id="search-pin-cat-${i}" data-pincat="${i}" ${dis}>${opts(b.cat)}</select>
       ${S.canWrite?`<button type="button" class="link" data-act="pindel" data-i="${i}">Retirer</button>`:""}</div>`).join("")}</div>`:""}
-    ${S.canWrite?`<form class="pin-add" id="pin-form"><label class="sr" for="search-pin-url">Lien du tableau Pinterest</label><input type="url" inputmode="url" autocomplete="off" id="search-pin-url" name="url" placeholder="https://www.pinterest.fr/compte/tableau/"><button class="btn sm" type="submit">Ajouter</button></form>`:""}
+    ${S.canWrite?`<form class="pin-add" id="pin-form"><label class="sr" for="search-pin-url">Lien du tableau Pinterest</label><input type="url" inputmode="url" autocomplete="off" id="search-pin-url" name="url" placeholder="https://pin.it/… ou lien du tableau"><button class="btn sm" type="submit">Ajouter</button></form>`:""}
     <div class="pin-foot"><span class="plan-when" style="margin:0">${running?"Synchronisation en cours…":esc(last)}${m.status==="erreur"&&m.lastError?` <b style="color:var(--bad)">Problème : ${esc(m.lastError)}</b>`:""}</span>
       ${boards.length&&S.canWrite?`<button class="btn sm primary" data-act="pinsync" ${running?"disabled":""}>${running?"Synchronisation…":"Synchroniser maintenant"}</button>`:""}</div></div>`;
 }
@@ -1620,7 +1620,7 @@ document.addEventListener("submit",async e=>{
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
   if(f.id==="pin-form"){e.preventDefault();const u=pinBoard(f.elements.url.value);
-    if(!u){toast("Lien de tableau non reconnu : ouvrez le tableau sur Pinterest et copiez son lien (…/compte/tableau/)");return}
+    if(!u){toast("Lien non reconnu : sur Pinterest, ouvrez le tableau, touchez Partager puis Copier le lien");return}
     const b=(S.pinterest.boards||[]).slice();if(b.some(x=>x.url===u)){toast("Ce tableau est déjà ajouté");return}
     b.push({url:u,cat:"auto"});if(await mergeDoc("meta/pinterest",{boards:b,requestedAt:Date.now()})){kick("pinterest");f.reset();document.activeElement&&document.activeElement.blur();toast("Tableau ajouté : première synchronisation lancée")}return}
   if(f.id==="ia-form"){e.preventDefault();const v=num(f.elements.budget.value);if(!(v>0)){toast("Indiquez un budget en euros");return}

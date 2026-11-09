@@ -58,6 +58,17 @@ const OUT = {
   },
 };
 
+/** Lien court pin.it (bouton « Partager » de Pinterest) → adresse du tableau, en suivant la redirection. */
+export const isShort = url => { try { return /^pin\.it$/i.test(new URL(url).hostname); } catch { return false; } };
+async function resolveBoard(url) {
+  if (!isShort(url)) return url;
+  const r = await fetch(url, { headers: { "User-Agent": UA }, redirect: "follow", signal: AbortSignal.timeout(20_000) });
+  const u = new URL(r.url);
+  const parts = u.pathname.split("/").filter(Boolean);
+  if (parts[0] === "pin") throw new Error("ce lien mène à une épingle, pas à un tableau");
+  return `https://www.pinterest.com/${parts[0]}/${parts[1]}/`;
+}
+
 async function get(url, as = "text") {
   const r = await fetch(url, { headers: { "User-Agent": UA }, redirect: "follow", signal: AbortSignal.timeout(20_000) });
   if (!r.ok) throw new Error(`${r.status} pour ${url}`);
@@ -66,12 +77,23 @@ async function get(url, as = "text") {
 
 export async function runPinterest({ log = console.log } = {}) {
   const db = getDb(), meta = await getMeta("pinterest");
-  const boards = (meta.boards || []).filter(b => rssUrl(b.url));
   const seen = new Set(meta.seen || []);
   const fresh = [], errors = [];
+  // liens pin.it : résolus une fois, puis remplacés par l'adresse du tableau
+  let changed = false;
+  const all = [];
+  for (const b of meta.boards || []) {
+    if (!isShort(b.url)) { all.push(b); continue; }
+    try { all.push({ ...b, url: await resolveBoard(b.url), short: b.url }); changed = true; }
+    catch (e) { all.push(b); errors.push(`${b.url} : ${e.message}`); }
+  }
+  if (changed) await db.doc("meta/pinterest").set({ boards: all }, { merge: true });
+  const boards = all.filter(b => rssUrl(b.url));
   for (const b of boards) {
     try {
-      for (const p of parseRss(await get(rssUrl(b.url)))) if (!seen.has(p.id) && !fresh.some(f => f.id === p.id)) fresh.push({ ...p, cat: b.cat || "auto", board: b.url });
+      const xml = await get(rssUrl(b.url));
+      if (!/<item>/.test(xml)) throw new Error("tableau vide ou secret : seuls les tableaux publics sont lisibles");
+      for (const p of parseRss(xml)) if (!seen.has(p.id) && !fresh.some(f => f.id === p.id)) fresh.push({ ...p, cat: b.cat || "auto", board: b.url });
     } catch (e) { errors.push(`${b.url} : ${e.message}`); log(`[pinterest] ${b.url} illisible : ${e.message}`); }
   }
   const batch = fresh.slice(0, MAX_PER_SYNC);
