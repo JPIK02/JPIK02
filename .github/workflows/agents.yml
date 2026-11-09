@@ -1,9 +1,6 @@
 name: Agents mariage
 
 on:
-  schedule:
-    - cron: "*/10 * * * *"   # toutes les 10 min : une demande faite depuis l'app part vite ;
-                             # agents/run.js ne lance un agent que s'il est dû (meta/planning) ou demandé
   workflow_dispatch:
     inputs:
       agent:
