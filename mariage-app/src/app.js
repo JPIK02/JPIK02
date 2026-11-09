@@ -998,19 +998,65 @@ const CHAT_SUGG={chat:["Que devons-nous faire cette semaine ?","Compare nos lieu
 // Un mail rédigé par le coach commence par « Objet : … »
 function mailOf(t){const m=String(t||"").match(/(?:^|\n)\s*\**Objet\s*:\**\s*(.+)\n([\s\S]+)/i);return m?{subject:m[1].replace(/\*+/g,"").trim(),body:m[2].replace(/\*\*/g,"").trim()}:null}
 const mailHref=m=>`mailto:?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
-function chatMsgsHTML(){
+function chatItems(){
   const c=S.chat;
   const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u">${(m.thumbs||[]).length?`<div class="cm-thumbs">${m.thumbs.map(u=>`<img src="${u}" alt="Photo envoyée">`).join("")}</div>`:""}<div class="bub">${esc(m.text)}</div></div>`
     :`<div class="cm a"><div class="bub">${mdLite(m.text)}</div>${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).length?`<div class="acts-done">${m.actions.map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
-      ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`).join("");
+      ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`);
   const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`
     :!c.busy&&c.mode==="brief"&&S.canWrite?`<div class="chat-sugg"><button class="chip" data-act="chatfile">Montrer une photo au coach</button></div>`:"";
   const intro=!c.messages.length?`<div class="chat-intro"><b>${c.mode==="brief"?"Entretien « Nos envies »":"Bonjour, je suis votre coach mariage"}</b><p>${c.mode==="brief"?"Je vous pose les questions du questionnaire une par une, en langage naturel, et je note vos réponses au fur et à mesure.":"Comme un wedding planner : je connais votre date, votre budget, vos envies et vos prestataires. Posez-moi une question ou demandez-moi d'agir (ajouter une tâche, ranger des invités, noter un devis, préparer une visite). Chaque action s'annule d'un toucher."}</p></div>`:"";
-  return intro+msgs+(c.busy?`<div class="cm a"><div class="bub typing" role="status"><i></i><i></i><i></i><span class="typing-l">${esc(c.busyLabel||"Je regarde vos données…")}</span></div></div>`:"")+sugg;
+  return [["intro",intro],...msgs.map((h,i)=>["m"+i,h]),["busy",c.busy?`<div class="cm a"><div class="bub typing" role="status"><i></i><i></i><i></i><span class="typing-l">${esc(c.busyLabel||"Je regarde vos données…")}</span></div></div>`:""],["sugg",sugg]].filter(x=>x[1]);
 }
-function renderChat(){
-  const box=document.getElementById("chat-msgs");if(!box)return;
-  box.innerHTML=chatMsgsHTML();box.scrollTop=box.scrollHeight;
+/* Met à jour la liste sans la reconstruire : les messages déjà affichés ne bougent pas (sélection,
+   position de lecture, images), seuls les nouveaux ou les modifiés sont insérés. */
+function patchKeyed(box,items){
+  const want=new Set(items.map(x=>x[0])),added=[];
+  [...box.children].forEach(n=>{if(!want.has(n.dataset.k))n.remove()});
+  let prev=null;
+  for(const [k,h] of items){
+    let n=[...box.children].find(x=>x.dataset.k===k);
+    if(!n||n._h!==h){const t=document.createElement("template");t.innerHTML=h.trim();const nn=t.content.firstElementChild;nn.dataset.k=k;nn._h=h;if(n)n.replaceWith(nn);else added.push(nn);n=nn}
+    const at=prev?prev.nextElementSibling:box.firstElementChild;
+    if(n!==at)box.insertBefore(n,at);
+    prev=n;
+  }
+  return added;
+}
+const chatMotion=()=>window.matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";
+const chatGap=box=>box.scrollHeight-box.scrollTop-box.clientHeight;
+function chatPill(){
+  const box=document.getElementById("chat-msgs"),pill=document.getElementById("chat-new");if(!box||!pill)return;
+  const c=S.chat,far=chatGap(box)>160;
+  // la nouvelle réponse est-elle déjà à l'écran ?
+  if(c.unseen){const n=[...box.children].find(x=>x.dataset.k===c.unseen);if(!n||n.offsetTop<box.scrollTop+box.clientHeight-40)c.unseen=null}
+  pill.hidden=!(c.unseen||far);
+  pill.innerHTML=c.unseen?'Nouvelle réponse <span aria-hidden="true">↓</span>':'<span aria-hidden="true">↓</span>';
+  pill.setAttribute("aria-label",c.unseen?"Aller à la nouvelle réponse":"Aller en bas de la conversation");
+  pill.classList.toggle("round",!c.unseen);
+}
+function chatJump(){
+  const box=document.getElementById("chat-msgs");if(!box)return;const c=S.chat;
+  const n=c.unseen&&[...box.children].find(x=>x.dataset.k===c.unseen);
+  box.scrollTo({top:n?Math.max(0,n.offsetTop-56):box.scrollHeight,behavior:chatMotion()});
+  c.unseen=null;setTimeout(chatPill,400);
+}
+/* intent : "open" (en bas, sans animation), "send" (on suit son message), "answer" (on montre le début de la
+   réponse si l'on suivait la conversation ; sinon on ne bouge pas et on propose « Nouvelle réponse »). */
+function renderChat(intent){
+  const box=document.getElementById("chat-msgs");if(!box)return;const c=S.chat;
+  const pinned=chatGap(box)<80,first=!box.children.length;
+  const added=patchKeyed(box,chatItems());
+  if(intent==="open"||first){box.scrollTop=box.scrollHeight}
+  else if(intent==="send"){c.unseen=null;box.scrollTo({top:box.scrollHeight,behavior:chatMotion()})}
+  else if(intent==="answer"){
+    const n=added.filter(x=>x.classList.contains("a")).pop()||[...box.children].filter(x=>x.dataset.k&&x.dataset.k[0]==="m").pop();
+    if(n){n.classList.add("enter");
+      if(pinned){c.unseen=null;box.scrollTo({top:Math.min(Math.max(0,n.offsetTop-56),box.scrollHeight-box.clientHeight),behavior:chatMotion()})}
+      else c.unseen=n.dataset.k}
+  }
+  else if(pinned&&added.length)box.scrollTo({top:box.scrollHeight,behavior:chatMotion()});
+  chatPill();
   const b=document.getElementById("chat-send");if(b)b.disabled=S.chat.busy;
   const md=document.getElementById("chat-mode");if(md)md.innerHTML=S.chat.mode==="brief"?`<span class="chip acc">Entretien Nos envies</span><button class="link" data-act="chatmode" data-m="chat">Quitter</button>`:`<button class="link" data-act="chatmode" data-m="brief">Remplir nos envies avec le coach</button>`;
 }
@@ -1051,30 +1097,35 @@ async function openChat(mode,prefill){
   document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal chat" role="dialog" aria-modal="true" aria-label="Coach mariage">
     <div class="chat-h"><h3>Votre coach</h3><button class="link" data-act="chatreset" ${c.busy?"disabled":""}>Nouvelle conversation</button></div>
     <div class="chat-mode" id="chat-mode"></div>
-    <div class="chat-msgs" id="chat-msgs" aria-live="polite"></div>
+    <div class="chat-wrap"><div class="chat-msgs" id="chat-msgs" aria-live="polite"></div><button type="button" class="chat-new" id="chat-new" data-act="chatbottom" hidden></button></div>
     <form class="chat-in" id="chat-form"><input type="file" id="chat-file" accept="image/*,application/pdf" multiple hidden>
     <div class="cmp"><div id="chat-att"></div>
     <label class="sr" for="chat-text">Votre message</label><textarea autocomplete="off" name="search_message" enterkeyhint="send" id="chat-text" rows="1" placeholder="Message ou photo…" ${S.canWrite?"":"disabled"}></textarea>
     <div class="cmp-bar"><button type="button" class="ch-ic" data-act="chatfile" aria-label="Joindre une photo ou un PDF" ${S.canWrite?"":"disabled"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     ${SR?`<button type="button" class="ch-ic" id="chat-mic" data-act="chatmic" aria-label="Dicter" ${S.canWrite?"":"disabled"}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>`:""}
     <button class="cmp-send" id="chat-send" type="submit" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></div></form></div></div>`;
-  renderChat();renderAtt();
+  renderChat("open");renderAtt();
+  { // suivi de la lecture : bouton « Nouvelle réponse », et bas de conversation conservé quand le clavier se ferme
+    const box=document.getElementById("chat-msgs");let pinned=true;
+    box.addEventListener("scroll",()=>{pinned=chatGap(box)<80;chatPill()},{passive:true});
+    if(window.ResizeObserver)new ResizeObserver(()=>{if(pinned)box.scrollTop=box.scrollHeight}).observe(box);
+  }
   if(prefill!=null){const ta=document.getElementById("chat-text");ta.value=prefill;ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
-  if(!c.loaded&&S.db&&S.user){try{const d=(await S.db.doc("chats/"+String(S.user.email).toLowerCase()).get()).data();c.loaded=true;if(d&&Array.isArray(d.messages)&&!c.messages.length){c.messages=d.messages;if(d.mode&&!mode)c.mode=d.mode}renderChat()}catch(e){}}
+  if(!c.loaded&&S.db&&S.user){try{const d=(await S.db.doc("chats/"+String(S.user.email).toLowerCase()).get()).data();c.loaded=true;if(d&&Array.isArray(d.messages)&&!c.messages.length){c.messages=d.messages;if(d.mode&&!mode)c.mode=d.mode}renderChat("open")}catch(e){}}
   if(mode==="brief"&&(switched||!c.messages.length))sendChat("Commençons le questionnaire Nos envies.");
 }
 async function sendChat(text){
   const c=S.chat;text=String(text||"").trim();const atts=c.atts||[];if((!text&&!atts.length)||c.busy||!S.canWrite)return;
   c.atts=[];renderAtt();
   const nI=atts.filter(a=>a.media_type!=="application/pdf").length,nP=atts.length-nI,tag=[nI?(nI>1?`${nI} photos jointes`:"photo jointe"):"",nP?(nP>1?`${nP} PDF joints`:"PDF joint"):""].filter(Boolean).join(", ");
-  c.messages.push({role:"user",text:(text+(tag?` [${tag}]`:"")).trim(),thumbs:atts.filter(a=>a.preview).map(a=>a.preview)});c.busy=true;c.busyLabel="Je regarde vos données…";renderChat();
+  c.messages.push({role:"user",text:(text+(tag?` [${tag}]`:"")).trim(),thumbs:atts.filter(a=>a.preview).map(a=>a.preview)});c.busy=true;c.busyLabel="Je regarde vos données…";renderChat("send");
   // Libellé d'attente qui évolue (la réponse prend souvent 10 à 20 secondes)
   const steps=["Je regarde vos données…","Je prépare la réponse…","Encore un instant…"];let k=0;
   const tick=setInterval(()=>{if(!c.busy){clearInterval(tick);return}k=Math.min(k+1,steps.length-1);c.busyLabel=steps[k];const l=document.querySelector(".typing-l");if(l)l.textContent=steps[k]},6000);
   try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(atts.length?{attachments:atts.map(a=>({media_type:a.media_type,data:a.data,...(a.thumb?{thumb:a.thumb}:{})}))}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[]});(r.actions||[]).forEach(a=>a.kick&&kick(a.kick))}
   catch(e){const msg=e&&e.code==="functions/resource-exhausted"?e.message:e&&e.code==="functions/permission-denied"?"Coach réservé à Claire et Julien.":e&&/not-found|internal|unavailable/.test(e.code||"")?"Le coach ne répond pas pour l'instant. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
     c.messages.push({role:"assistant",text:msg,actions:[],error:true})}
-  c.busy=false;renderChat();
+  c.busy=false;renderChat("answer");
 }
 async function undoChat(i){
   const m=S.chat.messages[i];if(!m||m.undone)return;
@@ -1395,6 +1446,7 @@ document.addEventListener("click",async e=>{
   if(a==="chat"){openChat(t.dataset.m||null);return}
   if(a==="chatsugg"){sendChat(t.dataset.t);return}
   if(a==="chatundo"){if(S.canWrite)await undoChat(+t.dataset.i);return}
+  if(a==="chatbottom"){chatJump();return}
   if(a==="chatmode"){S.chat.mode=t.dataset.m;renderChat();if(t.dataset.m==="brief")sendChat("Commençons le questionnaire Nos envies.");return}
   if(a==="chatreset"){if(S.chat.busy)return;S.chat.messages=[];renderChat();try{await callAssistant({reset:true})}catch(e){}return}
   if(a==="onboardoff"){try{localStorage.setItem("mariage-onboard-off","1")}catch(e){}render();return}

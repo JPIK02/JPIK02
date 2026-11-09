@@ -526,7 +526,7 @@ body.noauth .fab,body.modal-open .fab{display:none}
 .chat-h h3{margin:0 0 6px}
 .chat-h .link,.chat-mode .link{font-size:14.5px;color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0}
 .chat-mode{display:flex;align-items:center;gap:10px;min-height:32px;margin-bottom:6px}
-.chat-msgs{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px;padding:6px 2px 14px}
+.chat-msgs{position:relative;flex:1;min-height:0;overflow:auto;overflow-anchor:none;overscroll-behavior:contain;display:flex;flex-direction:column;gap:10px;padding:6px 2px 14px}
 .chat-intro{background:var(--surface-2);border-radius:14px;padding:14px 16px}
 .chat-intro p{margin:4px 0 0;color:var(--muted);font-size:15px}
 .cm{display:flex;flex-direction:column;max-width:88%}
@@ -808,3 +808,14 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 #chat-att .att img,#chat-att .att .att-pdf{width:56px;height:56px;border-radius:10px;object-fit:cover}
 #chat-att .att-x{position:absolute;top:-6px;right:-6px;width:24px;height:24px;border-radius:50%;border:2px solid var(--bg);background:var(--ink);color:var(--bg);font-size:15px;line-height:1;display:grid;place-items:center;cursor:pointer;padding:0}
 #chat-att .att-more{width:56px;height:56px;border-radius:10px;border:1.5px dashed var(--line-strong);background:none;color:var(--muted,var(--ink));font-size:24px;padding:0;align-self:auto}
+
+/* Conversation : lecture sans à-coups */
+.chat-wrap{position:relative;flex:1;min-height:0;display:flex;flex-direction:column}
+.chat-new{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:2;display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:8px 16px;border-radius:20px;border:1px solid var(--line-strong);background:var(--surface);color:var(--accent);font:inherit;font-size:15px;font-weight:700;box-shadow:0 6px 18px rgba(0,0,0,.14);cursor:pointer}
+.chat-new.round{width:40px;padding:0;justify-content:center;color:var(--ink)}
+.chat-new[hidden]{display:none}
+.chat-new:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){.cm.enter{animation:cmIn .28s ease-out}@keyframes cmIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}.chat-new{animation:cmIn .2s ease-out}}
+.chat-new{white-space:nowrap}
+/* Coach sur téléphone : en-tête compact, plus de place pour lire */
+@media (max-width:640px){.chat-h h3{font-size:22px;margin:0 0 2px}.chat-mode{min-height:28px;margin-bottom:2px}}
