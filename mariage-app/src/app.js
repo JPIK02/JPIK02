@@ -791,7 +791,9 @@ function pdfBriefs(k){
   const b=S.briefs;if(!b||!b.categories)return;
   if(k==="all"){const ks=Object.keys(BRIEF_LABEL).filter(x=>b.categories[x]);
     return makePdf("Briefs prestataires - Claire et Julien.pdf",{docTitle:"Nos briefs prestataires",blocks:[...filRougeBlocks(),...ks.flatMap(x=>[{page:true},...briefBlocks(x)])]})}
-  makePdf(`Brief ${BRIEF_LABEL[k]} - Claire et Julien.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...filRougeBlocks(),{page:true},...briefBlocks(k)]});
+  // le métier d'abord (c'est ce que le prestataire lit en premier), puis notre vision d'ensemble, commune à tous les briefs
+  const fr=filRougeBlocks();fr[0]={h2:"Notre vision d'ensemble (commune à tous nos prestataires)"};
+  makePdf(`Brief ${BRIEF_LABEL[k]} - Claire et Julien.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...briefBlocks(k).slice(1),...fr]});
 }
 function vEnvies(){
   const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
