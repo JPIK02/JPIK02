@@ -46,7 +46,7 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
-  const { text, actions } = await converse({ client, model: MODEL, system, tools: TOOL_DEFS, messages, exec });
+  const { text, actions } = await converse({ client, model: MODEL, system, tools: TOOL_DEFS, messages, exec, effort: mode === "brief" ? "medium" : "low" });
 
   // On garde de quoi annuler les 10 derniers messages ; au-delà, seulement le libellé des actions (taille du document).
   const history = [...past, { role: "user", text: message.trim(), at: Date.now() }, { role: "assistant", text, actions, at: Date.now() }].slice(-60)

@@ -569,3 +569,4 @@ body.noauth .fab,body.modal-open .fab{display:none}
 .ob-list li.ok>span:nth-child(2){color:var(--muted);text-decoration:line-through}
 .ob-hint{font-size:13px;color:var(--muted)}
 .ob-off{font-size:14px;color:var(--muted);background:none;border:0;cursor:pointer;padding:8px 0;margin-top:6px}
+.typing-l{margin-left:6px;font-size:14px;color:var(--muted)}
