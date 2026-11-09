@@ -1,4 +1,4 @@
-// Point d'entrée appelé toutes les heures par GitHub Actions.
+// Point d'entrée appelé toutes les 10 minutes par GitHub Actions.
 //   node agents/run.js            → chaque agent tourne s'il est dû (planning ou demande depuis l'app)
 //   node agents/run.js mail       → force l'agent e-mails
 //   node agents/run.js analyse    → force l'agent d'analyse

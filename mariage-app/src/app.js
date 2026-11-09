@@ -505,9 +505,9 @@ const fitCls=s=>s==null?"none":s>=75?"hi":s>=55?"mid":"lo";
 const fitBadge=(v,big)=>{const f=v.fit;return f&&f.score!=null?`<div class="fit ${fitCls(f.score)} ${big?"big":""}" title="Note de fit">${Math.round(f.score)}</div>`:`<div class="fit none ${big?"big":""}" title="Pas encore analysé">${big?"À analyser":"—"}</div>`};
 
 /* ---------- Planning des agents ----------
-   Les agents tournent dans GitHub Actions (agents/, .github/workflows/agents.yml), toutes les heures.
+   Les agents tournent dans GitHub Actions (agents/, .github/workflows/agents.yml), toutes les 10 minutes.
    À chaque passage, agents/scheduler.js lit meta/planning et décide si l'agent est dû.
-   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : pris en compte au prochain passage horaire. */
+   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : pris en compte au prochain passage (10 à 15 min). */
 const hh=(h)=>`${h}h`;
 function planOf(k){return Object.assign({},JOBS[k].def,S.planning[k]||{})}
 function planLabel(k){
@@ -523,7 +523,7 @@ async function runNow(k){
   if(!S.canWrite)return;
   const [path,cur]=metaOf(k);
   const ok=await setDoc(path,cur,k==="analyse"?{requestedAt:Date.now(),status:"demandée"}:{requestedAt:Date.now()});
-  if(ok)toast(k==="mail"?"Demande enregistrée : lecture au prochain passage (dans l'heure)":"Analyse demandée : elle tournera au prochain passage (dans l'heure)");
+  if(ok)toast(k==="mail"?"Demande enregistrée : lecture dans les 10 à 15 minutes":"Analyse demandée : elle démarre dans les 10 à 15 minutes");
 }
 async function savePlan(k,form){
   const fd=new FormData(form);
@@ -767,7 +767,7 @@ function vReglages(){
     <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
   </form>
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
-    <p class="plan-when" style="margin:0 0 12px">Les agents passent toutes les heures (GitHub Actions) et ne travaillent que selon le planning ci-dessous. Un passage demandé est fait dans l'heure.</p>
+    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes (GitHub Actions) s'ils ont du travail et ne tournent que selon le planning ci-dessous. Un passage demandé démarre dans les 10 à 15 minutes.</p>
     <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Compte</h3></div>
     <p class="plan-when" style="margin:0 0 12px">Connecté en tant que <b>${esc(S.user&&S.user.email||"")}</b>.</p>

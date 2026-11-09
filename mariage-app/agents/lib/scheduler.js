@@ -1,5 +1,5 @@
 // Décide si un agent doit tourner maintenant, à partir de meta/planning.
-// Le workflow GitHub tourne toutes les heures ; cette fonction est pure pour être testable.
+// Le workflow GitHub tourne toutes les 10 minutes ; cette fonction est pure pour être testable.
 
 export const DEFAULT_PLANS = {
   mail: { enabled: true, mode: "daily", h1: 7, h2: 19, day: 1 },
@@ -40,7 +40,7 @@ export function shouldRun(plan, meta = {}, now = new Date(), { force = false } =
   const req = +meta.requestedAt || 0;
   if (req && req > last) return { run: true, reason: "demandé depuis l'app" };
   if (!slotMatches(plan, parisClock(now))) return { run: false, reason: "hors créneau" };
-  // GitHub peut déclencher deux fois dans la même heure : on évite le doublon.
+  // Le workflow passe plusieurs fois dans l'heure : un seul passage par créneau.
   if (now - last < 50 * 60 * 1000) return { run: false, reason: "déjà passé dans l'heure" };
   return { run: true, reason: "créneau du planning" };
 }
