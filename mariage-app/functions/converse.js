@@ -1,7 +1,7 @@
 // Boucle de conversation : Claude appelle des outils jusqu'à donner sa réponse. Testable (client injecté).
 export async function converse({ client, model, system, tools, messages, exec, maxTurns = 12, effort = "low", onUsage = () => {} }) {
-  const actions = [];
-  let text = "";
+  const actions = [], sources = [];
+  let text = "", searches = 0;
   for (let turn = 0; turn < maxTurns; turn++) {
     const res = await client.beta.messages.create({
       model, max_tokens: 8000, system, tools, messages,
@@ -13,6 +13,9 @@ export async function converse({ client, model, system, tools, messages, exec, m
     await onUsage(res);
     if (res.stop_reason === "refusal") return { text: "Je ne peux pas répondre à cette demande.", actions };
     messages.push({ role: "assistant", content: res.content });
+    searches += res.usage?.server_tool_use?.web_search_requests || 0;
+    for (const b of res.content) for (const c of b.citations || []) if (c.url && !sources.some(s => s.url === c.url) && sources.length < 8) sources.push({ url: c.url, title: String(c.title || c.url).slice(0, 120) });
+    if (res.stop_reason === "pause_turn") continue; // recherche web longue : on relance tel quel
     const calls = res.content.filter(b => b.type === "tool_use");
     text = res.content.filter(b => b.type === "text").map(b => b.text).join("\n").trim() || text;
     if (res.stop_reason !== "tool_use" || !calls.length) break;
@@ -25,7 +28,8 @@ export async function converse({ client, model, system, tools, messages, exec, m
     messages.push({ role: "user", content: results });
   }
   if (!text) text = actions.length ? "C'est fait." : "Je n'ai pas réussi à répondre, pouvez-vous reformuler ?";
-  return { text, actions };
+  if (searches) actions.push({ label: `${searches} recherche${searches > 1 ? "s" : ""} sur internet` });
+  return { text, actions, sources };
 }
 
 // Pièce jointe (photo ou PDF d'un devis, d'une plaquette…) : bloc image ou document pour Claude.

@@ -845,3 +845,16 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .briefs-p .panel-h{margin-bottom:6px}
 .briefs-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .briefs-acts .link{color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0;font-size:14.5px}
+/* Coach et internet : demande d'autorisation, sources */
+.webask{margin-top:8px;border:1px solid var(--line-strong);border-radius:14px;padding:12px 14px;background:var(--surface);display:flex;flex-direction:column;gap:4px;max-width:100%}
+.webask b{font-size:14px;color:var(--accent)}
+.webask p{margin:0;font-weight:600;overflow-wrap:anywhere}
+.webask>span{font-size:14px;color:var(--muted)}
+.webask-a{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.webask-a .link{color:var(--muted);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0}
+.webask.done{font-size:13.5px;color:var(--muted);padding:8px 12px;border-style:dashed}
+.srcs{display:flex;flex-direction:column;gap:3px;margin-top:10px;padding-top:8px;border-top:1px solid var(--line);font-size:13.5px}
+.srcs span{color:var(--muted);font-weight:600}
+.srcs a{color:var(--accent);overflow-wrap:anywhere}
+.ia-web{display:flex;flex-direction:column;gap:8px;margin:4px 0 16px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.ia-web>div:first-child{display:flex;flex-direction:column}.ia-web span{font-size:13.5px;color:var(--muted)}

@@ -42,3 +42,28 @@ test("plusieurs photos : 3 au plus, numérotées pour le coach", () => {
   assert.equal(c.length, 3); assert.match(c[2].text, /2 pièces jointes/);
   assert.throws(() => userContent("x", [1, 2, 3, 4].map(() => ({ media_type: "image/jpeg", data: "A" }))), /3 pièces/);
 });
+
+test("recherche web : relance après pause_turn, sources citées et compteur", async () => {
+  const replies = [
+    { stop_reason: "pause_turn", usage: { server_tool_use: { web_search_requests: 2 } }, content: [{ type: "text", text: "Je cherche…" }] },
+    { stop_reason: "end_turn", usage: { server_tool_use: { web_search_requests: 1 } }, content: [
+      { type: "text", text: "Idée : des lanternes en verre ancien.", citations: [{ type: "web_search_result_location", url: "https://exemple.fr/a", title: "Déco champêtre" }] },
+      { type: "text", text: " Et du lin sauge.", citations: [{ url: "https://exemple.fr/a", title: "doublon" }] }] },
+  ];
+  let calls = 0;
+  const client = { beta: { messages: { create: async () => replies[calls++] } } };
+  const r = await converse({ client, model: "m", system: "s", tools: [], messages: [{ role: "user", content: "x" }], exec: async () => ({}) });
+  assert.equal(calls, 2);
+  assert.deepEqual(r.sources, [{ url: "https://exemple.fr/a", title: "Déco champêtre" }]);
+  assert.equal(r.actions.at(-1).label, "3 recherches sur internet");
+  assert.match(r.text, /lanternes/);
+});
+
+test("demander_recherche_web : ne cherche pas, renvoie la demande à l'app", async () => {
+  const { makeTools } = await import("../tools.js");
+  const db = { doc: () => ({ get: async () => ({ exists: false }) }), collection: () => ({ get: async () => ({ docs: [] }) }) };
+  const exec = makeTools(db, { qcats: [] });
+  const r = await exec("demander_recherche_web", { requete: "déco champêtre sauge", pourquoi: "des idées de centres de table" });
+  assert.equal(JSON.parse(r.content).ok, true);
+  assert.deepEqual(r.action.web, { requete: "déco champêtre sauge", pourquoi: "des idées de centres de table" });
+});

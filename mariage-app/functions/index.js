@@ -28,7 +28,7 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email))
     throw new HttpsError("permission-denied", "Coach réservé à Claire et Julien.");
-  const { message, mode = "chat", view = "", reset = false, attachment = null } = req.data || {};
+  const { message, mode = "chat", view = "", reset = false, attachment = null, web = false } = req.data || {};
   const atts = (Array.isArray(req.data?.attachments) ? req.data.attachments : attachment ? [attachment] : []).slice(0, 4);
   const chatRef = db.doc(`chats/${email}`);
   if (reset && !message) { await chatRef.set({ messages: [], updatedAt: Date.now() }); return { ok: true }; }
@@ -61,17 +61,23 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   client ||= new Anthropic();
 
   const feature = mode === "brief" ? "brief" : "coach";
-  const prof = profileFor((await db.doc("meta/ia").get()).data() || {}, feature);
-  let text, actions;
-  try { ({ text, actions } = await converse({ client, model: MODEL || prof.model, system, tools: TOOL_DEFS, messages, exec, effort: prof.effort,
+  const ia = (await db.doc("meta/ia").get()).data() || {};
+  const prof = profileFor(ia, feature);
+  // Internet : « off » (jamais), « ask » (le coach demande, l'app autorise une recherche à la fois, défaut), « libre »
+  const webMode = ["off", "ask", "libre"].includes(ia.web) ? ia.web : "ask";
+  const webOn = webMode === "libre" || (webMode === "ask" && web === true);
+  const tools = [...TOOL_DEFS.filter(t => t.name !== "demander_recherche_web" || (webMode === "ask" && !webOn)),
+    ...(webOn ? [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }] : [])];
+  let text, actions, sources;
+  try { ({ text, actions, sources } = await converse({ client, model: MODEL || prof.model, system, tools, messages, exec, effort: prof.effort,
     onUsage: res => recordUsage(db, FieldValue.increment, feature, res) })); }
   catch (e) { throw claudeError(e); }
 
   // On garde de quoi annuler les 10 derniers messages ; au-delà, seulement le libellé des actions (taille du document).
-  const history = [...past, { role: "user", text: shown, at: Date.now() }, { role: "assistant", text, actions, at: Date.now() }].slice(-60)
+  const history = [...past, { role: "user", text: shown, at: Date.now() }, { role: "assistant", text, actions, ...(sources?.length ? { sources } : {}), at: Date.now() }].slice(-60)
     .map((m, i, arr) => (i < arr.length - 10 && m.actions ? { ...m, actions: m.actions.map(({ label, undone }) => ({ label, ...(undone ? { undone } : {}) })) } : m));
   await chatRef.set({ messages: history, mode, updatedAt: Date.now() });
-  return { text, actions };
+  return { text, actions, sources };
 });
 
 /** Erreur de l'API Claude → message clair dans l'app (au lieu de « Le coach ne répond pas »). */

@@ -954,6 +954,8 @@ function iaPanel(){
     <div class="ia-bar ${tone}" role="progressbar" aria-label="Budget du mois utilisé" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
     <div class="ia-rows">${rows}</div>
     <p class="plan-when" style="margin:14px 0 10px"><b>Éco</b> : le modèle Sonnet, environ deux fois moins cher, très bien pour trier des mails ou les questions simples. <b>Équilibré</b> (recommandé) : Opus là où le jugement compte (coach, entretien, synthèse), Sonnet pour les tâches répétitives. <b>Max</b> : Opus partout, avec une réflexion plus poussée.</p>
+    <div class="ia-web"><div><b>Le coach et internet</b><span>${(S.ia.web||"ask")==="off"?"Le coach n'utilise jamais internet.":(S.ia.web||"ask")==="libre"?"Le coach cherche sur internet quand il le juge utile (3 recherches par message au plus).":"Le coach propose une recherche (inspiration, idées, avis) ; vous l'autorisez ou non, une à la fois."}</span></div>
+      <div class="seg" role="group" aria-label="Accès du coach à internet">${[["off","Jamais"],["ask","Avec notre accord"],["libre","Automatique"]].map(([k,l])=>`<button type="button" data-act="iaweb" data-v="${k}" aria-pressed="${(S.ia.web||"ask")===k}" ${dis}>${l}</button>`).join("")}</div></div>
     <form class="ia-budget" id="ia-form"><label for="search-ia-budget">Budget mensuel (€)</label><input type="number" inputmode="numeric" min="1" step="1" id="search-ia-budget" name="budget" value="${esc(budget)}" ${dis}><button class="btn sm" type="submit" ${dis}>Enregistrer</button></form>
     <p class="plan-when" style="margin:10px 0 0">Estimation calculée à partir des tokens consommés (tarifs publics, 1 $ ≈ ${String(USD_EUR).replace(".",",")} €). La facture exacte est sur console.anthropic.com, où vous pouvez aussi fixer une limite de dépense stricte.</p></div>`;
 }
@@ -1070,10 +1072,19 @@ const CHAT_SUGG={chat:["Que devons-nous faire cette semaine ?","Compare nos lieu
 // Un mail rédigé par le coach commence par « Objet : … »
 function mailOf(t){const m=String(t||"").match(/(?:^|\n)\s*\**Objet\s*:\**\s*(.+)\n([\s\S]+)/i);return m?{subject:m[1].replace(/\*+/g,"").trim(),body:m[2].replace(/\*\*/g,"").trim()}:null}
 const mailHref=m=>`mailto:?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
+/* Intercepteur internet : le coach propose une recherche, Claire ou Julien l'autorise (une recherche à la fois) */
+function webAsk(m,i){
+  const w=(m.actions||[]).find(a=>a.web);if(!w)return "";
+  const last=S.chat.messages.length-1===i;
+  if(m.webDecided||!last||S.chat.busy||!S.canWrite)return m.webDecided?`<div class="webask done">${m.webDecided==="ok"?"Recherche autorisée":"Recherche refusée"} : « ${esc(w.web.requete)} »</div>`:"";
+  return `<div class="webask" role="group" aria-label="Recherche sur internet proposée"><b>Le coach propose de chercher sur internet</b>
+    <p>« ${esc(w.web.requete)} »</p>${w.web.pourquoi?`<span>${esc(w.web.pourquoi)}</span>`:""}
+    <div class="webask-a"><button class="btn sm primary" data-act="webok" data-i="${i}">Autoriser cette recherche</button><button class="link" data-act="webno" data-i="${i}">Non merci</button></div></div>`;
+}
 function chatItems(){
   const c=S.chat;
   const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u">${(m.thumbs||[]).length?`<div class="cm-thumbs">${m.thumbs.map(u=>`<img src="${u}" alt="Photo envoyée">`).join("")}</div>`:""}<div class="bub">${esc(m.text)}</div></div>`
-    :`<div class="cm a"><div class="bub">${mdLite(m.text)}</div>${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).length?`<div class="acts-done">${m.actions.map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
+    :`<div class="cm a"><div class="bub">${mdLite(m.text)}${(m.sources||[]).length?`<div class="srcs"><span>Sources</span>${m.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.url)}</a>`).join("")}</div>`:""}</div>${webAsk(m,i)}${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).filter(a=>!a.web).length?`<div class="acts-done">${m.actions.filter(a=>!a.web).map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
       ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`);
   const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`
     :!c.busy&&c.mode==="brief"&&S.canWrite?`<div class="chat-sugg"><button class="chip" data-act="chatfile">Montrer une photo au coach</button></div>`:"";
@@ -1186,7 +1197,7 @@ async function openChat(mode,prefill){
   if(!c.loaded&&S.db&&S.user){try{const d=(await S.db.doc("chats/"+String(S.user.email).toLowerCase()).get()).data();c.loaded=true;if(d&&Array.isArray(d.messages)&&!c.messages.length){c.messages=d.messages;if(d.mode&&!mode)c.mode=d.mode}renderChat("open")}catch(e){}}
   if(mode==="brief"&&(switched||!c.messages.length))sendChat("Commençons le questionnaire Nos envies.");
 }
-async function sendChat(text){
+async function sendChat(text,opts={}){
   const c=S.chat;text=String(text||"").trim();const atts=c.atts||[];if((!text&&!atts.length)||c.busy||!S.canWrite)return;
   c.atts=[];renderAtt();
   const nI=atts.filter(a=>a.media_type!=="application/pdf").length,nP=atts.length-nI,tag=[nI?(nI>1?`${nI} photos jointes`:"photo jointe"):"",nP?(nP>1?`${nP} PDF joints`:"PDF joint"):""].filter(Boolean).join(", ");
@@ -1194,7 +1205,7 @@ async function sendChat(text){
   // Libellé d'attente qui évolue (la réponse prend souvent 10 à 20 secondes)
   const steps=["Je regarde vos données…","Je prépare la réponse…","Encore un instant…"];let k=0;
   const tick=setInterval(()=>{if(!c.busy){clearInterval(tick);return}k=Math.min(k+1,steps.length-1);c.busyLabel=steps[k];const l=document.querySelector(".typing-l");if(l)l.textContent=steps[k]},6000);
-  try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(atts.length?{attachments:atts.map(a=>({media_type:a.media_type,data:a.data,...(a.thumb?{thumb:a.thumb}:{})}))}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[]});(r.actions||[]).forEach(a=>a.kick&&kick(a.kick))}
+  try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(opts.web?{web:true}:{}),...(atts.length?{attachments:atts.map(a=>({media_type:a.media_type,data:a.data,...(a.thumb?{thumb:a.thumb}:{})}))}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[],sources:r.sources||[]});(r.actions||[]).forEach(a=>a.kick&&kick(a.kick))}
   catch(e){const msg=e&&/functions\/(resource-exhausted|failed-precondition)/.test(e.code||"")||e&&e.code==="functions/unavailable"&&e.message&&!/^unavailable$/i.test(e.message)?e.message:e&&e.code==="functions/permission-denied"?"Coach réservé à Claire et Julien.":e&&/not-found|internal|unavailable/.test(e.code||"")?"Le coach ne répond pas pour l'instant. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
     c.messages.push({role:"assistant",text:msg,actions:[],error:true})}
   c.busy=false;renderChat("answer");
@@ -1496,6 +1507,7 @@ document.addEventListener("click",async e=>{
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
   if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
+  if(a==="iaweb"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{web:t.dataset.v,updatedAt:Date.now()}))toast("Réglage enregistré");return}
   if(a==="ialvl"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{niveaux:{[t.dataset.feat]:t.dataset.v},updatedAt:Date.now()}))toast("Réglage enregistré : appliqué dès le prochain appel");return}
   if(a==="fireall"){if(!S.canWrite||agentBusy("analyse"))return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer : refaire toutes les fiches";return}
     const now=Date.now();if(await mergeDoc("meta/analyse",{requestedAt:now,fullRequestedAt:now,status:"demandée"})){kick("analyse");toast("Toutes les fiches sont refaites : quelques minutes");render()}return}
@@ -1523,6 +1535,9 @@ document.addEventListener("click",async e=>{
   if(a==="pdfreport"){pdfReport();return}
   if(a==="chat"){openChat(t.dataset.m||null);return}
   if(a==="chatsugg"){sendChat(t.dataset.t);return}
+  if(a==="webok"||a==="webno"){const m=S.chat.messages[+t.dataset.i],w=m&&(m.actions||[]).find(x=>x.web);if(!w||m.webDecided||S.chat.busy)return;
+    m.webDecided=a==="webok"?"ok":"no";
+    if(a==="webok")sendChat(`Oui, tu peux chercher sur internet : « ${w.web.requete} ».`,{web:true});else renderChat();return}
   if(a==="chatundo"){if(S.canWrite)await undoChat(+t.dataset.i);return}
   if(a==="chatbottom"){chatJump();return}
   if(a==="chatmode"){S.chat.mode=t.dataset.m;renderChat();if(t.dataset.m==="brief")sendChat("Commençons le questionnaire Nos envies.");return}

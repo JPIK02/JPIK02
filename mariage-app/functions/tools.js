@@ -78,6 +78,8 @@ export const TOOL_DEFS = [
   { name: "noter_inspiration", description: "Garde une photo jointe à ce message comme inspiration dans « Nos envies » (catégorie), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
     photo: { type: "integer", minimum: 1, maximum: 3, description: "numéro de la photo jointe (1 si une seule)" }, categorie: T("clé de catégorie, ex. lieu, fleurs, tenues, vision"),
     description: T("ce que montre la photo et ce qui leur plaît : style, couleurs, matières, ambiance (2 phrases)") }, ["photo", "categorie", "description"]) },
+  { name: "demander_recherche_web", description: "Tu n'as pas accès à internet sans accord. Quand une recherche aiderait vraiment (inspiration, tendances, idées de déco ou de menu, infos ou avis sur un lieu ou un prestataire), propose-la avec une requête précise. Claire ou Julien l'autorise ou non dans l'app : arrête-toi ensuite et dis en une phrase ce que tu veux chercher et pourquoi.", input_schema: S({
+    requete: T("ce que tu veux chercher, précis (ex. « décoration mariage champêtre vert sauge terracotta »)"), pourquoi: T("en une phrase, ce que ça leur apportera") }, ["requete", "pourquoi"]) },
   { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) qui démarre aussitôt (résultats en 2 à 3 minutes). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
 ];
 
@@ -273,6 +275,11 @@ export function makeTools(db, { qcats, now = new Date(), thumbs = [], author = "
       const { op, id } = await create("inspirations", { cat: c.k, description, thumb, by: author });
       await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
       return { result: { ok: true, id }, action: { label: `Inspiration gardée (${c.label})`, ops: [op] } };
+    },
+    async demander_recherche_web(i) {
+      const requete = String(i.requete || "").trim().slice(0, 200), pourquoi = String(i.pourquoi || "").trim().slice(0, 300);
+      return { result: { ok: true, statut: "En attente de leur accord dans l'app. Ne cherche pas maintenant : dis en une phrase ce que tu veux chercher et pourquoi." },
+        action: { label: `Recherche sur internet proposée : « ${requete} »`, web: { requete, pourquoi } } };
     },
     async demander_analyse() {
       const op = await write("meta/analyse", { requestedAt: Date.now(), status: "demandée" });
