@@ -413,3 +413,16 @@ input:not([type=checkbox]):not([type=radio]),textarea,select{font-size:16px}
 body.noauth .tabs,body.noauth .bnav{display:none!important}
 body.noauth{padding-bottom:0}
 .lock .form{text-align:left}
+
+/* Fenêtres : barre « Retour » toujours visible en haut, défilement isolé de la page */
+body.modal-open{overflow:hidden}
+.modal{overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding-top:0!important}
+.modal-bar{position:sticky;top:0;z-index:3;display:flex;align-items:center;margin:0 -20px 14px;padding:10px 12px;background:var(--surface);border-bottom:1px solid var(--line)}
+.modal-back{display:inline-flex;align-items:center;gap:4px;min-height:44px;padding:6px 12px 6px 6px;border:0;border-radius:12px;background:none;color:var(--accent);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+.modal-back svg{width:24px;height:24px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.modal-back:hover{background:var(--accent-soft)}
+.modal-back:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (min-width:640px){.modal-bar{margin:0 -26px 14px;padding:10px 16px}}
+/* Pastille « À analyser » : texte centré qui reste dans le cercle, même en grand format */
+.fit.none{text-align:center;line-height:1.1;padding:4px}
+.fit.big.none{font-size:15px;padding:8px}
