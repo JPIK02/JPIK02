@@ -55,7 +55,9 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
-  const { text, actions } = await converse({ client, model: MODEL, system, tools: TOOL_DEFS, messages, exec, effort: mode === "brief" ? "medium" : "low" });
+  let text, actions;
+  try { ({ text, actions } = await converse({ client, model: MODEL, system, tools: TOOL_DEFS, messages, exec, effort: mode === "brief" ? "medium" : "low" })); }
+  catch (e) { throw claudeError(e); }
 
   // On garde de quoi annuler les 10 derniers messages ; au-delà, seulement le libellé des actions (taille du document).
   const history = [...past, { role: "user", text: shown, at: Date.now() }, { role: "assistant", text, actions, at: Date.now() }].slice(-60)
@@ -63,6 +65,18 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   await chatRef.set({ messages: history, mode, updatedAt: Date.now() });
   return { text, actions };
 });
+
+/** Erreur de l'API Claude → message clair dans l'app (au lieu de « Le coach ne répond pas »). */
+export function claudeError(e) {
+  if (e instanceof HttpsError) return e;
+  const msg = String(e?.error?.error?.message || e?.message || "");
+  console.error("[assistant] Claude :", e?.status, msg);
+  if (/credit balance/i.test(msg)) return new HttpsError("failed-precondition", "Le crédit Claude est épuisé : rechargez-le sur console.anthropic.com (Plans & Billing), puis réessayez.");
+  if (e?.status === 401) return new HttpsError("failed-precondition", "La clé Claude n'est plus valide : recréez-la sur console.anthropic.com et mettez à jour le secret GitHub ANTHROPIC_API_KEY.");
+  if (e?.status === 429) return new HttpsError("resource-exhausted", "Trop de demandes envoyées à Claude en peu de temps : réessayez dans une minute.");
+  if (e?.status === 529 || e?.status >= 500) return new HttpsError("unavailable", "Claude est surchargé en ce moment : réessayez dans quelques minutes.");
+  return new HttpsError("internal", "Le coach a rencontré une erreur : " + msg.slice(0, 200));
+}
 
 // Agents (mails, analyse, synthèse, point du lundi, relances) : réveil par Google Cloud Scheduler toutes les 10 minutes.
 // Chaque agent décide lui-même s'il a du travail (planning, demande depuis l'app) : la plupart des passages ne font rien.
