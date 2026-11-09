@@ -34,9 +34,17 @@ if (import.meta.env.VITE_USE_EMULATORS === "1") {
 export async function signInGoogle() {
   const provider = new firebase.auth.GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
-  // Redirection plutôt que popup : plus fiable sur iPhone (Safari bloque souvent les popups).
-  const mobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-  return mobile ? auth.signInWithRedirect(provider) : auth.signInWithPopup(provider);
+  // Popup partout : la redirection échoue sur Safari iPhone, qui bloque le stockage partagé entre
+  // mariageapp-a2ffe.web.app (l'app) et firebaseapp.com (la page de retour de Google) :
+  // on revenait sur l'écran de connexion sans être connecté. Le popup n'est pas concerné.
+  // Repli sur la redirection seulement si le navigateur refuse d'ouvrir le popup.
+  try {
+    return await auth.signInWithPopup(provider);
+  } catch (e) {
+    if (e?.code === "auth/popup-blocked" || e?.code === "auth/operation-not-supported-in-environment")
+      return auth.signInWithRedirect(provider);
+    throw e;
+  }
 }
 
 const LINK_KEY = "mariage-email-lien";

@@ -1,0 +1,36 @@
+name: Import de données
+
+# Applique les fichiers de mariage-app/import/ à la base, une seule fois chacun
+# (une trace dans meta/imports empêche toute deuxième application).
+on:
+  push:
+    branches: [main, claude/cool-cori-ipe48i]
+    paths:
+      - "mariage-app/import/**"
+  workflow_dispatch:
+
+concurrency:
+  group: import
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mariage-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd agents && npm ci --no-audit --no-fund
+      - name: Appliquer les imports
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          for f in import/*.json; do
+            echo "== $f"
+            node scripts/apply-import.js "$f"
+          done

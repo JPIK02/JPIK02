@@ -61,7 +61,7 @@ Une fois que tout tourne ici, mettre en pause les deux tâches planifiées « As
 
 ## Au quotidien
 - Les agents passent selon le planning réglé dans **Réglages** (par défaut 7 h pour les mails, 8 h pour l'analyse).
-- « Lire la boîte au prochain passage » / « Demander une analyse » : pris en compte dans l'heure.
+- « Lire la boîte au prochain passage » / « Demander une analyse » : pris en compte dans les 10 à 15 minutes.
 - Rien n'entre dans le planning, le budget ou les invités sans votre validation dans l'onglet **E-mails**.
 
 ## Structure

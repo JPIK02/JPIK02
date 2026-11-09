@@ -1,4 +1,7 @@
 import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED} from "./firebase.js";
+// Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
+// coupe l'élan sur iPhone et remet les barres horizontales au début.
+const setHTML=(el,h)=>{if(el&&el._h!==h){el._h=h;el.innerHTML=h}};
 
 
 /* ---------- Constants ---------- */
@@ -226,27 +229,27 @@ function renderHero(){
   if(st.lieu||st.ville)sub.push(`<span>${esc([st.lieu,st.ville].filter(Boolean).join(", "))}</span>`);
   if(st.mairie)sub.push(`<span>Mairie de ${esc(st.mairie)}</span>`);
   if(!sub.length)sub.push(`<span>${S.mode==="live"?"Date et lieu à renseigner dans Réglages":"Notre mariage"}</span>`);
-  document.getElementById("hero-sub").innerHTML=sub.join("");
+  setHTML(document.getElementById("hero-sub"),sub.join(""));
   const c=document.getElementById("count");
   if(d){
     const n=days(today(),d);
-    c.innerHTML=n>0?`<div class="count-n">${n}<small>jours</small></div><div class="count-l">${n>60?"environ "+Math.round(n/30.44)+" mois · ":""}${Math.floor(n/7)} semaines avant le grand jour</div>`
+    setHTML(c,n>0?`<div class="count-n">${n}<small>jours</small></div><div class="count-l">${n>60?"environ "+Math.round(n/30.44)+" mois · ":""}${Math.floor(n/7)} semaines avant le grand jour</div>`
       :n===0?`<div class="count-n">Jour J</div><div class="count-l">C'est aujourd'hui</div>`
-      :`<div class="count-n" style="font-size:clamp(44px,7vw,80px)">Mariés</div><div class="count-l">depuis ${-n} jour${-n>1?"s":""}</div>`;
-  }else c.innerHTML=S.mode==="live"?`<button class="count-set" data-go="reglages">Fixer la date</button>`:"";
+      :`<div class="count-n" style="font-size:clamp(44px,7vw,80px)">Mariés</div><div class="count-l">depuis ${-n} jour${-n>1?"s":""}</div>`);
+  }else setHTML(c,S.mode==="live"?`<button class="count-set" data-go="reglages">Fixer la date</button>`:"");
   const fr=document.getElementById("frieze");
-  if(!d){fr.innerHTML="";return}
+  if(!d){setHTML(fr,"");return}
   const cur=currentPhase(),ci=cur?PH[cur.k].i:0;
   const fill=ci/PHASES.length*100+1;
-  fr.innerHTML=`<div class="fr-track" role="list" aria-label="Étapes de la préparation"><div class="fr-fill" style="width:${Math.min(100,fill).toFixed(1)}%"></div>${PHASES.map((p,i)=>`<div class="fr-step ${i<ci?"past":i===ci?"now":""}" role="listitem"><span class="fr-dot"></span><span class="fr-lab">${p.short}${i===ci?" · en cours":""}</span></div>`).join("")}</div>`;
+  setHTML(fr,`<div class="fr-track" role="list" aria-label="Étapes de la préparation"><div class="fr-fill" style="width:${Math.min(100,fill).toFixed(1)}%"></div>${PHASES.map((p,i)=>`<div class="fr-step ${i<ci?"past":i===ci?"now":""}" role="listitem"><span class="fr-dot"></span><span class="fr-lab">${p.short}${i===ci?" · en cours":""}</span></div>`).join("")}</div>`);
 }
 const ICON={apercu:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',prestataires:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',plus:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'};
 const BNAV=[["apercu","Accueil"],["planning","Planning"],["invites","Invités"],["prestataires","Annuaire"]];
 function renderBnav(){
   const late=S.tasks.filter(isLate).length,sug=pendingSugs().length;
   const inMain=BNAV.some(b=>b[0]===S.view);
-  document.getElementById("bnav").innerHTML=BNAV.map(([k,l])=>`<button data-go="${k}" ${S.view===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="planning"&&late?`<span class="badge num">${late}</span>`:""}</button>`).join("")
-   +`<button data-act="more" ${inMain?"":'aria-current="page"'}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON.plus}</svg>${inMain?"Plus":esc((VIEWS.find(v=>v[0]===S.view)||[])[1]||"Plus")}${sug?`<span class="badge gold num">${sug}</span>`:""}</button>`;
+  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${S.view===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="planning"&&late?`<span class="badge num">${late}</span>`:""}</button>`).join("")
+   +`<button data-act="more" ${inMain?"":'aria-current="page"'}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON.plus}</svg>${inMain?"Plus":esc((VIEWS.find(v=>v[0]===S.view)||[])[1]||"Plus")}${sug?`<span class="badge gold num">${sug}</span>`:""}</button>`);
   document.body.classList.toggle("compact",S.view!=="apercu");
 }
 function openMore(){
@@ -258,8 +261,8 @@ function openMore(){
 function renderTabs(){
   renderBnav();
   const late=S.tasks.filter(isLate).length,sug=pendingSugs().length;
-  document.getElementById("tabs").innerHTML=VIEWS.map(([k,l])=>
-    `<button class="tab" data-go="${k}" ${S.view===k?'aria-current="page"':""}>${l}${k==="planning"&&late?`<span class="badge num" title="En retard">${late}</span>`:""}${k==="assistant"&&sug?`<span class="badge gold num" title="À valider">${sug}</span>`:""}</button>`).join("");
+  setHTML(document.getElementById("tabs"),VIEWS.map(([k,l])=>
+    `<button class="tab" data-go="${k}" ${S.view===k?'aria-current="page"':""}>${l}${k==="planning"&&late?`<span class="badge num" title="En retard">${late}</span>`:""}${k==="assistant"&&sug?`<span class="badge gold num" title="À valider">${sug}</span>`:""}</button>`).join(""));
 }
 
 /* ---------- Dashboard ---------- */
@@ -505,9 +508,9 @@ const fitCls=s=>s==null?"none":s>=75?"hi":s>=55?"mid":"lo";
 const fitBadge=(v,big)=>{const f=v.fit;return f&&f.score!=null?`<div class="fit ${fitCls(f.score)} ${big?"big":""}" title="Note de fit">${Math.round(f.score)}</div>`:`<div class="fit none ${big?"big":""}" title="Pas encore analysé">${big?"À analyser":"—"}</div>`};
 
 /* ---------- Planning des agents ----------
-   Les agents tournent dans GitHub Actions (agents/, .github/workflows/agents.yml), toutes les heures.
+   Les agents tournent dans GitHub Actions (agents/, .github/workflows/agents.yml), toutes les 10 minutes.
    À chaque passage, agents/scheduler.js lit meta/planning et décide si l'agent est dû.
-   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : pris en compte au prochain passage horaire. */
+   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : pris en compte au prochain passage (10 à 15 min). */
 const hh=(h)=>`${h}h`;
 function planOf(k){return Object.assign({},JOBS[k].def,S.planning[k]||{})}
 function planLabel(k){
@@ -523,7 +526,7 @@ async function runNow(k){
   if(!S.canWrite)return;
   const [path,cur]=metaOf(k);
   const ok=await setDoc(path,cur,k==="analyse"?{requestedAt:Date.now(),status:"demandée"}:{requestedAt:Date.now()});
-  if(ok)toast(k==="mail"?"Demande enregistrée : lecture au prochain passage (dans l'heure)":"Analyse demandée : elle tournera au prochain passage (dans l'heure)");
+  if(ok)toast(k==="mail"?"Demande enregistrée : lecture dans les 10 à 15 minutes":"Analyse demandée : elle démarre dans les 10 à 15 minutes");
 }
 async function savePlan(k,form){
   const fd=new FormData(form);
@@ -601,7 +604,7 @@ function openFiche(id){
   layer.innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Fiche ${esc(v.name)}" style="max-width:680px">
     <div class="fiche-top">${fitBadge(v,true)}<div style="min-width:0"><h3>${esc(v.name)}</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">${esc(v.cat||"")}</span><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${fi.confiance?`<span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span>`:""}</div></div></div>
     ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'annuaire, ou attendez le passage de demain matin.${qk&&catProg(qk).p<.5?" Remplissez aussi la partie « "+esc(QC[qk].label)+" » de Nos envies pour une note plus juste.":""}</div>`}
-    ${offre.length?`<div class="fsec"><h4>L'offre</h4><div class="kv">${offre.map(([k,val])=>`<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div>${v.note?`<p style="font-size:14px;color:var(--muted);margin:10px 0 0">${esc(v.note)}</p>`:""}</div>`:""}
+    ${offre.length?`<div class="fsec"><h4>L'offre</h4><div class="kv">${offre.map(([k,val])=>`<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div>${v.note?`<p style="font-size:14px;color:var(--muted);margin:10px 0 0;white-space:pre-line;overflow-wrap:anywhere">${esc(v.note)}</p>`:""}</div>`:""}
     ${crit}
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
@@ -767,7 +770,7 @@ function vReglages(){
     <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
   </form>
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
-    <p class="plan-when" style="margin:0 0 12px">Les agents passent toutes les heures (GitHub Actions) et ne travaillent que selon le planning ci-dessous. Un passage demandé est fait dans l'heure.</p>
+    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes (GitHub Actions) s'ils ont du travail et ne tournent que selon le planning ci-dessous. Un passage demandé démarre dans les 10 à 15 minutes.</p>
     <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Compte</h3></div>
     <p class="plan-when" style="margin:0 0 12px">Connecté en tant que <b>${esc(S.user&&S.user.email||"")}</b>.</p>
@@ -794,13 +797,13 @@ function render(){
   S.pending=false;
   let pre="";
   document.body.classList.toggle("noauth",S.mode==="login"||S.mode==="locked");
-  if(S.mode==="login"){main.innerHTML=loginView();return}
-  if(S.mode==="locked"){main.innerHTML=`<div class="lock"><h2>Accès réservé</h2><p style="color:var(--muted);margin:0 0 16px">Cette app est réservée à Claire et Julien. Le compte <b>${esc(S.user&&S.user.email||"")}</b> n'est pas autorisé.</p><button class="btn" data-act="logout">Changer de compte</button></div>`;return}
+  if(S.mode==="login"){setHTML(main,loginView());return}
+  if(S.mode==="locked"){setHTML(main,`<div class="lock"><h2>Accès réservé</h2><p style="color:var(--muted);margin:0 0 16px">Cette app est réservée à Claire et Julien. Le compte <b>${esc(S.user&&S.user.email||"")}</b> n'est pas autorisé.</p><button class="btn" data-act="logout">Changer de compte</button></div>`);return}
   if(S.mode==="loading")pre=`<div class="banner">Chargement de vos données…</div>`;
   else if(S.mode==="offline")pre=`<div class="banner warn">Connexion à la base impossible. Vérifiez votre réseau puis rechargez la page.</div>`;
   if(S.mode==="live"&&S.stale)pre=`<div class="banner warn">Les données ne répondent pas pour l'instant. Ce qui s'affiche peut ne pas être à jour.</div>`;
   if(S.mode==="live"&&!S.canWrite)pre+=`<div class="banner">Vous consultez en lecture seule.</div>`;
-  main.innerHTML=pre+(VIEWFN[S.view]||vApercu)();
+  setHTML(main,pre+(VIEWFN[S.view]||vApercu)());
   if(aid){const el=document.getElementById(aid);if(el){el.focus();if(sel)try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
 function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0)}
@@ -902,6 +905,19 @@ function openEditor(col,id){
   });
 }
 function closeModal(){document.getElementById("layer").innerHTML=""}
+/* Toute fenêtre (fiche, formulaire, menu) reçoit une barre « Retour » fixe en haut, bloque le défilement
+   de la page derrière, et se ferme avec le bouton ou le geste « retour » du téléphone. */
+let lastScroll=0,modalOpen=false;
+["scroll","touchmove"].forEach(ev=>document.addEventListener(ev,()=>{lastScroll=Date.now()},{passive:true,capture:true}));
+const BACK_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+new MutationObserver(()=>{
+  const layer=document.getElementById("layer"),m=layer.querySelector(".modal");
+  if(m&&!m.querySelector(".modal-bar"))m.insertAdjacentHTML("afterbegin",`<div class="modal-bar"><button type="button" class="modal-back" data-close="1">${BACK_SVG}<span>Retour</span></button></div>`);
+  document.body.classList.toggle("modal-open",!!m);
+  if(m&&!modalOpen){modalOpen=true;try{history.pushState({modal:1},"")}catch(e){}}
+  else if(!m&&modalOpen){modalOpen=false;if(history.state&&history.state.modal)history.back()}
+}).observe(document.getElementById("layer"),{childList:true});
+window.addEventListener("popstate",()=>{if(modalOpen)closeModal()});
 
 function openBulk(){
   const layer=document.getElementById("layer");
@@ -966,7 +982,7 @@ function renderInvitesPart(){
   if(S.view!=="invites"){render();return}
   const gl=document.getElementById("guest-list");
   document.querySelectorAll('[data-f^="g"]').forEach(b=>b.setAttribute("aria-pressed",S.f[b.dataset.f]===b.dataset.v));
-  if(gl)gl.innerHTML=guestRows();
+  if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
 document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}});
 document.addEventListener("change",async e=>{
@@ -1044,7 +1060,7 @@ function boot(){
     const need=["settings","agent",...COLS];
     const timer=setTimeout(()=>{if(need.some(k=>!S.got.has(k))){S.stale=true;render()}},10000);
     const mark=(k,snap)=>{if(!snap.metadata.fromCache){S.got.add(k);if(need.every(x=>S.got.has(x))){clearTimeout(timer);S.stale=false}}};
-    let raf=0;const later=()=>{if(raf||S.mode!=="live")return;raf=requestAnimationFrame(()=>{raf=0;render()})};
+    let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<700){raf=setTimeout(run,250);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
     meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");
