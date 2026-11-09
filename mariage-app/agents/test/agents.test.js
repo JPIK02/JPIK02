@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { shouldRun, slotMatches, parisClock, vendorsToAnalyse } from "../lib/scheduler.js";
+import { shouldRun, slotMatches, parisClock, vendorsToAnalyse, profilDue } from "../lib/scheduler.js";
 import { cleanPayload, cleanSubject } from "../lib/validate.js";
 import { extractText, stripHtml } from "../lib/mailtext.js";
 
@@ -65,4 +65,12 @@ test("lecture du corps des mails", () => {
   ] };
   assert.deepEqual(extractText(payload), { text: "Bonjour ! Tarif 4 850 €", attachments: ["plaquette.pdf"] });
   assert.equal(stripHtml("<div>A<br>B</div><style>x{}</style>"), "A\nB");
+});
+
+test("synthèse des envies : relancée après une modification, une fois la saisie terminée", () => {
+  const now = 1_000_000_000;
+  assert.equal(profilDue({}, {}, now), false);                                            // rien de demandé
+  assert.equal(profilDue({ profilRequestedAt: now - 10 * 60e3 }, { updatedAt: 0 }, now), true);
+  assert.equal(profilDue({ profilRequestedAt: now - 60e3 }, { updatedAt: 0 }, now), false);  // saisie en cours
+  assert.equal(profilDue({ profilRequestedAt: now - 10 * 60e3 }, { updatedAt: now - 60e3 }, now), false); // déjà refaite
 });

@@ -50,6 +50,32 @@ const FIT_OUT = {
 
 const strip = ({ fit, ...v }) => v; // on n'envoie pas l'ancienne fiche à Claude
 
+async function loadContext() {
+  const [settings, brief, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("inbox")]);
+  return JSON.stringify({
+    settings,
+    brief: brief.map(({ id, updatedAt, ...b }) => ({ id, ...b })),
+    offresRecues: inbox.filter(m => m.type !== "ignored").map(m => ({ from: m.from, summary: m.summary, payload: m.payload })),
+  });
+}
+
+async function writeProfil(context) {
+  const profil = await runForOutput({
+    system: SYSTEM,
+    user: `Écris la synthèse du brief (divergences : desaccord=true ou réponses claire/julien différentes).\n\n<donnees>${context}</donnees>`,
+    output: PROFIL_OUT,
+    effort: "medium",
+  });
+  await getDb().doc("meta/profil").set({ ...profil, updatedAt: Date.now() });
+  return profil;
+}
+
+/** Synthèse seule (sans recherche web) : relancée quand les envies ou les réglages ont changé. */
+export async function runProfil({ log = console.log } = {}) {
+  const profil = await writeProfil(await loadContext());
+  log(`Synthèse des envies mise à jour (brief complet à ${Math.round(profil.completude ?? 0)} %).`);
+}
+
 export async function runAnalyseAgent({ log = console.log, force = false } = {}) {
   const analyse = await getMeta("analyse");
   const vendors = await listAll("vendors");
@@ -63,20 +89,10 @@ export async function runAnalyseAgent({ log = console.log, force = false } = {})
   await mergeMeta("analyse", { status: "en cours" });
 
   try {
-    const [settings, brief, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("inbox")]);
-    const context = JSON.stringify({
-      settings,
-      brief: brief.map(({ id, updatedAt, ...b }) => ({ id, ...b })),
-      offresRecues: inbox.filter(m => m.type !== "ignored").map(m => ({ from: m.from, summary: m.summary, payload: m.payload })),
-    });
+    const context = await loadContext();
 
     // 1. Synthèse du brief
-    const profil = await runForOutput({
-      system: SYSTEM,
-      user: `Écris la synthèse du brief (divergences : desaccord=true ou réponses claire/julien différentes).\n\n<donnees>${context}</donnees>`,
-      output: PROFIL_OUT,
-    });
-    await getDb().doc("meta/profil").set({ ...profil, updatedAt: Date.now() });
+    await writeProfil(context);
 
     // 2. Fiches prestataires
     const scores = [];
