@@ -103,7 +103,7 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé à Claire et Julien.");
   const job = req.data?.job;
-  if (!["mail", "analyse", "hebdo"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
+  if (!["mail", "analyse", "hebdo", "briefs"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
   const { runAll } = await import("./agents/main.js");
   const failed = await runAll({ forced: job });
   return { ok: !failed };

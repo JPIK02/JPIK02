@@ -55,7 +55,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -744,6 +744,53 @@ function inspGallery(c){
     ${list.length?`<div class="insp-grid">${list.map(x=>`<figure><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description)}" loading="lazy"><figcaption>${esc(x.description)}${x.by?` <span>· ${esc(x.by)}</span>`:""}</figcaption>${S.canWrite?`<button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button>`:""}</figure>`).join("")}</div>`
       :`<p class="plan-when" style="margin:0">Une photo vaut mieux qu'un long discours : montrez au coach un lieu, une déco ou une tenue qui vous plaît, il en tirera vos goûts et la gardera ici.</p>`}</div>`;
 }
+/* Briefs prestataires : fil rouge commun + un brief par métier, rédigés par l'agent (meta/briefs), exportés en PDF */
+const BRIEF_LABEL={lieu:"Lieu",traiteur:"Traiteur",photo:"Photographe",video:"Vidéaste",musique:"Musique",fleurs:"Fleurs et déco",tenues:"Tenues",alliances:"Alliances",beaute:"Coiffure et maquillage",papeterie:"Papeterie",transport:"Transport",ceremonie:"Cérémonie",hebergement:"Hébergement",enfants:"Enfants"};
+function briefsState(){
+  const b=S.briefs||{},now=Date.now();
+  const running=(S.locks.briefs||0)>now||((b.requestedAt||0)>(b.updatedAt||0)&&now-(b.requestedAt||0)<20*60000);
+  const ready=!!(b.filRouge&&b.categories&&Object.keys(b.categories).length);
+  const lastAnswer=Math.max(0,...S.brief.map(x=>+x.updatedAt||0),...S.inspirations.map(x=>+x.createdAt||0));
+  return {b,running,ready,stale:ready&&lastAnswer>(b.updatedAt||0)};
+}
+function briefsPanel(c){
+  const {b,running,ready,stale}=briefsState(),dis=S.canWrite&&!running?"":"disabled";
+  const one=ready&&b.categories[c];
+  const when=b.updatedAt?new Date(b.updatedAt).toLocaleDateString("fr-FR",{day:"numeric",month:"long"}):"";
+  return `<div class="briefs-p"><div class="panel-h"><h3>Briefs pour les prestataires</h3>${ready?`<span class="chip ${stale?"warn":"ok"}">${stale?"À mettre à jour":"Prêts"}</span>`:""}</div>
+    <p class="plan-when" style="margin:0 0 12px">${running?"Le coach rédige vos briefs : un fil rouge commun puis un brief par prestataire. Environ deux minutes, vous recevrez une notification."
+      :ready?`${esc(b.filRouge.titre||"")}${b.filRouge.titre?" · ":""}rédigés le ${esc(when)}.${stale?" Vos réponses ou vos inspirations ont changé depuis.":""} Le même fil rouge ouvre chaque brief : tous vos prestataires partent de la même vision.`
+      :"Le coach compile vos réponses et vos inspirations en un fil rouge commun (ambiance, palette, matières, ce que vous ne voulez pas), puis en un brief par prestataire, avec les questions à leur poser. À envoyer en PDF avant chaque échange."}</p>
+    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
+      ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
+}
+const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
+function briefBlocks(k){
+  const b=S.briefs,x=b.categories[k];if(!x)return [];
+  // budget : seulement le « budget cible » que vous avez choisi d'indiquer dans Nos envies (jamais vos lignes de budget)
+  const m=bMeta(k),bud=num(m.budget);
+  const d=wDate(),st=S.settings;
+  const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
+  const imgs=S.inspirations.filter(i=>i.cat===k&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  return [{h2:"Brief · "+BRIEF_LABEL[k]},
+    {kpis:[["Date",d?fmtD(d):"à fixer",""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
+    {p:x.intention},...list("Nos essentiels",x.essentiels),...list("L'ambiance, dans le détail",x.details),...list("Ce que nous ne voulons pas",x.aEviter),
+    ...list("En accord avec nos autres prestataires",x.liens),...list("Nos questions pour vous",x.questions),
+    ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
+}
+function filRougeBlocks(){
+  const f=S.briefs.filRouge||{},list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
+  const imgs=S.inspirations.filter(i=>i.cat==="vision"&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  return [{h2:"Notre fil rouge"},...(f.titre?[{h3:f.titre}]:[]),{p:f.ambiance||""},...(f.motsCles&&f.motsCles.length?[{tags:f.motsCles}]:[]),
+    ...list("Palette",f.palette),...list("Matières et textures",f.matieres),...list("L'expérience de nos invités",f.experience),...list("Ce que nous ne voulons surtout pas",f.aEviter),
+    ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
+}
+function pdfBriefs(k){
+  const b=S.briefs;if(!b||!b.categories)return;
+  if(k==="all"){const ks=Object.keys(BRIEF_LABEL).filter(x=>b.categories[x]);
+    return makePdf("Briefs prestataires - Claire et Julien.pdf",{docTitle:"Nos briefs prestataires",blocks:[...filRougeBlocks(),...ks.flatMap(x=>[{page:true},...briefBlocks(x)])]})}
+  makePdf(`Brief ${BRIEF_LABEL[k]} - Claire et Julien.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...filRougeBlocks(),{page:true},...briefBlocks(k)]});
+}
 function vEnvies(){
   const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
   const chatCta=S.canWrite?`<div class="chat-cta"><div><b>Plus simple : répondez en discutant avec le coach</b><span>Il vous pose les questions une par une et remplit le questionnaire pour vous.</span></div><button class="btn primary" data-act="chat" data-m="brief">Commencer l'entretien</button></div>`:"";
@@ -769,7 +816,7 @@ function vEnvies(){
     ${Array.isArray(pr.questionsOuvertes)&&pr.questionsOuvertes.length?`<h3 class="sec" style="margin-top:14px">Ce qu'il nous manque pour bien choisir</h3><ul class="blist">${pr.questionsOuvertes.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}</div>`:"";
   const tot=allProg();
   return `<div class="vh"><div><h2>Nos envies</h2><p>Le questionnaire de votre wedding planner. Répondez ensemble ; quand vos avis diffèrent, chacun écrit le sien. Tout s'enregistre dès que vous quittez un champ.</p></div><span class="chip ${tot>=.7?"ok":"gold"} num" style="font-size:13px;padding:6px 12px">${Math.round(tot*100)} % rempli</span></div>
-  ${chatCta}${analyseBar("envies")}${synth}
+  ${chatCta}${analyseBar("envies")}${synth}${briefsPanel(c)}
   <div class="env">${nav}<section style="min-width:0">${inspGallery(c)}
     <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p></div>
     <div class="qs">${qhtml}${metaH}</div>
@@ -1447,6 +1494,8 @@ document.addEventListener("click",async e=>{
     if(await patch("tasks",A.id,{status:st,note,due:A.due||B.due||null})&&await remove("tasks",B.id))toast("Tâches fusionnées");return}
   if(a==="dupkeep"){if(S.canWrite&&await mergeDoc("meta/prefs",{notDupes:[...(S.prefs.notDupes||[]),t.dataset.k]}))toast("C'est noté");return}
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
+  if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
+  if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
   if(a==="ialvl"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{niveaux:{[t.dataset.feat]:t.dataset.v},updatedAt:Date.now()}))toast("Réglage enregistré : appliqué dès le prochain appel");return}
   if(a==="fireall"){if(!S.canWrite||agentBusy("analyse"))return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer : refaire toutes les fiches";return}
     const now=Date.now();if(await mergeDoc("meta/analyse",{requestedAt:now,fullRequestedAt:now,status:"demandée"})){kick("analyse");toast("Toutes les fiches sont refaites : quelques minutes");render()}return}
@@ -1596,7 +1645,7 @@ function boot(){
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
-    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");
+    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");meta("briefs","briefs");
     { const d=new Date(),prev=monthKey(new Date(d.getFullYear(),d.getMonth()-1,15));
       for(const [k,m] of [["cur",monthKey(d)],["prev",prev]])unsubs.push(db.doc("usage/"+m).onSnapshot(LIVE,x=>{S.usage[k]=x.exists?x.data():{};later()},()=>{})); }
     db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});

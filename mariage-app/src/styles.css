@@ -840,3 +840,8 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .ai-acts{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .ai-acts .link{color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0;font-size:14.5px}
 .ai-acts .link.armed{color:var(--bad)}
+/* Briefs prestataires (Nos envies) */
+.briefs-p{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;margin:0 0 18px;box-shadow:var(--shadow-s)}
+.briefs-p .panel-h{margin-bottom:6px}
+.briefs-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.briefs-acts .link{color:var(--accent);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0;font-size:14.5px}

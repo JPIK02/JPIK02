@@ -8,6 +8,7 @@ import { runAnalyseAgent, runProfil } from "./analyse-agent.js";
 import { ensureVapid } from "./lib/push.js";
 import { runHebdo, runVisitFollowups } from "./hebdo-agent.js";
 import { withLock } from "./lib/lock.js";
+import { runBriefs, briefsDue } from "./briefs-agent.js";
 import { overBudget, monthKey } from "./lib/usage.js";
 import { getDb } from "./lib/firestore.js";
 
@@ -53,6 +54,11 @@ export async function runAll({ forced } = {}) {
     try { if (forced === "hebdo" || hebdoDue(await getMeta("hebdo"))) { console.log("[hebdo] → point de la semaine"); await withLock("hebdo", 10 * 60 * 1000, () => runHebdo()); } }
     catch (e) { failed = true; console.error("[hebdo] échec :", e); }
     try { await runVisitFollowups(); } catch (e) { console.error("[visites] échec :", e.message); }
+  }
+  // Briefs prestataires : sur demande depuis l'app (meta/briefs.requestedAt)
+  if (!forced || forced === "briefs") {
+    try { if (forced === "briefs" || briefsDue(await getMeta("briefs"))) { console.log("[briefs] → rédaction"); await withLock("briefs", 15 * 60 * 1000, () => runBriefs()); } }
+    catch (e) { failed = true; console.error("[briefs] échec :", e); await getDb().doc("meta/briefs").set({ status: "erreur", updatedAt: Date.now() }, { merge: true }).catch(() => {}); }
   }
   return failed;
 }

@@ -3,7 +3,8 @@
 // sur l'écran d'accueil, et Safari la bloque si elle n'est pas lancée pile au moment du toucher.
 //
 // Le contenu est décrit par blocs : { h2 }, { h3 }, { p }, { note }, { ul: [...] }, { kpis: [[libellé, valeur, détail]] },
-// { alerts: [[niveau, titre, texte]] }, { table: { head: [...], body: [[...]], widths?: [...], right?: [index] } }.
+// { alerts: [[niveau, titre, texte]] }, { table: { head: [...], body: [[...]], widths?: [...], right?: [index] } },
+// { tags: [...] } (pastilles), { imgs: [{ data: "data:image/jpeg;base64,…", caption }] }, { page: true } (saut de page).
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -62,6 +63,40 @@ export function buildPdf({ kicker = "LE MARIAGE DE", title, subtitle, docTitle, 
         y += h + 2;
       }
       y += 1;
+    }
+    else if (b.page) { doc.addPage(); y = 18; }
+    else if (b.tags) {
+      // mots-clés en pastilles
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+      let x = M; need(9);
+      for (const t of b.tags) {
+        const w = doc.getTextWidth(T(t)) + 6;
+        if (x + w > W - M) { x = M; y += 8; need(9); }
+        doc.setFillColor(242, 232, 240); doc.roundedRect(x, y, w, 6.2, 3, 3, "F");
+        doc.setTextColor(...PRUNE); doc.text(T(t), x + 3, y + 4.3); x += w + 2.5;
+      }
+      y += 10;
+    }
+    else if (b.imgs) {
+      // photos d'inspiration : 3 par ligne, légende dessous
+      const n = 3, gap = 4, w = (CW - gap * (n - 1)) / n;
+      for (let i = 0; i < b.imgs.length; i += n) {
+        const row = b.imgs.slice(i, i + n);
+        doc.setFont("helvetica", "normal"); doc.setFontSize(7.8);
+        const caps = row.map(im => doc.splitTextToSize(T(im.caption || ""), w).slice(0, 3));
+        const h = w * 0.75 + 2 + Math.max(...caps.map(c => c.length)) * 3.3;
+        need(h + 3);
+        row.forEach((im, j) => {
+          const x = M + j * (w + gap);
+          try {
+            const pr = doc.getImageProperties(im.data), r = Math.min(w / pr.width, (w * 0.75) / pr.height);
+            const iw = pr.width * r, ih = pr.height * r;
+            doc.addImage(im.data, "JPEG", x + (w - iw) / 2, y + (w * 0.75 - ih) / 2, iw, ih);
+          } catch { doc.setDrawColor(...LINE); doc.rect(x, y, w, w * 0.75); }
+          doc.setTextColor(...MUTED); doc.text(caps[j], x, y + w * 0.75 + 4.5);
+        });
+        y += h + 3;
+      }
     }
     else if (b.table) {
       const { head, body, widths, right = [], foot } = b.table;
