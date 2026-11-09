@@ -48,7 +48,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},tasks:[],budget:[],guests:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,tasks:[],budget:[],guests:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vStat:"all",bcat:"vision",overview:false}
 };
@@ -654,7 +654,8 @@ function vPrestataires(){
   const groups=cats.map(c=>{
     const list=vs.filter(v=>v.cat===c).sort((a,b)=>sc(b)-sc(a)||VSTAT_RANK[b.status]-VSTAT_RANK[a.status]);
     const qk=VCAT2Q[c],p=qk?catProg(qk):null,m=qk?bMeta(qk):{};
-    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${p?`<button class="chip ${p.p>=.7?"ok":p.p>0?"warn":""}" data-bgo="${qk}">Brief ${Math.round(p.p*100)} %</button>`:""}</div></div>
+    const cmp=S.vendors.filter(v=>v.cat===c&&v.status!=="ecarte").length>=2;
+    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${cmp?`<button class="chip acc" data-act="compare" data-cat="${esc(c)}">Comparer</button>`:""}${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${p?`<button class="chip ${p.p>=.7?"ok":p.p>0?"warn":""}" data-bgo="${qk}">Brief ${Math.round(p.p*100)} %</button>`:""}</div></div>
     <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">${list.length>1?`<span class="rank">${i+1}</span>`:""}${fitBadge(v)}
       <div class="main" style="flex:1;min-width:0"><div class="t" style="font-weight:500">${esc(v.name)}</div>
         ${fi.verdict?`<div class="verdict">${esc(fi.verdict)}</div>`:""}
@@ -668,6 +669,37 @@ function vPrestataires(){
   ${groups||emptyBlock(S.vendors.length?"Aucun prestataire avec ce statut":"Aucun prestataire pour l'instant","Notez chaque piste dès le premier contact, ou laissez l'assistant e-mails les ajouter.")}`;
 }
 
+/* ---------- Comparateur ---------- */
+// Valeur d'une ligne « Libellé : valeur » des notes (capacité, couchages… importés du fichier Excel)
+const noteVal=(v,label)=>{const m=fold(v.note).match(new RegExp(fold(label)+"\\s*:?\\s*([^\\n]+)"));return m?m[1].trim():""};
+const capMax=v=>{const m=noteVal(v,"Capacité").match(/(\d+)(?:\s*-\s*(\d+))?/);return m?+(m[2]||m[1]):null};
+function openCompare(cat){
+  const vs=S.vendors.filter(v=>v.cat===cat&&v.status!=="ecarte").sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1)).slice(0,4);
+  if(vs.length<2)return;
+  const line=budgetLineFor(cat),env=line?num(line.prevu):0,guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
+  const best=(vals,dir)=>{const ns=vals.filter(x=>x!=null);if(ns.length<2)return null;return dir>0?Math.max(...ns):Math.min(...ns)};
+  const L=a=>Array.isArray(a)&&a.length?`<ul class="blist">${a.slice(0,3).map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:'<span class="na">—</span>';
+  const rowNum=(label,get,fmt,dir,hint)=>{const vals=vs.map(get),b=best(vals,dir);return `<tr><th scope="row">${label}${hint?`<small>${hint}</small>`:""}</th>${vals.map(x=>`<td class="${x!=null&&x===b?"best":""}">${x==null?'<span class="na">—</span>':fmt(x)}</td>`).join("")}</tr>`};
+  const row=(label,get)=>`<tr><th scope="row">${label}</th>${vs.map(v=>`<td>${get(v)}</td>`).join("")}</tr>`;
+  const crits=[...new Set(vs.flatMap(v=>((v.fit&&v.fit.criteres)||[]).map(c=>c.label)))];
+  const body=[
+    rowNum("Note de fit",v=>v.fit&&v.fit.score!=null?Math.round(v.fit.score):null,x=>`<b class="num">${x}</b>/100`,1),
+    row("Confiance",v=>v.fit&&v.fit.confiance?esc(v.fit.confiance):'<span class="na">—</span>'),
+    rowNum("Prix",v=>num(v.prix)||null,x=>`<b class="num">${eur(x)}</b>`,-1),
+    env?rowNum("Écart à l'enveloppe",v=>num(v.prix)?num(v.prix)-env:null,x=>`<span class="num ${x>0?"over":"ok-t"}">${x>0?"+":""}${eur(x)}</span>`,-1,`poste ${esc(line.label)} : ${eur(env)}`):"",
+    cat==="Lieu"?rowNum("Capacité",capMax,x=>`<span class="num ${guests>x?"over":""}">${x}</span>`,1,`${guests} invités au dîner`):"",
+    cat==="Lieu"?rowNum("Couchages",v=>{const m=noteVal(v,"Couchages").match(/\d+/);return m?+m[0]:null},x=>`<span class="num">${x}</span>`,1):"",
+    rowNum("Avis en ligne",v=>v.fit&&v.fit.avis&&v.fit.avis.note!=null?num(v.fit.avis.note):null,x=>`<span class="stars">★ ${String(x).replace(".",",")}</span>`,1),
+    ...crits.map(cl=>rowNum(esc(cl),v=>{const c=((v.fit&&v.fit.criteres)||[]).find(c=>c.label===cl);return c?Math.round(num(c.note)):null},x=>`<span class="num">${x}</span>/100`,1)),
+    row("Points forts",v=>L(v.fit&&v.fit.forces)),
+    row("Vigilance",v=>L(v.fit&&v.fit.vigilance)),
+    row("Notes de visite",v=>v.visitNotes?`<span class="vn">${esc(v.visitNotes)}</span>`:'<span class="na">—</span>'),
+    row("Statut",v=>`<span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>`),
+  ].join("");
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal cmp-modal" role="dialog" aria-modal="true" aria-label="Comparer : ${esc(cat)}">
+    <h3>Comparer · ${esc(cat)}</h3><p class="plan-when" style="margin:-8px 0 14px">En vert, la meilleure valeur de chaque ligne. Faites glisser le tableau sur le côté.</p>
+    <div class="cmp-wrap"><table class="cmp"><thead><tr><th></th>${vs.map(v=>`<th scope="col"><button class="link" data-fiche="${v.id}">${esc(v.name)}</button></th>`).join("")}</tr></thead><tbody>${body}</tbody></table></div></div></div>`;
+}
 function openFiche(id){
   const v=S.vendors.find(x=>x.id===id);if(!v)return;
   const fi=v.fit||{},av=fi.avis||{};
@@ -684,6 +716,9 @@ function openFiche(id){
     ${crit}
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
+    <div class="fsec"><h4>Notes de visite</h4>${v.visitNotes?`<p class="vnotes">${esc(v.visitNotes)}</p>`:`<p class="plan-when" style="margin:0 0 8px">Après une visite ou un échange, notez vos impressions : l'IA recalcule la note avec ces informations de première main.</p>`}
+      ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (d'ici 15 minutes environ).</p>`:""}
+      ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div><button type="button" class="btn" data-close="1">Fermer</button><button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
@@ -780,7 +815,7 @@ function vAssistant(){
   </div>
   <div class="grid2">
     <section>
-      <h3 class="sec">${ps.length?`À valider · ${ps.length}`:"Aperçu de ce que l'assistant proposera"}</h3>
+      <div class="sec-row"><h3 class="sec">${ps.length?`À valider · ${ps.length}`:"Aperçu de ce que l'assistant proposera"}</h3>${ps.length>1&&S.canWrite?`<button class="btn sm primary" data-act="acceptall">Tout valider</button>`:""}</div>
       <div class="sugs">${ps.length?ps.map(s=>sugCard(s,false)).join(""):exampleSugs().map(s=>sugCard(s,true)).join("")}</div>
       ${hist.length?`<h3 class="sec" style="margin-top:28px">Historique</h3><div class="list">${hist.map(s=>`<div class="row"><div class="main"><div class="t">${esc(s.summary||s.subject)}</div><div class="m"><span>${esc((SUGTYPE[s.type]||["Info"])[0])}</span><span>${esc(s.from||"")}</span></div></div><div class="end"><span class="chip ${s.status==="accepted"?"ok":""}">${s.status==="accepted"?"Ajouté":"Ignoré"}</span>${s.status==="dismissed"?`<button class="btn ghost sm" data-act="restore" data-id="${s.id}" ${dis}>Rétablir</button>`:""}</div></div>`).join("")}</div>`:""}
     </section>
@@ -803,8 +838,8 @@ function vAssistant(){
     </section>
   </div>`;
 }
-async function acceptSug(id){
-  const s=S.inbox.find(x=>x.id===id);if(!s)return;
+async function acceptSug(id,quiet){
+  const s=S.inbox.find(x=>x.id===id);if(!s)return false;
   const p=Object.assign({},s.payload||{});let ok=true;
   const stamp={source:"mail",sourceId:s.id};
   if(s.type==="vendor"||s.type==="quote"){
@@ -826,12 +861,14 @@ async function acceptSug(id){
     const upd={};if(p.rsvp)upd.rsvp=p.rsvp;if(p.regime)upd.regime=p.regime;
     ok=g?await patch("guests",g.id,upd):await save("guests",null,Object.assign({name:p.name||s.from||"Invité",side:"commun",group:"",rsvp:p.rsvp||"attente",regime:p.regime||"",ceremonie:true,vin:true,diner:true,enfant:false},stamp));
   }
-  if(ok){await patch("inbox",id,{status:"accepted",decidedAt:Date.now()});toast("Ajouté")}
+  if(ok){await patch("inbox",id,{status:"accepted",decidedAt:Date.now()});if(!quiet)toast("Ajouté")}
+  return ok;
 }
 
 /* ---------- Settings ---------- */
 function vReglages(){
   const s=S.settings,dis=S.canWrite?"":"disabled";
+  if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported";render()}),0);
   return `<div class="vh"><div><h2>Réglages</h2><p>Les infos de base qui alimentent le compte à rebours, les échéances et le budget.</p></div></div>
   <form class="formpanel form" id="settings-form">
     <div class="cols2">
@@ -848,6 +885,7 @@ function vReglages(){
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
     <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes (GitHub Actions) s'ils ont du travail et ne tournent que selon le planning ci-dessous. Un passage demandé démarre dans les 10 à 15 minutes.</p>
     <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
+  ${pushPanel()}
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Apparence</h3></div>
     <p class="plan-when" style="margin:0 0 12px">Choix propre à cet appareil. « Automatique » suit le réglage clair ou sombre du téléphone.</p>
     <div class="seg" role="group" aria-label="Thème">${[["auto","Automatique"],["light","Clair"],["dark","Sombre"]].map(([k,l])=>`<button data-act="theme" data-v="${k}" aria-pressed="${themePref()===k}">${l}</button>`).join("")}</div></div>
@@ -864,6 +902,44 @@ function vReglages(){
   </div>`;
 }
 
+/* ---------- Notifications push ---------- */
+const isStandalone=()=>window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
+const isIOS=()=>/iPhone|iPad|iPod/.test(navigator.userAgent);
+const b64u=s=>{const p="=".repeat((4-s.length%4)%4),b=atob((s+p).replace(/-/g,"+").replace(/_/g,"/"));return Uint8Array.from(b,c=>c.charCodeAt(0))};
+const subId=sub=>btoa(sub.endpoint).replace(/[^a-zA-Z0-9]/g,"").slice(-60);
+async function refreshPushState(){
+  let st;
+  if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))st=isIOS()&&!isStandalone()?"install":"unsupported";
+  else if(Notification.permission==="denied")st="denied";
+  else{const reg=await navigator.serviceWorker.getRegistration("/");const sub=reg&&await reg.pushManager.getSubscription();st=sub?"on":"off"}
+  if(st!==S.pushState){S.pushState=st;if(S.view==="reglages")render()}
+}
+async function enablePush(){
+  if(!S.push.publicKey){toast("Les notifications seront prêtes après le prochain passage des agents (10 min)");return}
+  const perm=await Notification.requestPermission();
+  if(perm!=="granted"){await refreshPushState();toast("Notifications refusées");return}
+  const reg=await navigator.serviceWorker.register("/sw.js");await navigator.serviceWorker.ready;
+  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64u(S.push.publicKey)});
+  await save("pushSubs",subId(sub),{sub:JSON.parse(JSON.stringify(sub)),email:S.user&&S.user.email||"",ua:navigator.userAgent.slice(0,160),createdAt:Date.now()});
+  reg.showNotification("Notifications activées",{body:"Vous serez prévenus des nouvelles propositions et des analyses terminées.",icon:"/icon.svg"});
+  await refreshPushState();
+}
+async function disablePush(){
+  const reg=await navigator.serviceWorker.getRegistration("/");const sub=reg&&await reg.pushManager.getSubscription();
+  if(sub){await remove("pushSubs",subId(sub));await sub.unsubscribe()}
+  await refreshPushState();toast("Notifications coupées sur ce téléphone");
+}
+function pushPanel(){
+  const st=S.pushState;
+  const txt={on:"Activées sur ce téléphone. Vous êtes prévenus des nouvelles propositions de l'assistant et des analyses terminées.",
+    off:"Recevez une notification quand l'assistant trouve un devis ou un rendez-vous dans vos mails, ou quand une analyse est terminée.",
+    install:"Sur iPhone, les notifications ne marchent que depuis l'app installée : Safari → Partager → « Sur l'écran d'accueil », puis ouvrez l'app depuis son icône et revenez ici.",
+    denied:"Les notifications sont bloquées pour cette app. Réautorisez-les dans les réglages du téléphone (Notifications → Mariage), puis revenez ici.",
+    unsupported:"Ce navigateur ne gère pas les notifications push.",null:"Vérification…"}[st];
+  return `<div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Notifications</h3>${st==="on"?'<span class="chip ok">Activées</span>':""}</div>
+    <p class="plan-when" style="margin:0 0 12px">${txt}</p>
+    ${st==="off"?`<button class="btn primary" data-act="pushon" ${S.canWrite?"":"disabled"}>Activer sur ce téléphone</button>`:st==="on"?`<button class="btn" data-act="pushoff">Couper sur ce téléphone</button>`:""}</div>`;
+}
 const THEME_KEY="mariage-theme";
 const themePref=()=>{try{const t=localStorage.getItem(THEME_KEY);return t==="light"||t==="dark"?t:"auto"}catch(e){return "auto"}};
 function applyTheme(t){
@@ -931,7 +1007,8 @@ const SCHEMAS={
     {k:"acomptePaye",label:"Acompte versé",type:"check"},
     {k:"soldePaye",label:"Solde versé",type:"check"},
     {row:[{k:"contact",label:"Contact (nom, e-mail, site)",type:"text"},{k:"tel",label:"Téléphone",type:"text"}]},
-    {k:"note",label:"Notes",type:"textarea"}]},
+    {k:"note",label:"Notes",type:"textarea"},
+    {k:"visitNotes",label:"Notes de visite ou d'échange (l'IA en tient compte et recalcule la note)",type:"textarea"}]},
   schedule:{one:"le moment",fields:[
     {row:[{k:"time",label:"Heure",type:"time"},{k:"title",label:"Moment",type:"text",req:1}]},
     {row:[{k:"lieu",label:"Lieu",type:"text"},{k:"qui",label:"Qui est concerné",type:"text"}]},
@@ -977,10 +1054,11 @@ function openEditor(col,id){
     });
     delete out._ev;delete out.template;
     if(col==="tasks"&&isNew){const same=S.tasks.filter(t=>t.phase===out.phase);out.order=same.reduce((m,t)=>Math.max(m,t.order||0),0)+1}
+    if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim())out.fitRequestedAt=Date.now();
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
     const ok=await save(col,id,out);
-    if(ok){closeModal();toast(isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
+    if(ok){closeModal();toast(out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000?"Enregistré : la note sera recalculée d'ici 15 minutes":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
   });
   const del=form.querySelector('[data-act="del"]');
   if(del)del.addEventListener("click",async ev=>{
@@ -1072,6 +1150,13 @@ document.addEventListener("click",async e=>{
   if(a==="unseat"){if(S.canWrite)await patch("guests",id,{table:""});return}
   if(a==="bulk"){if(S.canWrite)openBulk();return}
   if(a==="csv"){exportCSV();return}
+  if(a==="pushon"){t.disabled=true;try{await enablePush()}catch(err){toast("Activation impossible : "+(err.message||err));t.disabled=false}return}
+  if(a==="pushoff"){t.disabled=true;try{await disablePush()}catch(err){toast("Échec : "+(err.message||err));t.disabled=false}return}
+  if(a==="compare"){openCompare(t.dataset.cat);return}
+  if(a==="acceptall"){if(!S.canWrite)return;const ids=pendingSugs().map(x=>x.id);
+    if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent=`Confirmer : valider les ${ids.length}`;setTimeout(()=>{if(t.isConnected){t.classList.remove("armed");t.textContent="Tout valider"}},5000);return}
+    t.disabled=true;t.textContent="Validation…";let n=0;for(const x of ids)if(await acceptSug(x,true))n++;
+    toast(n===ids.length?`${n} propositions ajoutées`:`${n} sur ${ids.length} ajoutées, les autres restent à valider`);return}
   if(a==="accept"){if(S.canWrite){t.disabled=true;await acceptSug(id)}return}
   if(a==="dismiss"){if(S.canWrite&&await patch("inbox",id,{status:"dismissed",decidedAt:Date.now()}))toast("Ignoré");return}
   if(a==="restore"){if(S.canWrite)await patch("inbox",id,{status:"new"});return}
@@ -1170,7 +1255,7 @@ function boot(){
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
-    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");
+    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");
     COLS.forEach(c=>{
       unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));
     });

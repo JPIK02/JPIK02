@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { getDb, getMeta, listAll, mergeMeta } from "./lib/firestore.js";
 import { runForOutput } from "./lib/claude.js";
 import { vendorsToAnalyse } from "./lib/scheduler.js";
+import { notify } from "./lib/push.js";
 
 const SYSTEM = readFileSync(new URL("./prompts/analyse.md", import.meta.url), "utf8");
 
@@ -110,6 +111,7 @@ export async function runAnalyseAgent({ log = console.log, force = false } = {})
     }
     await mergeMeta("analyse", { status: "terminée", lastRun: Date.now(), lastRunAt: Date.now() });
     log(`${todo.length} prestataire(s) analysé(s). ${scores.join(" · ")}`);
+    if (todo.length) await notify({ title: "Analyse des prestataires terminée", body: scores.join(" · "), url: "/#prestataires", tag: "analyse" }, { log });
     return { analyses: todo.length, scores };
   } catch (e) {
     await mergeMeta("analyse", { status: "erreur", lastError: String(e.message || e).slice(0, 500), lastRunAt: Date.now() });

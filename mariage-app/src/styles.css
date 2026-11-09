@@ -492,3 +492,24 @@ body.modal-open{overflow:hidden}
 .ov-open svg{flex:none;width:22px;height:22px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .ov-open:hover{background:var(--surface-2)}
 .ov-open:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+/* Titre de section avec action à droite */
+.sec-row{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sec-row .btn.armed{background:var(--bad);border-color:var(--bad);color:#fff}
+/* ---------- Comparateur ---------- */
+.modal.cmp-modal{max-width:980px}
+.cmp-wrap{overflow-x:auto;margin:0 -20px;padding:0 20px;-webkit-overflow-scrolling:touch}
+.cmp{border-collapse:separate;border-spacing:0;font-size:14.5px;min-width:100%}
+.cmp th,.cmp td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top;text-align:left;min-width:150px;max-width:240px}
+.cmp thead th{font-family:var(--f-display);font-size:17px;font-weight:600;position:sticky;top:0;background:var(--surface)}
+.cmp thead th .link{font:inherit;color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-align:left}
+.cmp tbody th{position:sticky;left:0;background:var(--surface);z-index:1;font-weight:700;min-width:118px;max-width:130px;font-size:13.5px;color:var(--muted)}
+.cmp tbody th small{display:block;font-weight:500;font-size:12px;margin-top:2px}
+.cmp td.best{background:var(--ok-soft)}
+.cmp td.best b,.cmp td.best span.num{color:var(--ok)}
+.cmp .na{color:var(--muted)}
+.cmp .over{color:var(--bad);font-weight:700}
+.cmp .ok-t{color:var(--ok);font-weight:700}
+.cmp .blist{margin:0;padding-left:18px}
+.cmp .vn{white-space:pre-line}
+@media (min-width:640px){.cmp-wrap{margin:0 -26px;padding:0 26px}}
+.vnotes{white-space:pre-line;margin:0 0 10px;font-size:15px;overflow-wrap:anywhere}
