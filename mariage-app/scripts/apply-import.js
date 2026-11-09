@@ -3,7 +3,8 @@
 // Une trace est écrite dans meta/imports : si l'import a déjà eu lieu, le script ne fait rien
 // (les modifications faites depuis dans l'app ne sont jamais écrasées).
 // Opérations : set (crée/remplace), merge (complète un document existant),
-// deleteIfEmpty (supprime seulement si les champs listés sont tous vides : ligne de modèle jamais remplie).
+// deleteIfEmpty (supprime seulement si les champs listés sont tous vides : ligne de modèle jamais remplie),
+// regexField (retire un motif d'un champ texte dans toute une collection).
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
@@ -30,8 +31,8 @@ const stats = {};
 const count = k => (stats[k] = (stats[k] || 0) + 1);
 const batch = db.batch();
 for (const o of ops) {
-  const ref = db.doc(o.path);
-  const col = o.path.split("/")[0];
+  const ref = o.path ? db.doc(o.path) : null;
+  const col = o.path ? o.path.split("/")[0] : o.collection;
   if (o.op === "set") { batch.set(ref, o.data); count(`${col} ajoutés`); }
   else if (o.op === "merge") { batch.set(ref, o.data, { merge: true }); count(`${col} mis à jour`); }
   else if (o.op === "deleteIfEmpty") {
@@ -40,6 +41,15 @@ for (const o of ops) {
     const d = snap.data();
     if (o.fields.every(f => d[f] === null || d[f] === undefined || d[f] === "")) { batch.delete(ref); count(`${col} supprimés (lignes vides)`); }
     else count(`${col} conservés (déjà remplis)`);
+  } else if (o.op === "regexField") {
+    // Nettoie un champ texte de tous les documents d'une collection (seulement ceux qui correspondent)
+    const re = new RegExp(o.pattern, "gi");
+    for (const d of (await db.collection(o.collection).get()).docs) {
+      const v = d.data()[o.field];
+      if (typeof v !== "string" || !new RegExp(o.pattern, "i").test(v)) continue;
+      const cleaned = v.replace(re, o.replace ?? "").replace(/^\s*·\s*|\s*·\s*$/g, "").replace(/\s{2,}/g, " ").trim();
+      batch.set(d.ref, { [o.field]: cleaned }, { merge: true }); count(`${o.collection} nettoyés`);
+    }
   } else throw new Error(`Opération inconnue : ${o.op}`);
 }
 if (!dry) {

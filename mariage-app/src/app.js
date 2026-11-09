@@ -735,16 +735,16 @@ function vEnvies(){
     const a=bGet(c,id),done=answered(a),base=`q-${c}-${id}`;
     const choix=Array.isArray(a.choix)?a.choix:[];
     const chips=opts?`<div class="opts" role="group" aria-label="${esc(q)}">${opts.map(o=>`<button class="opt" data-bchip="${c}|${id}|${type}" data-o="${esc(o)}" aria-pressed="${choix.includes(o)}" ${dis}>${esc(o)}</button>`).join("")}</div>`:"";
-    const main=`<textarea id="${base}-commun" data-bq="${c}|${id}|commun" placeholder="${opts?"Une précision ?":"Votre réponse commune…"}" ${opts?'style="min-height:44px"':""} ${dis}>${esc(a.commun||"")}</textarea>`;
-    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">Claire</span><textarea id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">Julien</span><textarea id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
+    const main=`<textarea autocomplete="off" id="${base}-commun" data-bq="${c}|${id}|commun" placeholder="${opts?"Une précision ?":"Votre réponse commune…"}" ${opts?'style="min-height:44px"':""} ${dis}>${esc(a.commun||"")}</textarea>`;
+    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">Claire</span><textarea autocomplete="off" id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">Julien</span><textarea autocomplete="off" id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
     return `<div class="q ${done?"done":""}"><label class="ql" for="${base}-commun"><span class="n">${i+1}.</span><span>${esc(q)}</span></label>${chips}${main}
       <label class="diff"><input type="checkbox" id="${base}-dz" data-bq="${c}|${id}|desaccord" ${a.desaccord?"checked":""} ${dis}> Nos avis diffèrent</label>${duo}</div>`;
   }).join("");
   const metaH=c==="vision"?"":`<div class="q"><div class="ql" style="font-weight:500">Pour conclure sur ${esc(cat.label.toLowerCase())}</div>
     <div class="field"><span class="lab">Importance pour vous</span><div class="seg" role="group">${IMPORT.map((l,i)=>`<button data-bimp="${c}|${i+1}" aria-pressed="${m.importance===i+1}" ${dis}>${l}</button>`).join("")}</div></div>
     <div class="duo"><div class="field"><label for="q-${c}-_m-budget" class="lab">Budget cible (€)</label><input type="number" min="0" step="50" inputmode="numeric" id="q-${c}-_m-budget" data-bm="${c}|budget" value="${esc(m.budget??"")}" ${dis}></div><div></div></div>
-    <div class="field"><label for="q-${c}-_m-reussite" class="lab">Ce qui en fera une vraie réussite</label><textarea id="q-${c}-_m-reussite" data-bm="${c}|reussite" ${dis}>${esc(m.reussite||"")}</textarea></div>
-    <div class="field"><label for="q-${c}-_m-redhibitoire" class="lab">Ce qui serait rédhibitoire</label><textarea id="q-${c}-_m-redhibitoire" data-bm="${c}|redhibitoire" ${dis}>${esc(m.redhibitoire||"")}</textarea></div></div>`;
+    <div class="field"><label for="q-${c}-_m-reussite" class="lab">Ce qui en fera une vraie réussite</label><textarea autocomplete="off" id="q-${c}-_m-reussite" data-bm="${c}|reussite" ${dis}>${esc(m.reussite||"")}</textarea></div>
+    <div class="field"><label for="q-${c}-_m-redhibitoire" class="lab">Ce qui serait rédhibitoire</label><textarea autocomplete="off" id="q-${c}-_m-redhibitoire" data-bm="${c}|redhibitoire" ${dis}>${esc(m.redhibitoire||"")}</textarea></div></div>`;
   const synth=pr.resume?`<div class="synth"><div class="panel-h"><h3>Ce que nous retenons de vous</h3>${pr.completude!=null?`<span class="chip ${pr.completude>=70?"ok":"warn"} num">Brief complet à ${Math.round(pr.completude)} %</span>`:""}</div>
     <p>${esc(pr.resume)}</p>
     ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">Claire :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">Julien :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
@@ -835,7 +835,7 @@ function vAssistant(){
         <div class="field"><label for="a-mailbox">Adresse de la boîte dédiée</label><input type="email" id="a-mailbox" name="mailbox" value="${esc(ag.mailbox||"")}" placeholder="adresse@gmail.com" ${dis}></div>
         <p class="plan-when" style="margin:0">Lecture automatique : <b>${esc(planLabel("mail"))}</b>. <button type="button" class="btn ghost sm" data-go="reglages" style="padding:0 4px;min-height:0">Modifier dans Réglages</button></p>
         <div class="field"><span class="lab">Ce qu'il doit repérer</span><div class="checks">${Object.entries(SUGTYPE).map(([k,[l]])=>`<label><input type="checkbox" id="a-t-${k}" name="t-${k}" ${types[k]!==false?"checked":""} ${dis}> ${l}</label>`).join("")}</div></div>
-        <div class="field"><label for="a-notes">Consignes particulières</label><textarea id="a-notes" name="consignes" placeholder="Ex. ignorer les newsletters, toujours attribuer les tenues à la bonne personne…" ${dis}>${esc(ag.consignes||"")}</textarea></div>
+        <div class="field"><label for="a-notes">Consignes particulières</label><textarea autocomplete="off" id="a-notes" name="consignes" placeholder="Ex. ignorer les newsletters, toujours attribuer les tenues à la bonne personne…" ${dis}>${esc(ag.consignes||"")}</textarea></div>
         <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
       </form>
     </section>
@@ -877,12 +877,12 @@ function vReglages(){
     <div class="cols2">
       <div class="field"><label for="s-date">Date du mariage</label><input type="date" id="s-date" name="date" value="${esc(s.date||"")}" ${dis}></div>
       <div class="field"><label for="s-budget">Budget total (€)</label><input type="number" inputmode="numeric" min="0" step="100" id="s-budget" name="budgetTotal" value="${esc(s.budgetTotal??"")}" ${dis}></div>
-      <div class="field"><label for="s-lieu">Lieu de réception</label><input type="text" id="s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
-      <div class="field"><label for="s-ville">Ville</label><input type="text" id="s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
-      <div class="field"><label for="s-mairie">Mairie</label><input type="text" id="s-mairie" name="mairie" value="${esc(s.mairie||"")}" placeholder="Commune où le mariage est célébré" ${dis}></div>
+      <div class="field"><label for="s-lieu">Lieu de réception</label><input type="text" autocomplete="off" id="s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
+      <div class="field"><label for="s-ville">Ville</label><input type="text" autocomplete="off" id="s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
+      <div class="field"><label for="s-mairie">Mairie</label><input type="text" autocomplete="off" id="s-mairie" name="mairie" value="${esc(s.mairie||"")}" placeholder="Commune où le mariage est célébré" ${dis}></div>
       <div class="field"><label for="s-cible">Nombre d'invités visé</label><input type="number" inputmode="numeric" min="0" id="s-cible" name="invitesCible" value="${esc(s.invitesCible??"")}" ${dis}></div>
     </div>
-    <div class="field"><label for="s-notes">Notes communes</label><textarea id="s-notes" name="notes" ${dis}>${esc(s.notes||"")}</textarea></div>
+    <div class="field"><label for="s-notes">Notes communes</label><textarea autocomplete="off" id="s-notes" name="notes" ${dis}>${esc(s.notes||"")}</textarea></div>
     <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
   </form>
   <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
@@ -1032,7 +1032,7 @@ async function openChat(mode,prefill){
     <form class="chat-in" id="chat-form"><input type="file" id="chat-file" accept="image/*,application/pdf" hidden>
     <button type="button" class="ch-ic" data-act="chatfile" aria-label="Joindre une photo ou un PDF" ${S.canWrite?"":"disabled"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     ${SR?`<button type="button" class="ch-ic" id="chat-mic" data-act="chatmic" aria-label="Dicter" ${S.canWrite?"":"disabled"}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>`:""}
-    <label class="sr" for="chat-text">Votre message</label><textarea id="chat-text" rows="1" placeholder="Écrivez ou dictez…" ${S.canWrite?"":"disabled"}></textarea>
+    <label class="sr" for="chat-text">Votre message</label><textarea autocomplete="off" name="message" enterkeyhint="send" id="chat-text" rows="1" placeholder="Écrivez ou dictez…" ${S.canWrite?"":"disabled"}></textarea>
     <button class="btn primary" id="chat-send" type="submit" aria-label="Envoyer">Envoyer</button></form></div></div>`;
   renderChat();renderAtt();
   if(prefill!=null){const ta=document.getElementById("chat-text");ta.value=prefill;ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
@@ -1218,11 +1218,11 @@ function fieldHTML(f,v){
   const id="m-"+f.k,dis=S.canWrite?"":"disabled",dv=v??defOf(f);
   if(f.type==="seg")return `<div class="field"><span class="lab">${f.label}</span><div class="seg" role="radiogroup">${f.options.map(([k,l])=>`<label><input type="radio" name="${f.k}" value="${k}" id="${id}-${k}" ${dv===k?"checked":""} ${dis}><span>${l}</span></label>`).join("")}</div></div>`;
   if(f.type==="select")return `<div class="field"><label for="${id}">${f.label}</label><select id="${id}" name="${f.k}" ${dis}>${f.options.map(([k,l])=>`<option value="${esc(k)}" ${dv===k?"selected":""}>${esc(l)}</option>`).join("")}</select></div>`;
-  if(f.type==="textarea")return `<div class="field"><label for="${id}">${f.label}</label><textarea id="${id}" name="${f.k}" ${dis}>${esc(v||"")}</textarea></div>`;
+  if(f.type==="textarea")return `<div class="field"><label for="${id}">${f.label}</label><textarea autocomplete="off" id="${id}" name="${f.k}" ${dis}>${esc(v||"")}</textarea></div>`;
   if(f.type==="check")return `<div class="field"><label class="toggle" style="color:var(--ink);font-weight:500;font-size:14px"><input type="checkbox" id="${id}" name="${f.k}" ${v?"checked":""} ${dis}> ${f.label}</label></div>`;
   if(f.type==="checks")return `<div class="field"><span class="lab">${f.label}</span><div class="checks">${f.options.map(([k,l])=>`<label><input type="checkbox" id="${id}-${k}" name="${k}" ${v&&v[k]===false?"":"checked"} ${dis}> ${l}</label>`).join("")}</div></div>`;
   const t=f.type==="number"?'type="number" inputmode="decimal" step="any" min="0"':`type="${f.type}"`;
-  return `<div class="field"><label for="${id}">${f.label}</label><input ${t} id="${id}" name="${f.k}" value="${esc(v??"")}" ${f.req?"required":""} ${f.list?`list="${id}-l"`:""} ${dis}>${f.list?`<datalist id="${id}-l">${f.list.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`:""}</div>`;
+  return `<div class="field"><label for="${id}">${f.label}</label><input ${t} ${f.type==="email"?"":'autocomplete="off"'} id="${id}" name="${f.k}" value="${esc(v??"")}" ${f.req?"required":""} ${f.list?`list="${id}-l"`:""} ${dis}>${f.list?`<datalist id="${id}-l">${f.list.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`:""}</div>`;
 }
 
 function openEditor(col,id){
@@ -1238,7 +1238,8 @@ function openEditor(col,id){
     <div class="acts"><div>${!isNew&&S.canWrite?`<button type="button" class="btn danger" data-act="del">Supprimer</button>`:""}</div>
     <div><button type="button" class="btn" data-close="1">Annuler</button>${S.canWrite?`<button type="submit" class="btn primary">${isNew?"Ajouter":"Enregistrer"}</button>`:""}</div></div></form></div>`;
   const form=document.getElementById("editor");
-  const first=form.querySelector("input:not([type=radio]):not([type=checkbox]),select,textarea");if(first)first.focus();
+  // Pas de curseur automatique sur téléphone : le clavier ne s'ouvre que quand on touche un champ pour le modifier
+  if(!window.matchMedia("(pointer:coarse)").matches){const first=form.querySelector("input:not([type=radio]):not([type=checkbox]),select,textarea");if(first)first.focus()}
   form.addEventListener("submit",async e=>{
     e.preventDefault();
     const out=Object.assign({},cur);delete out.id;
@@ -1288,9 +1289,9 @@ function openBulk(){
   const layer=document.getElementById("layer");
   layer.innerHTML=`<div class="ov" data-close="1"><form class="modal form" id="bulk" role="dialog" aria-modal="true" aria-label="Ajout rapide d'invités">
     <h3>Ajout rapide</h3>
-    <div class="field"><label for="b-names">Un nom par ligne</label><textarea id="b-names" style="min-height:160px" placeholder="Marie Dupont&#10;Paul Dupont&#10;Léa Martin" required></textarea></div>
+    <div class="field"><label for="b-names">Un nom par ligne</label><textarea autocomplete="off" id="b-names" style="min-height:160px" placeholder="Marie Dupont&#10;Paul Dupont&#10;Léa Martin" required></textarea></div>
     <div class="field"><span class="lab">Côté</span><div class="seg" role="radiogroup">${Object.entries(SIDES).map(([k,l])=>`<label><input type="radio" name="side" value="${k}" ${k==="commun"?"checked":""}><span>${l}</span></label>`).join("")}</div></div>
-    <div class="field"><label for="b-group">Groupe</label><input type="text" id="b-group" list="b-gl" placeholder="Famille, Amis…"><datalist id="b-gl">${GROUPS.map(g=>`<option value="${g}">`).join("")}</datalist></div>
+    <div class="field"><label for="b-group">Groupe</label><input type="text" autocomplete="off" id="b-group" list="b-gl" placeholder="Famille, Amis…"><datalist id="b-gl">${GROUPS.map(g=>`<option value="${g}">`).join("")}</datalist></div>
     <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Annuler</button><button type="submit" class="btn primary">Ajouter</button></div></div></form></div>`;
   const form=document.getElementById("bulk");form.querySelector("textarea").focus();
   form.addEventListener("submit",async e=>{
@@ -1410,7 +1411,7 @@ document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.tar
 document.addEventListener("submit",async e=>{
   const f=e.target;
   if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-text");const v=inp.value.trim();if(!v)return;inp.value="";openChat("chat");await sendChat(v);return}
-  if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";await sendChat(v);ta.focus();return}
+  if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="settings-form"){
     e.preventDefault();
     const d={updatedAt:Date.now()};["date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());

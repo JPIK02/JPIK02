@@ -1,0 +1,13 @@
+{
+ "name": "budget-notes-2026-11",
+ "source": "Nettoyage : la part du budget est calculée automatiquement",
+ "ops": [
+  {
+   "op": "regexField",
+   "collection": "budget",
+   "field": "note",
+   "pattern": "\\s*·?\\s*\\d+(?:[.,]\\d+)?\\s*%\\s*du budget\\s*·?\\s*",
+   "replace": " "
+  }
+ ]
+}
