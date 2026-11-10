@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 // Outils de l'assistant IA : ce qu'il peut lire et faire dans l'app.
 // Règles : aucune suppression ; chaque écriture renvoie l'état d'avant pour pouvoir l'annuler depuis l'app ;
 // les valeurs sont nettoyées ici, quoi que Claude envoie. Indépendant de Firebase : `db` est injecté (testable).
@@ -63,6 +64,12 @@ export const TOOL_DEFS = [
   { name: "modifier_prestataire", description: "Modifie un prestataire. notes_visite : impressions après visite ou échange (l'analyse IA les prend en compte et recalcule la note).", input_schema: S({
     id: T(""), statut: E(VSTAT), prix: N("€"), acompte: N("€"), date_acompte: T("AAAA-MM-JJ"), date_solde: T("AAAA-MM-JJ"),
     acompte_paye: { type: "boolean" }, solde_paye: { type: "boolean" }, contact: T(""), tel: T(""), note: T("remplace les notes"), notes_visite: T("remplace les notes de visite") }, ["id"]) },
+  { name: "enregistrer_devis", description: "Enregistre un devis sur la fiche d'un prestataire (photo ou PDF joint, ou montants dictés) : il s'ajoute à l'historique des devis de la fiche et met à jour le prix, l'acompte et les échéances. Donne l'id d'un prestataire existant ; sinon nom et catégorie pour le créer. Ne remplis que ce qui figure sur le devis.", input_schema: S({
+    id: T("id du prestataire s'il existe"), nom: T("si nouveau"), categorie: E(VCATS, "si nouveau"),
+    montant: N("total TTC en €"), acompte: N("€"), date_acompte: T("AAAA-MM-JJ"), date_solde: T("AAAA-MM-JJ"), validite: T("date limite AAAA-MM-JJ"),
+    invites: N("invités ou couverts prévus"), inclus: { type: "array", items: { type: "string" }, description: "ce que comprend le prix" },
+    options: { type: "array", items: { type: "object", properties: { label: T(""), prix: N("€") }, required: ["label"], additionalProperties: false } },
+    conditions: T("acompte, annulation, frais… en une phrase"), resume: T("2 phrases : ce qu'on retient du devis"), fichier: T("nom du fichier joint") }, ["montant"]) },
   { name: "ajouter_rendez_vous", description: "Ajoute un rendez-vous à l'agenda.", input_schema: S({
     titre: T(""), date: T("AAAA-MM-JJ"), heure: T("HH:MM"), avec: T(""), lieu: T(""), qui: E(OWNERS) }, ["titre", "date"]) },
   { name: "definir_poste_budget", description: "Crée ou modifie un poste de budget (id pour modifier un poste existant).", input_schema: S({
@@ -71,11 +78,16 @@ export const TOOL_DEFS = [
     date: T("AAAA-MM-JJ"), budget_total: N("€"), lieu: T(""), ville: T(""), mairie: T(""), invites_cible: N("") }) },
   { name: "enregistrer_envie", description: "Enregistre la réponse à une question de « Nos envies ». Reformule fidèlement ce qui a été dit, n'invente rien.", input_schema: S({
     categorie: T("clé de catégorie"), question: T("id de la question"), commun: T("réponse commune"),
-    claire: T("avis de Claire si différent"), julien: T("avis de Julien si différent"),
+    claire: T("avis du partenaire 1 si différent"), julien: T("avis du partenaire 2 si différent"),
     choix: { type: "array", items: { type: "string" }, description: "options choisies, telles qu'écrites dans la question" }, desaccord: { type: "boolean" } }, ["categorie", "question"]) },
   { name: "enregistrer_priorites", description: "Importance (1 à 5), budget cible, critère de réussite et rédhibitoire d'une catégorie de « Nos envies ».", input_schema: S({
     categorie: T(""), importance: { type: "integer", minimum: 1, maximum: 5 }, budget: N("€"), reussite: T(""), redhibitoire: T("") }, ["categorie"]) },
-  { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) au prochain passage de l'agent (10 à 15 min). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
+  { name: "noter_inspiration", description: "Garde une photo jointe à ce message, ou au dernier message qui contenait des photos (par ex. après leur « oui »), comme inspiration dans « Nos envies » (catégorie), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
+    photo: { type: "integer", minimum: 1, maximum: 3, description: "numéro de la photo jointe (1 si une seule)" }, categorie: T("clé de catégorie, ex. lieu, fleurs, tenues, vision"),
+    description: T("ce que montre la photo et ce qui leur plaît : style, couleurs, matières, ambiance (2 phrases)") }, ["photo", "categorie", "description"]) },
+  { name: "demander_recherche_web", description: "Tu n'as pas accès à internet sans accord. Quand une recherche aiderait vraiment (inspiration, tendances, idées de déco ou de menu, infos ou avis sur un lieu ou un prestataire), propose-la avec une requête précise. l'un des deux l'autorise ou non dans l'app : arrête-toi ensuite et dis en une phrase ce que tu veux chercher et pourquoi.", input_schema: S({
+    requete: T("ce que tu veux chercher, précis (ex. « décoration mariage champêtre vert sauge terracotta »)"), pourquoi: T("en une phrase, ce que ça leur apportera") }, ["requete", "pourquoi"]) },
+  { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) qui démarre aussitôt (résultats en 2 à 3 minutes). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
 ];
 
 // ---------- Exécution ----------
@@ -85,7 +97,7 @@ const docs = snap => snap.docs.map(d => ({ id: d.id, ...d.data() }));
  * @param {*} db  Firestore (Admin SDK ou faux en test) : doc(path).get/set/update, collection(c).get/doc()
  * @param {{qcats:Array, now?:Date}} ctx
  */
-export function makeTools(db, { qcats, now = new Date() }) {
+export function makeTools(db, { qcats, now = new Date(), thumbs = [], author = "" }) {
   const get = async path => { const s = await db.doc(path).get(); return s.exists ? s.data() : null; };
   const all = async c => docs(await db.collection(c).get());
   const settings = async () => (await get("meta/settings")) || {};
@@ -217,6 +229,27 @@ export function makeTools(db, { qcats, now = new Date() }) {
       const op = await write(`vendors/${i.id}`, upd);
       return { result: { ok: true, reanalyse: !!upd.visitNotes }, action: { label: `Prestataire modifié : ${v.name}`, ops: [op] } };
     },
+    async enregistrer_devis(i) {
+      const montant = num(i.montant); if (montant == null) throw new Error("montant manquant");
+      let id = i.id, v = id ? await need("vendors", id) : null;
+      const ops = [];
+      if (!v) {
+        const nom = str(i.nom, 200); if (!nom) throw new Error("donne l'id du prestataire, ou son nom et sa catégorie");
+        const c = await create("vendors", { name: nom, cat: oneOf(i.categorie, VCATS) || "Autre", status: "devis", acomptePaye: false, note: "", source: "coach" });
+        id = c.id; ops.push(c.op); v = { name: nom, status: "devis", devis: [] };
+      }
+      const list = (a, n = 200) => (Array.isArray(a) ? a.map(x => str(x, n)).filter(Boolean).slice(0, 15) : []);
+      const entry = clean({
+        id: `c${Date.now().toString(36)}`, montant, acompte: num(i.acompte), dateAcompte: isDate(i.date_acompte) ? i.date_acompte : undefined, dateSolde: isDate(i.date_solde) ? i.date_solde : undefined,
+        validite: isDate(i.validite) ? i.validite : undefined, invites: num(i.invites) > 0 ? Math.round(num(i.invites)) : undefined, inclus: list(i.inclus),
+        options: (Array.isArray(i.options) ? i.options : []).map(o => o && str(o.label, 200) ? clean({ label: str(o.label, 200), prix: num(o.prix) }) : null).filter(Boolean).slice(0, 15),
+        conditions: str(i.conditions, 500), resume: str(i.resume, 600), fichier: str(i.fichier, 200), recuLe: new Date().toISOString().slice(0, 10), source: "coach", par: author || undefined,
+      });
+      const upd = clean({ devis: [entry, ...(v.devis || [])].slice(0, 12), prix: montant, acompte: entry.acompte, dateAcompte: entry.dateAcompte, dateSolde: entry.dateSolde,
+        status: ["repere", "contacte"].includes(v.status) ? "devis" : undefined, updatedAt: Date.now() }); // updatedAt : la note de fit sera recalculée
+      ops.push(await write(`vendors/${id}`, upd));
+      return { result: { ok: true, id, devisPrecedents: (v.devis || []).length }, action: { label: `Devis enregistré : ${v.name} (${montant} €)`, ops } };
+    },
     async ajouter_rendez_vous(i) {
       const titre = str(i.titre, 200); if (!titre) throw new Error("titre manquant");
       if (!isDate(i.date)) throw new Error("date au format AAAA-MM-JJ obligatoire");
@@ -262,9 +295,29 @@ export function makeTools(db, { qcats, now = new Date() }) {
       await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
       return { result: { ok: true }, action: { label: `Priorités notées : ${c.label}`, ops: [op] } };
     },
+    async noter_inspiration(i) {
+      const c = QC[i.categorie]; if (!c) throw new Error(`catégorie inconnue : ${i.categorie}`);
+      const n = Number.isInteger(i.photo) ? i.photo : 1, thumb = thumbs[n - 1];
+      if (!thumb) throw new Error(thumbs.length ? `photo ${n} introuvable : ${thumbs.length} photo(s) disponible(s)` : "aucune photo récente : demande-leur de la renvoyer avec le bouton photo");
+      // pas de doublon si la même photo est gardée deux fois
+      const thumbHash = createHash("sha1").update(thumb).digest("hex");
+      if (db.collection("inspirations").where) {
+        const dup = await db.collection("inspirations").where("thumbHash", "==", thumbHash).limit(1).get();
+        if (!dup.empty) { await db.doc(`inspirations/${dup.docs[0].id}`).update({ cat: c.k, description: str(i.description, 600) || dup.docs[0].data().description }); return { result: { ok: true, id: dup.docs[0].id, note: "photo déjà gardée : description mise à jour" } }; }
+      }
+      const description = str(i.description, 600); if (!description) throw new Error("description manquante");
+      const { op, id } = await create("inspirations", { cat: c.k, description, thumb, thumbHash, by: author });
+      await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
+      return { result: { ok: true, id }, action: { label: `Inspiration gardée (${c.label})`, ops: [op] } };
+    },
+    async demander_recherche_web(i) {
+      const requete = String(i.requete || "").trim().slice(0, 200), pourquoi = String(i.pourquoi || "").trim().slice(0, 300);
+      return { result: { ok: true, statut: "En attente de leur accord dans l'app. Ne cherche pas maintenant : dis en une phrase ce que tu veux chercher et pourquoi." },
+        action: { label: `Recherche sur internet proposée : « ${requete} »`, web: { requete, pourquoi } } };
+    },
     async demander_analyse() {
       const op = await write("meta/analyse", { requestedAt: Date.now(), status: "demandée" });
-      return { result: { ok: true, delai: "10 à 15 minutes" }, action: { label: "Analyse des prestataires demandée", ops: [op] } };
+      return { result: { ok: true, delai: "2 à 3 minutes" }, action: { label: "Analyse des prestataires lancée", ops: [op], kick: "analyse" } };
     },
   };
 

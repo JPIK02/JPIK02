@@ -1,4 +1,4 @@
-// Assistant IA intégré à l'app : fonction appelable par Claire et Julien uniquement.
+// Assistant IA intégré à Lamaelle : fonction appelable par les deux comptes du couple uniquement.
 // La clé Claude reste côté serveur (variable d'environnement écrite au déploiement depuis les secrets GitHub).
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -10,14 +10,19 @@ import { TOOL_DEFS, makeTools } from "./tools.js";
 import { systemPrompt } from "./prompt.js";
 import { converse, userContent } from "./converse.js";
 import { QCATS } from "./questions.js";
+import { FieldValue } from "firebase-admin/firestore";
+import { profileFor, recordUsage } from "./agents/lib/usage.js";
+import { coupleNames } from "./agents/lib/couple.js";
 
 initializeApp();
 const db = getFirestore();
 setGlobalOptions({ region: "europe-west1", maxInstances: 3 });
 
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+const MODEL = process.env.ANTHROPIC_MODEL || ""; // vide : modèle choisi dans Réglages → Coût de l'IA (meta/ia)
 const ALLOWED = String(process.env.ALLOWED_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-const PRENOMS = { "julienpicquet@gmail.com": "Julien", "duquesne.claire@yahoo.fr": "Claire", "claiire.duquesne59@gmail.com": "Claire" };
+// Quel partenaire est connecté (compte → emplacement « claire » = partenaire 1, « julien » = partenaire 2) ;
+// les prénoms viennent des réglages de l'app (meta/settings.prenom1 / prenom2), jamais du code.
+const PARTNER = { "julienpicquet@gmail.com": "julien", "duquesne.claire@yahoo.fr": "claire", "claiire.duquesne59@gmail.com": "claire" };
 const DAILY_LIMIT = 150;   // messages par jour, à vous deux (garde-fou de coût)
 const HISTORY = 16;        // derniers messages repris comme contexte
 let client;
@@ -25,15 +30,18 @@ let client;
 export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async req => {
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email))
-    throw new HttpsError("permission-denied", "Coach réservé à Claire et Julien.");
-  const { message, mode = "chat", view = "", reset = false, attachment = null } = req.data || {};
+    throw new HttpsError("permission-denied", "Coach réservé au couple.");
+  const { message, mode = "chat", view = "", reset = false, attachment = null, web = false } = req.data || {};
+  const atts = (Array.isArray(req.data?.attachments) ? req.data.attachments : attachment ? [attachment] : []).slice(0, 4);
   const chatRef = db.doc(`chats/${email}`);
   if (reset && !message) { await chatRef.set({ messages: [], updatedAt: Date.now() }); return { ok: true }; }
-  if (typeof message !== "string" || (!message.trim() && !attachment) || message.length > 4000)
+  if (typeof message !== "string" || (!message.trim() && !atts.length) || message.length > 4000)
     throw new HttpsError("invalid-argument", "Message vide ou trop long.");
   let content;
-  try { content = userContent(message, attachment); } catch (e) { throw new HttpsError("invalid-argument", e.message); }
-  const shown = (message.trim() || "") + (attachment ? `${message.trim() ? " " : ""}[${attachment.media_type === "application/pdf" ? "PDF joint" : "photo jointe"}]` : "");
+  try { content = userContent(message, atts); } catch (e) { throw new HttpsError("invalid-argument", e.message); }
+  const nPdf = atts.filter(a => a.media_type === "application/pdf").length, nImg = atts.length - nPdf;
+  const tag = [nImg ? (nImg > 1 ? `${nImg} photos jointes` : "photo jointe") : "", nPdf ? (nPdf > 1 ? `${nPdf} PDF joints` : "PDF joint") : ""].filter(Boolean).join(", ");
+  const shown = (message.trim() + (tag ? `${message.trim() ? " " : ""}[${tag}]` : "")).trim();
 
   // Garde-fou : nombre de messages par jour
   const today = new Date().toISOString().slice(0, 10);
@@ -44,20 +52,56 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
     tx.set(ref, { day: today, count: count + 1 }, { merge: true });
   });
 
-  const past = reset ? [] : ((await chatRef.get()).data()?.messages || []);
-  const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content }];
-  const exec = makeTools(db, { qcats: QCATS });
-  const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
+  const chatDoc = reset ? {} : ((await chatRef.get()).data() || {});
+  const past = chatDoc.messages || [];
+  // La section ouverte va dans le message (pas dans les consignes) : les consignes restent identiques et en cache.
+  const where = `[Section ouverte : ${String(view || "Accueil").slice(0, 60)}]`;
+  const withView = typeof content === "string" ? `${where} ${content}` : [...content.slice(0, -1), { ...content.at(-1), text: `${where} ${content.at(-1).text}` }];
+  const messages = [...past.slice(-HISTORY).map(m => ({ role: m.role, content: m.text || "…" })), { role: "user", content: withView }];
+  // Miniatures envoyées par l'app (480 px) : le coach peut garder une photo comme inspiration (noter_inspiration)
+  // Photos jointes à ce message, sinon celles du dernier message avec photo (24 h) : le coach décrit d'abord
+  // la photo, demande « c'est bien ça ? », et l'enregistre au message suivant (« Oui ! »), qui n'a plus la photo.
+  const fresh = atts.map(a => (typeof a.thumb === "string" && a.thumb.length < 400_000 ? a.thumb : null));
+  const pending = chatDoc.pendingThumbs && Date.now() - (chatDoc.pendingThumbs.at || 0) < 24 * 3600_000 ? chatDoc.pendingThumbs.list || [] : [];
+  const thumbs = fresh.some(Boolean) ? fresh : pending;
+  const names = coupleNames((await db.doc("meta/settings").get()).data() || {});
+  const me = PARTNER[email] === "claire" ? names.p1 : PARTNER[email] === "julien" ? names.p2 : "";
+  const exec = makeTools(db, { qcats: QCATS, thumbs, author: me });
+  const system = systemPrompt({ prenom: me || "l'un des mariés", couple: names, today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
-  const { text, actions } = await converse({ client, model: MODEL, system, tools: TOOL_DEFS, messages, exec, effort: mode === "brief" ? "medium" : "low" });
+  const feature = mode === "brief" ? "brief" : "coach";
+  const ia = (await db.doc("meta/ia").get()).data() || {};
+  const prof = profileFor(ia, feature);
+  // Internet : « off » (jamais), « ask » (le coach demande, l'app autorise une recherche à la fois, défaut), « libre »
+  const webMode = ["off", "ask", "libre"].includes(ia.web) ? ia.web : "ask";
+  const webOn = webMode === "libre" || (webMode === "ask" && web === true);
+  const tools = [...TOOL_DEFS.filter(t => t.name !== "demander_recherche_web" || (webMode === "ask" && !webOn)),
+    ...(webOn ? [{ type: "web_search_20260209", name: "web_search", max_uses: 3 }] : [])];
+  let text, actions, sources;
+  try { ({ text, actions, sources } = await converse({ client, model: MODEL || prof.model, system, tools, messages, exec, effort: prof.effort,
+    onUsage: res => recordUsage(db, FieldValue.increment, feature, res) })); }
+  catch (e) { throw claudeError(e); }
 
   // On garde de quoi annuler les 10 derniers messages ; au-delà, seulement le libellé des actions (taille du document).
-  const history = [...past, { role: "user", text: shown, at: Date.now() }, { role: "assistant", text, actions, at: Date.now() }].slice(-60)
+  const history = [...past, { role: "user", text: shown, at: Date.now() }, { role: "assistant", text, actions, ...(sources?.length ? { sources } : {}), at: Date.now() }].slice(-60)
     .map((m, i, arr) => (i < arr.length - 10 && m.actions ? { ...m, actions: m.actions.map(({ label, undone }) => ({ label, ...(undone ? { undone } : {}) })) } : m));
-  await chatRef.set({ messages: history, mode, updatedAt: Date.now() });
-  return { text, actions };
+  await chatRef.set({ messages: history, mode, updatedAt: Date.now(),
+    pendingThumbs: fresh.some(Boolean) ? { list: fresh, at: Date.now() } : pending.length ? chatDoc.pendingThumbs : null });
+  return { text, actions, sources };
 });
+
+/** Erreur de l'API Claude → message clair dans l'app (au lieu de « Le coach ne répond pas »). */
+export function claudeError(e) {
+  if (e instanceof HttpsError) return e;
+  const msg = String(e?.error?.error?.message || e?.message || "");
+  console.error("[assistant] Claude :", e?.status, msg);
+  if (/credit balance/i.test(msg)) return new HttpsError("failed-precondition", "Le crédit Claude est épuisé : rechargez-le sur console.anthropic.com (Plans & Billing), puis réessayez.");
+  if (e?.status === 401) return new HttpsError("failed-precondition", "La clé Claude n'est plus valide : recréez-la sur console.anthropic.com et mettez à jour le secret GitHub ANTHROPIC_API_KEY.");
+  if (e?.status === 429) return new HttpsError("resource-exhausted", "Trop de demandes envoyées à Claude en peu de temps : réessayez dans une minute.");
+  if (e?.status === 529 || e?.status >= 500) return new HttpsError("unavailable", "Claude est surchargé en ce moment : réessayez dans quelques minutes.");
+  return new HttpsError("internal", "Le coach a rencontré une erreur : " + msg.slice(0, 200));
+}
 
 // Agents (mails, analyse, synthèse, point du lundi, relances) : réveil par Google Cloud Scheduler toutes les 10 minutes.
 // Chaque agent décide lui-même s'il a du travail (planning, demande depuis l'app) : la plupart des passages ne font rien.
@@ -69,3 +113,15 @@ export const agents = onSchedule(
     const failed = await runAll({});
     if (failed) console.error("[agents] au moins un agent a échoué (voir les lignes ci-dessus)");
   });
+
+// Lancement immédiat depuis l'app (« Demander une analyse », « Lire la boîte », point de la semaine, notes de visite),
+// sans attendre le prochain réveil. Un verrou (agents/lib/lock.js) évite les doubles passages.
+export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstances: 2 }, async req => {
+  const email = String(req.auth?.token?.email || "").toLowerCase();
+  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
+  const job = req.data?.job;
+  if (!["mail", "analyse", "hebdo", "briefs", "pinterest"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
+  const { runAll } = await import("./agents/main.js");
+  const failed = await runAll({ forced: job });
+  return { ok: !failed };
+});

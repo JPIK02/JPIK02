@@ -1,19 +1,23 @@
-import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant} from "./firebase.js";
+// Polices Lamaelle hébergées avec l'app (pas de Google Fonts : RGPD) : Jost pour l'interface, Cormorant Garamond italique pour les accroches
+import "@fontsource/jost/300.css";import "@fontsource/jost/400.css";import "@fontsource/jost/500.css";import "@fontsource/jost/600.css";
+import "@fontsource/cormorant-garamond/400-italic.css";import "@fontsource/cormorant-garamond/500-italic.css";
+import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
 import {QCATS} from "./questions.js";
+import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
 const setHTML=(el,h)=>{if(el&&el._h!==h){el._h=h;el.innerHTML=h}};
 
 
 /* ---------- Constants ---------- */
-// Navigation : 4 sections principales (Coach, Planning, Prestataires, Invités) ; Agenda et Plan de table
-// sont des sous-onglets de Planning et d'Invités ; le reste est dans « Plus ».
+// Navigation : 4 sections principales (Coach, Planning, Prestataires, Nos envies) ; Agenda et Plan de table
+// sont des sous-onglets de Planning et d'Invités ; le reste (dont Invités) est dans « Plus ».
 const VIEWS=[
-  ["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["invites","Invités"],
-  ["budget","Budget"],["jour-j","Jour J"],["envies","Nos envies"],["assistant","E-mails"],["reglages","Réglages"]
+  ["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["envies","Nos envies"],
+  ["invites","Invités"],["budget","Budget"],["jour-j","Jour J"],["assistant","E-mails"],["reglages","Réglages"]
 ];
-const VIEW_NAMES=Object.assign(Object.fromEntries(VIEWS),{agenda:"Agenda",tables:"Plan de table"});
-const PARENT_VIEW={agenda:"planning",tables:"invites"};
+const VIEW_NAMES=Object.assign(Object.fromEntries(VIEWS),{agenda:"Agenda",tables:"Plan de table","reglages-ia":"Agents IA"});
+const PARENT_VIEW={agenda:"planning",tables:"invites","reglages-ia":"reglages"};
 const subnav=(items)=>`<div class="seg subnav" role="tablist">${items.map(([k,l])=>`<button role="tab" data-go="${k}" aria-selected="${S.view===k}" aria-pressed="${S.view===k}">${l}</button>`).join("")}</div>`;
 const JOBS={
   mail:{label:"Lecture de la boîte mail",intro:"L'assistant lit les nouveaux mails et prépare des propositions à valider.",def:{enabled:true,mode:"daily",h1:7,h2:19,day:1}},
@@ -21,9 +25,14 @@ const JOBS={
 };
 const JOURS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
 const MODES=[["hourly","Toutes les heures"],["daily","1 fois par jour"],["twice","2 fois par jour"],["weekly","1 fois par semaine"]];
-const OWNERS={claire:"Claire",julien:"Julien",deux:"Les deux"};
+/* Prénoms du couple : saisis dans Réglages (meta/settings.prenom1 et prenom2), jamais écrits dans le code.
+   Les emplacements internes restent "claire" (partenaire 1) et "julien" (partenaire 2) : ce sont des clés de données. */
+const P1=()=>String(S.settings&&S.settings.prenom1||"").trim()||"Partenaire 1";
+const P2=()=>String(S.settings&&S.settings.prenom2||"").trim()||"Partenaire 2";
+const COUPLE=(sep=" et ")=>`${P1()}${sep}${P2()}`;
+const OWNERS={get claire(){return P1()},get julien(){return P2()},deux:"Les deux"};
 const STATUS={todo:"À faire",doing:"En cours",done:"Fait"};
-const SIDES={claire:"Claire",julien:"Julien",commun:"Commun"};
+const SIDES={get claire(){return P1()},get julien(){return P2()},commun:"Commun"};
 const RSVP={attente:"En attente",oui:"Présent",non:"Absent"};
 const RSVP_CLS={attente:"warn",oui:"ok",non:"bad"};
 const VSTAT={repere:"Repéré",contacte:"Contacté",devis:"Devis reçu",reserve:"Réservé",ecarte:"Écarté"};
@@ -51,10 +60,10 @@ const PHASES=[
 const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 
 /* ---------- State ---------- */
-const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief"];
+const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -132,8 +141,9 @@ function alerts(){
 }
 const alertRow=a=>`<button class="alert ${a.lvl}" ${a.fiche?`data-fiche="${a.fiche}"`:a.edit?`data-edit="rdv" data-id="${a.edit}"`:`data-go="${a.go}"`}><span class="adot" aria-hidden="true"></span><span class="atx"><b>${esc(a.t)}</b><span>${esc(a.s)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
 /* ---------- Le coach à l'accueil : réponses rapides en un toucher ---------- */
-const PRENOMS={"julienpicquet@gmail.com":"Julien","duquesne.claire@yahoo.fr":"Claire","claiire.duquesne59@gmail.com":"Claire"};
-const prenom=()=>PRENOMS[String(S.user&&S.user.email||"").toLowerCase()]||"";
+// Quel partenaire est connecté (compte → emplacement) ; le prénom vient des réglages
+const PARTNER={"julienpicquet@gmail.com":"julien","duquesne.claire@yahoo.fr":"claire","claiire.duquesne59@gmail.com":"claire"};
+const prenom=()=>{const k=PARTNER[String(S.user&&S.user.email||"").toLowerCase()];return k==="claire"?P1():k==="julien"?P2():""};
 const SPARK='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg>';
 function qrFor(a){
   const v=a.v;
@@ -161,7 +171,7 @@ function visitsToTell(){
 }
 function coupleAvatar(){
   const ph=S.photo&&S.photo.data;
-  return `<button class="ch-photo ${ph?"has":""}" data-act="couplephoto" aria-label="${ph?"Changer la photo du couple":"Ajouter une photo du couple"}" ${S.canWrite?"":"disabled"}>${ph?`<img src="data:image/jpeg;base64,${ph}" alt="Claire et Julien">`:`<span>C&amp;J</span><i aria-hidden="true">+</i>`}</button>`;
+  return `<button class="ch-photo ${ph?"has":""}" data-act="couplephoto" aria-label="${ph?"Changer la photo du couple":"Ajouter une photo du couple"}" ${S.canWrite?"":"disabled"}>${ph?`<img src="data:image/jpeg;base64,${ph}" alt="${esc(COUPLE())}">`:`<span>${esc(P1().charAt(0))}&amp;${esc(P2().charAt(0))}</span><i aria-hidden="true">+</i>`}</button>`;
 }
 // Une carte « point du jour » : titre, une phrase, UN bouton principal ; les autres options à la demande
 function dayCard(id,lvl,title,text,qr){
@@ -196,7 +206,7 @@ async function runQr(dd){
   if(k==="chat")return openChat();
   if(k==="chatbrief")return openChat("brief");
   if(k==="compare"){const [cat,id]=[rest[0],rest[1]];return openCompare(cat,id)}
-  if(k==="hebdo"){if(await mergeDoc("meta/hebdo",{requestedAt:Date.now()}))toast("Le coach prépare votre point : il arrive d'ici 15 minutes");return}
+  if(k==="hebdo"){if(await mergeDoc("meta/hebdo",{requestedAt:Date.now()})){kick("hebdo");toast("Le coach prépare votre point : il arrive dans une minute environ")}return}
   if(!S.canWrite)return;
   if(k==="vstatus"){const [id,st]=rest,v=S.vendors.find(x=>x.id===id);if(!v)return;const prev=v.status;if(await patch("vendors",id,{status:st}))toastUndo(`${v.name} : ${VSTAT[st]}`,()=>patch("vendors",id,{status:prev}));return}
   if(k==="budgetset"){const [id,amt]=rest,b=S.budget.find(x=>x.id===id);if(!b)return;const prev=b.prevu??null;if(await patch("budget",id,{prevu:num(amt)}))toastUndo(`${b.label} : enveloppe à ${eur(num(amt))}`,()=>patch("budget",id,{prevu:prev}));return}
@@ -263,6 +273,8 @@ function renderHero(){
   if(st.mairie)sub.push(`<span>Mairie de ${esc(st.mairie)}</span>`);
   if(!sub.length)sub.push(`<span>${S.mode==="live"?"Date et lieu à renseigner dans Réglages":"Notre mariage"}</span>`);
   setHTML(document.getElementById("hero-sub"),sub.join(""));
+  // prénoms du couple, depuis les réglages (rien avant la connexion)
+  setHTML(document.getElementById("names"),S.mode==="live"||S.mode==="demo"?`${esc(P1())}<span class="amp">&amp;</span>${esc(P2())}`:"");
   const c=document.getElementById("count");
   if(d){
     const n=days(today(),d);
@@ -276,8 +288,8 @@ function renderHero(){
   const fill=ci/PHASES.length*100+1;
   setHTML(fr,`<div class="fr-track" role="list" aria-label="Étapes de la préparation"><div class="fr-fill" style="width:${Math.min(100,fill).toFixed(1)}%"></div>${PHASES.map((p,i)=>`<div class="fr-step ${i<ci?"past":i===ci?"now":""}" role="listitem"><span class="fr-dot"></span><span class="fr-lab">${p.short}${i===ci?" · en cours":""}</span></div>`).join("")}</div>`);
 }
-const ICON={coach:'<path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/>',apercu:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',prestataires:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',plus:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'};
-const BNAV=[["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["invites","Invités"]];
+const ICON={envies:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',coach:'<path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/>',apercu:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',prestataires:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',plus:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'};
+const BNAV=[["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["envies","Nos envies"]];
 function renderBnav(){
   const late=S.tasks.filter(isLate).length,sug=pendingSugs().length;
   const cur=PARENT_VIEW[S.view]||S.view,inMain=BNAV.some(b=>b[0]===cur);
@@ -333,7 +345,7 @@ function vApercu(){
   const d=wDate(),cur=currentPhase();
 
   const kpis=`
-    <div class="kpi t1 c3">${ring(S.tasks.length?done/S.tasks.length:0,"var(--accent)")}<div><div class="k">Préparation</div><div class="v num">${done}<small>/ ${S.tasks.length} tâches</small></div><div class="s">${late.length?`<span class="over">${late.length} en retard</span>`:"Rien en retard"}</div></div></div>
+    <div class="kpi t1 c3">${ring(S.tasks.length?done/S.tasks.length:0,"var(--coral-ui)")}<div><div class="k">Préparation</div><div class="v num">${done}<small>/ ${S.tasks.length} tâches</small></div><div class="s">${late.length?`<span class="over">${late.length} en retard</span>`:"Rien en retard"}</div></div></div>
     <div class="kpi t2 c3">${ring(g.length?yes/g.length:0,"var(--julien)")}<div><div class="k">Invités</div><div class="v num">${yes}<small>/ ${g.length} présents</small></div><div class="s">${wait} réponse${wait>1?"s":""} attendue${wait>1?"s":""}</div></div></div>
     <div class="kpi t3 c3">${ring(ref?engage/ref:0,"var(--gold)")}<div><div class="k">Budget engagé</div><div class="v num">${eur(engage)}</div><div class="s">${ref?"sur "+eur(ref)+(tot?"":" prévus"):"Budget à fixer"}</div></div></div>
     <div class="kpi t4 c3">${ring(keyRes/KEY_VCATS.length,"var(--ok)")}<div><div class="k">Prestataires clés</div><div class="v num">${keyRes}<small>/ ${KEY_VCATS.length} réservés</small></div><div class="s">${KEY_VCATS.filter(c=>!S.vendors.some(v=>v.cat===c&&v.status==="reserve")).slice(0,2).join(", ")||"Tout est réservé"}</div></div></div>`;
@@ -371,7 +383,7 @@ function vApercu(){
   const cnt=k=>open.filter(t=>(t.owner||"deux")===k).length,lateOf=k=>late.filter(t=>(t.owner||"deux")===k).length;
   const mx=Math.max(1,cnt("claire"),cnt("julien"),cnt("deux"));
   const whoH=`<div class="panel c4"><div class="panel-h"><h3>Qui fait quoi</h3><span class="chip num">${open.length} ouvertes</span></div>
-    <div class="who">${[["claire","Claire","var(--claire)"],["julien","Julien","var(--julien)"],["deux","Ensemble","var(--muted)"]].map(([k,l,c])=>`<button class="who-row" data-who="${k}" style="background:none;border:0;padding:0;cursor:pointer;text-align:left"><span style="font-weight:600">${l}</span><span class="hb-track"><i style="width:${cnt(k)/mx*100}%;background:${c}"></i></span><span class="num" style="font-size:13px;color:var(--muted)">${cnt(k)}${lateOf(k)?` · <span class="over">${lateOf(k)} en retard</span>`:""}</span></button>`).join("")}</div>
+    <div class="who">${[["claire",P1(),"var(--claire)"],["julien",P2(),"var(--julien)"],["deux","Ensemble","var(--muted)"]].map(([k,l,c])=>`<button class="who-row" data-who="${k}" style="background:none;border:0;padding:0;cursor:pointer;text-align:left"><span style="font-weight:600">${l}</span><span class="hb-track"><i style="width:${cnt(k)/mx*100}%;background:${c}"></i></span><span class="num" style="font-size:13px;color:var(--muted)">${cnt(k)}${lateOf(k)?` · <span class="over">${lateOf(k)} en retard</span>`:""}</span></button>`).join("")}</div>
     <div class="mini"><div><b class="num">${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length}</b><span>couverts</span></div><div><b class="num">${g.filter(x=>x.rsvp!=="non"&&x.regime).length}</b><span>régimes</span></div><div><b class="num">${g.filter(x=>x.enfant&&x.rsvp!=="non").length}</b><span>enfants</span></div></div></div>`;
 
   const lines=S.budget.filter(b=>num(b.prevu)||num(b.engage)).sort((a,b)=>Math.max(num(b.prevu),num(b.engage))-Math.max(num(a.prevu),num(a.engage))).slice(0,6);
@@ -380,7 +392,7 @@ function vApercu(){
   const perGuest=guestsBase?(engage||prevu)/guestsBase:0;
   const budH=`<div class="panel c7"><div class="panel-h"><h3>Budget par poste</h3><button class="link" data-go="budget">Détail</button></div>
     ${lines.length?`<div class="hbars">${lines.map(b=>{const p=num(b.prevu),e=num(b.engage),ov=p&&e>p;return `<div class="hb-row"><span class="lab">${esc(b.label)}</span><span class="amt num">${e?eur(e):"—"} / ${p?eur(p):"—"}</span><div class="hb-track"><i class="plan" style="width:${p/bmx*100}%"></i><i class="eng ${ov?"over":""}" style="width:${e/bmx*100}%"></i></div></div>`}).join("")}</div>
-      <div class="legend"><span><i style="background:var(--accent)"></i>Engagé</span><span><i style="border:1.5px solid var(--accent)"></i>Prévu</span><span><i style="background:var(--bad)"></i>Dépassement</span></div>`
+      <div class="legend"><span><i style="background:var(--coral-ui)"></i>Engagé</span><span><i style="border:1.5px solid var(--accent)"></i>Prévu</span><span><i style="background:var(--bad)"></i>Dépassement</span></div>`
     :`<div class="empty" style="padding:14px 0">Renseignez les montants prévus dans Budget pour voir la répartition.</div>`}
     <div class="mini"><div><b class="num">${eur(paye)}</b><span>déjà payé</span></div><div><b class="num">${eur(Math.max(0,engage-paye))}</b><span>reste à payer</span></div><div><b class="num">${perGuest?eur(perGuest):"—"}</b><span>par invité</span></div></div></div>`;
 
@@ -428,7 +440,7 @@ function vPlanning(){
   return `${subnav([["planning","Tâches"],["agenda","Agenda"]])}<div class="vh"><div><h2>Rétroplanning</h2><p>${d?"Les échéances se calculent à partir de la date du mariage. Une échéance précise sur une tâche prend le dessus.":"Fixez la date dans Réglages pour voir les échéances."}</p></div>
     <button class="btn primary" data-new="tasks" ${S.canWrite?"":"disabled"}>Ajouter une tâche</button></div>
   <div class="filters">
-    <div class="seg" role="group" aria-label="Filtrer par personne">${[["all","Tout"],["claire","Claire"],["julien","Julien"],["deux","Ensemble"]].map(([k,l])=>`<button data-f="owner" data-v="${k}" aria-pressed="${f.owner===k}">${l}</button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="Filtrer par personne">${[["all","Tout"],["claire",P1()],["julien",P2()],["deux","Ensemble"]].map(([k,l])=>`<button data-f="owner" data-v="${k}" aria-pressed="${f.owner===k}">${l}</button>`).join("")}</div>
     <label class="toggle"><input type="checkbox" id="hide-done" ${f.hideDone?"checked":""}> Masquer les tâches faites</label>
   </div>
   ${dupH}${groups||emptyBlock("Aucune tâche pour l'instant","Ajoutez la première avec le bouton ci-dessus.")}`;
@@ -455,7 +467,7 @@ function vBudget(){
   const marge=tot?tot-Math.max(prevu,engage):null;
   const resv=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
   const strip=`<div class="strip">
-    <div class="kpi t1"><div><div class="k">Budget total</div><div class="v num">${tot?eur(tot):"—"}</div><div class="s">${tot?"Fixé dans Réglages":`<button class="chip acc" data-go="reglages">Le fixer</button>`}</div></div></div>
+    <div class="kpi t1"><div><div class="k">Budget total</div><div class="v num">${tot?eur(tot):"—"}</div><div class="s">${S.canWrite?`<button class="chip acc" data-act="budgettot">${tot?"Modifier":"Le fixer"}</button>`:""}</div></div></div>
     <div class="kpi t2"><div><div class="k">Prévu</div><div class="v num">${eur(prevu)}</div><div class="s">Somme des postes</div></div></div>
     <div class="kpi t3"><div><div class="k">Engagé</div><div class="v num">${eur(engage)}</div><div class="s">Payé ${eur(paye)} · reste ${eur(Math.max(0,engage-paye))}</div></div></div>
     <div class="kpi ${marge!==null&&marge<0?"":"t4"}" style="${marge!==null&&marge<0?"background:var(--bad-soft)":""}"><div><div class="k">Marge</div><div class="v num" style="${marge!==null&&marge<0?"color:var(--bad)":""}">${marge===null?"—":eur(marge)}</div><div class="s">${marge===null?"Selon le budget total":marge<0?"Au-dessus du budget":"Encore disponible"}</div></div></div>
@@ -512,7 +524,7 @@ function vInvites(){
     <div class="kpi t1"><div><div class="k">Invités</div><div class="v num">${g.length}${cible?`<small>/ ${cible} visés</small>`:""}</div><div class="s">${g.filter(x=>x.enfant).length} enfants</div></div></div>
     <div class="kpi t4"><div><div class="k">Présents</div><div class="v num">${yes}</div><div class="s">${g.length-yes-no} réponses attendues · ${no} absents</div></div></div>
     <div class="kpi t3"><div><div class="k">Au dîner</div><div class="v num">${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length}</div><div class="s">Présents et en attente</div></div></div>
-    <div class="kpi t2"><div><div class="k">Claire · Julien · Commun</div><div class="v num" style="font-size:26px">${g.filter(x=>x.side==="claire").length} · ${g.filter(x=>x.side==="julien").length} · ${g.filter(x=>x.side==="commun"||!x.side).length}</div><div class="s">Répartition par côté</div></div></div>
+    <div class="kpi t2"><div><div class="k">${esc(P1())} · ${esc(P2())} · Commun</div><div class="v num" style="font-size:26px">${g.filter(x=>x.side==="claire").length} · ${g.filter(x=>x.side==="julien").length} · ${g.filter(x=>x.side==="commun"||!x.side).length}</div><div class="s">Répartition par côté</div></div></div>
   </div>`;
   return `${subnav([["invites","Liste"],["tables","Plan de table"]])}<div class="vh"><div><h2>Invités</h2><p>Touchez la réponse d'un invité pour la changer. « Ranger » classe plusieurs invités d'un coup par groupe ou par côté.</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${g.length&&S.canWrite?`<button class="btn" data-act="gselstart" aria-pressed="${S.selMode}">Ranger</button>`:""}<button class="btn primary" data-new="guests" ${S.canWrite?"":"disabled"}>Ajouter</button></div></div>
@@ -565,7 +577,7 @@ const fitBadge=(v,big)=>{const f=v.fit;return f&&f.score!=null?`<div class="fit 
 /* ---------- Planning des agents ----------
    Les agents tournent dans GitHub Actions (agents/, .github/workflows/agents.yml), toutes les 10 minutes.
    À chaque passage, agents/scheduler.js lit meta/planning et décide si l'agent est dû.
-   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : pris en compte au prochain passage (10 à 15 min). */
+   « Maintenant » = on pose requestedAt dans meta/agent ou meta/analyse : lancé tout de suite par la fonction runAgent (repli : prochain réveil, 10 min). */
 const hh=(h)=>`${h}h`;
 function planOf(k){return Object.assign({},JOBS[k].def,S.planning[k]||{})}
 function planLabel(k){
@@ -581,8 +593,10 @@ async function runNow(k){
   if(!S.canWrite)return;
   const [path,cur]=metaOf(k);
   const ok=await setDoc(path,cur,k==="analyse"?{requestedAt:Date.now(),status:"demandée"}:{requestedAt:Date.now()});
-  if(ok)toast(k==="mail"?"Demande enregistrée : lecture dans les 10 à 15 minutes":"Analyse demandée : elle démarre dans les 10 à 15 minutes");
+  if(ok){kick(k);toast(k==="mail"?"Lecture de la boîte lancée : propositions dans 1 à 2 minutes":"Analyse lancée : résultats dans 2 à 3 minutes")}
 }
+// Lancement immédiat côté serveur ; si l'appel échoue, la demande enregistrée est prise au prochain réveil (10 min).
+function kick(job){runAgentNow(job).catch(e=>console.warn("[agents] lancement immédiat impossible, prochain réveil :",e&&e.message))}
 async function savePlan(k,form){
   const fd=new FormData(form);
   const p={enabled:fd.get("enabled")==="on",mode:fd.get("mode")||"daily",h1:+fd.get("h1"),h2:+fd.get("h2"),day:+fd.get("day")};
@@ -607,20 +621,28 @@ function planForm(k){
       <div class="field only-twice"><label for="p-${k}-h2">Deuxième passage</label>${hours("h2",p.h2)}</div>
       <div class="field only-weekly"><label for="p-${k}-day">Jour</label><select name="day" id="p-${k}-day" ${dis}>${[1,2,3,4,5,6,0].map(d=>`<option value="${d}" ${d===p.day?"selected":""}>${JOURS[d]}</option>`).join("")}</select></div>
     </div>
-    <div class="plan-acts"><button class="btn primary" type="submit" ${dis}>Enregistrer le planning</button><button class="btn" type="button" data-act="runnow" data-job="${k}" ${dis}>${k==="mail"?"Lire la boîte au prochain passage":"Lancer l'analyse au prochain passage"}</button></div>
+    <div class="plan-acts"><button class="btn primary" type="submit" ${dis}>Enregistrer le planning</button><button class="btn" type="button" data-act="runnow" data-job="${k}" ${dis||(agentBusy(k)?"disabled":"")}>${busyLabel(k)||(k==="mail"?"Lire la boîte maintenant":"Lancer l'analyse maintenant")}</button></div>
   </form>`;
 }
 async function fireAnalysis(){return runNow("analyse")}
+/** « en cours » (verrou posé par l'agent), « demandée » (bouton touché, passage pas encore fini) ou null */
+function agentBusy(k){
+  const now=Date.now(),m=k==="mail"?S.agent:S.analyse;
+  if((S.locks[k]||0)>now||(k==="analyse"&&m.status==="en cours"&&now-(m.requestedAt||0)<30*60000))return "en cours";
+  if(m.requestedAt&&m.requestedAt>(m.lastRunAt||0)&&now-m.requestedAt<30*60000)return "demandée";
+  return null;
+}
+const busyLabel=k=>{const b=agentBusy(k);return b==="en cours"?(k==="mail"?"Lecture en cours…":"Analyse en cours…"):b?(k==="mail"?"Lecture demandée…":"Analyse demandée…"):null};
 function analyseBar(ctx){
-  const a=S.analyse||{},st=a.status;
+  const a=S.analyse||{},st=agentBusy("analyse")||(a.status==="en cours"||a.status==="demandée"?null:a.status);
   const last=a.lastRun?new Date(a.lastRun):null;
   const label=st==="en cours"?"Analyse en cours…":st==="demandée"?"Analyse demandée":last?"Dernière analyse "+relDay(last)+" à "+last.toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"}):"Aucune analyse pour l'instant";
   const todo=S.vendors.filter(v=>v.status!=="ecarte"&&!(v.fit&&v.fit.score!=null)).length;
   const profilPending=ctx==="envies"&&(a.profilRequestedAt||0)>(S.profil.updatedAt||0);
   return `<div class="ai-bar"><div style="min-width:0"><b>${ctx==="envies"?"Synthèse du coach":"Analyse IA des prestataires"}</b>
-    <p>${esc(label)}${ctx!=="envies"&&todo?` · ${todo} prestataire${todo>1?"s":""} à analyser`:""}. ${ctx==="envies"?"L'agent relit vos réponses, repère vos priorités et les points où vous n'êtes pas alignés.":"L'agent cherche les avis en ligne, croise chaque offre avec vos envies et attribue une note de fit sur 100."} Passage automatique ${esc(planLabel("analyse"))}.</p></div>
+    <p>${esc(label)}${ctx!=="envies"&&todo?` · ${todo} prestataire${todo>1?"s":""} à analyser`:""}. ${ctx==="envies"?"L'agent relit vos réponses, repère vos priorités et les points où vous n'êtes pas alignés.":"L'agent cherche les avis en ligne, croise chaque offre avec vos envies et attribue une note de fit sur 100. Il ne refait que les fiches nouvelles ou modifiées (ou toutes si vos envies ont changé)."} Passage automatique ${esc(planLabel("analyse"))}.</p></div>
     ${profilPending?`<p class="ai-pending">Vos réponses ont changé : la synthèse se met à jour toute seule, environ 15 minutes après votre dernière modification.</p>`:""}
-    <button class="btn primary" data-act="fire" ${S.canWrite&&st!=="en cours"?"":"disabled"}>Demander une analyse</button></div>`;
+    <div class="ai-acts"><button class="btn primary" data-act="fire" ${S.canWrite&&!agentBusy("analyse")?"":"disabled"}>${busyLabel("analyse")||"Demander une analyse"}</button>${ctx!=="envies"&&S.canWrite&&!agentBusy("analyse")?`<button class="link" data-act="fireall">Tout réanalyser</button>`:""}</div></div>`;
 }
 
 /* ---------- Annuaire ---------- */
@@ -700,6 +722,33 @@ function cmpBody(pool){
   ].join("")+`</div><div class="cmp-foot">${vs.map(v=>`<button class="btn sm" data-fiche="${v.id}">Fiche ${esc(v.name.length>18?v.name.slice(0,17)+"…":v.name)}</button>`).join("")}</div>
   ${S.canWrite?`<button class="btn primary cmp-ask" data-act="cmpask">Demander l'avis du coach sur ce choix</button>`:""}`;
 }
+/* Devis de la fiche : le dernier en détail (écart avec le précédent, validité, prix par invité, inclus, options,
+   conditions, lien vers le mail), les précédents repliés. Alimenté par l'agent mail (acceptSug) et le coach (enregistrer_devis). */
+function devisSection(v){
+  const list=Array.isArray(v.devis)?v.devis:[];
+  const add=S.canWrite?`<button class="btn sm" data-act="devisadd" data-id="${v.id}">${list.length?"Ajouter un nouveau devis":"Ajouter le devis"}</button>`:"";
+  if(!list.length)return `<div class="fsec"><h4>Devis</h4><p class="plan-when" style="margin:0 0 10px">Aucun devis enregistré. Les devis reçus par mail s'ajoutent ici quand vous les validez ; vous pouvez aussi photographier ou joindre le PDF : le coach le lit et le range sur cette fiche.</p>${add}</div>`;
+  const d=list[0],prev=list[1],t=today();
+  const delta=prev&&num(prev.montant)?num(d.montant)-num(prev.montant):null;
+  const val=d.validite?pd(d.validite):null,left=val?days(t,val):null;
+  const valChip=val?(left<0?`<span class="chip bad">Expiré le ${fmtD(val)}</span>`:left<=14?`<span class="chip warn">Valable jusqu'au ${fmtD(val)}</span>`:`<span class="chip">Valable jusqu'au ${fmtD(val)}</span>`):"";
+  const kv=[["Acompte",num(d.acompte)?eur(d.acompte)+(d.dateAcompte?" avant le "+fmtD(pd(d.dateAcompte)):""):""],["Solde",d.dateSolde?"avant le "+fmtD(pd(d.dateSolde)):""],
+    ["Invités prévus",d.invites?String(d.invites):""],["Par invité",d.invites&&num(d.montant)?"≈ "+eur(Math.round(num(d.montant)/d.invites)):""]].filter(x=>x[1]);
+  const src=d.source==="mail"?"reçu par mail":d.source==="coach"?`ajouté avec le coach${d.par?" par "+esc(d.par):""}`:"";
+  const mail=d.mailUrl&&/^https:\/\/mail\.google\.com\//.test(d.mailUrl)?`<a class="link" href="${esc(d.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail${d.fichier?" et le devis joint":""}</a>`:d.fichier?`<span class="plan-when" style="margin:0">Fichier : ${esc(d.fichier)}</span>`:"";
+  return `<div class="fsec devis"><h4>Devis${list.length>1?` · ${list.length} versions`:""}</h4>
+    <div class="devis-card"><div class="devis-top"><div><b class="num devis-m">${eur(d.montant)}</b>${delta!=null&&delta!==0?`<span class="devis-d ${delta<0?"ok":"bad"}">${delta<0?"−":"+"}${eur(Math.abs(delta))} vs devis précédent</span>`:""}</div>${valChip}</div>
+      <p class="devis-src">Devis du ${fmtD(pd(d.recuLe))}${src?` · ${src}`:""}</p>
+      ${d.resume?`<p class="devis-r">${esc(d.resume)}</p>`:""}
+      ${kv.length?`<div class="kv">${kv.map(([k,x])=>`<div><span>${k}</span><b>${esc(x)}</b></div>`).join("")}</div>`:""}
+      ${d.inclus&&d.inclus.length?`<h5>Inclus</h5><ul class="blist">${d.inclus.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}
+      ${d.options&&d.options.length?`<h5>Options</h5><ul class="blist">${d.options.map(o=>`<li>${esc(o.label)}${num(o.prix)?` · <b class="num">${eur(o.prix)}</b>`:""}</li>`).join("")}</ul>`:""}
+      ${d.conditions?`<h5>Conditions</h5><p class="devis-r">${esc(d.conditions)}</p>`:""}
+      ${mail}</div>
+    ${list.length>1?`<details class="devis-old"><summary>Devis précédents (${list.length-1})</summary>${list.slice(1).map((x,i)=>{const nx=list[i+2],dd=nx&&num(nx.montant)?num(x.montant)-num(nx.montant):null;
+      return `<div class="hb-row"><span class="lab">${fmtD(pd(x.recuLe))}${x.source==="mail"?" · mail":""}${x.resume?` — ${esc(x.resume.slice(0,90))}${x.resume.length>90?"…":""}`:""}</span><span class="amt num">${eur(x.montant)}${dd?` <small class="${dd<0?"ok":"bad"}">${dd<0?"−":"+"}${eur(Math.abs(dd))}</small>`:""}</span></div>`}).join("")}</details>`:""}
+    <div style="margin-top:10px">${add}</div></div>`;
+}
 function openFiche(id){
   const v=S.vendors.find(x=>x.id===id);if(!v)return;
   const fi=v.fit||{},av=fi.avis||{};
@@ -713,11 +762,12 @@ function openFiche(id){
     <div class="fiche-top">${fitBadge(v,true)}<div style="min-width:0"><h3>${esc(v.name)}</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">${esc(v.cat||"")}</span><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${fi.confiance?`<span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span>`:""}</div></div></div>
     ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'annuaire, ou attendez le passage de demain matin.${qk&&catProg(qk).p<.5?" Remplissez aussi la partie « "+esc(QC[qk].label)+" » de Nos envies pour une note plus juste.":""}</div>`}
     ${offre.length?`<div class="fsec"><h4>L'offre</h4><div class="kv">${offre.map(([k,val])=>`<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div>${v.note?`<p style="font-size:14px;color:var(--muted);margin:10px 0 0;white-space:pre-line;overflow-wrap:anywhere">${esc(v.note)}</p>`:""}</div>`:""}
+    ${devisSection(v)}
     ${crit}
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
     <div class="fsec"><h4>Notes de visite</h4>${v.visitNotes?`<p class="vnotes">${esc(v.visitNotes)}</p>`:`<p class="plan-when" style="margin:0 0 8px">Après une visite ou un échange, notez vos impressions : l'IA recalcule la note avec ces informations de première main.</p>`}
-      ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (d'ici 15 minutes environ).</p>`:""}
+      ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (1 à 2 minutes).</p>`:""}
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
@@ -726,39 +776,147 @@ function openFiche(id){
 }
 
 /* ---------- Nos envies ---------- */
+function inspGallery(c){
+  const list=S.inspirations.filter(x=>x.cat===c).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if(!list.length&&!S.canWrite)return "";
+  return `<div class="insp"><div class="insp-h"><h3>Inspirations</h3>${S.canWrite?`<button class="btn sm" data-act="inspadd">Montrer une photo au coach</button>`:""}</div>
+    ${list.length?`<div class="insp-grid">${list.map(x=>`<figure><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description)}" loading="lazy"><figcaption>${esc(x.description)}${x.pinUrl?` <a href="${esc(x.pinUrl)}" target="_blank" rel="noopener noreferrer">· Pinterest</a>`:x.by?` <span>· ${esc(x.by)}</span>`:""}</figcaption>${S.canWrite?`<button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button>`:""}</figure>`).join("")}</div>`
+      :`<p class="plan-when" style="margin:0">Une photo vaut mieux qu'un long discours : montrez au coach un lieu, une déco ou une tenue qui vous plaît, il en tirera vos goûts et la gardera ici.</p>`}</div>`;
+}
+/* Briefs prestataires : fil rouge commun + un brief par métier, rédigés par l'agent (meta/briefs), exportés en PDF */
+const BRIEF_LABEL={lieu:"Lieu",traiteur:"Traiteur",photo:"Photographe",video:"Vidéaste",musique:"Musique",fleurs:"Fleurs et déco",tenues:"Tenues",alliances:"Alliances",beaute:"Coiffure et maquillage",papeterie:"Papeterie",transport:"Transport",ceremonie:"Cérémonie",hebergement:"Hébergement",enfants:"Enfants"};
+function briefsState(){
+  const b=S.briefs||{},now=Date.now();
+  const failed=b.status==="erreur"&&(b.failedAt||0)>=(b.requestedAt||0);
+  const running=!failed&&((S.locks.briefs||0)>now||((b.requestedAt||0)>Math.max(b.updatedAt||0,b.failedAt||0)&&now-(b.requestedAt||0)<20*60000));
+  const ready=!!(b.filRouge&&b.categories&&Object.keys(b.categories).length);
+  const lastAnswer=Math.max(0,...S.brief.map(x=>+x.updatedAt||0),...S.inspirations.map(x=>+x.createdAt||0));
+  return {b,running,ready,failed,stale:ready&&lastAnswer>(b.updatedAt||0)};
+}
+function briefsPanel(c){
+  const {b,running,ready,stale,failed}=briefsState(),dis=S.canWrite&&!running?"":"disabled";
+  const one=ready&&b.categories[c];
+  const when=b.updatedAt?new Date(b.updatedAt).toLocaleDateString("fr-FR",{day:"numeric",month:"long"}):"";
+  return `<div class="briefs-p"><div class="panel-h"><h3>Briefs pour les prestataires</h3>${ready?`<span class="chip ${stale?"warn":"ok"}">${stale?"À mettre à jour":"Prêts"}</span>`:""}</div>
+    <p class="plan-when" style="margin:0 0 12px">${running?"Le coach rédige vos briefs : un fil rouge commun puis un brief par prestataire. Environ deux minutes, vous recevrez une notification."
+      :ready?`${esc(b.filRouge.titre||"")}${b.filRouge.titre?" · ":""}rédigés le ${esc(when)}.${stale?" Vos réponses ou vos inspirations ont changé depuis.":""} Le même fil rouge ouvre chaque brief : tous vos prestataires partent de la même vision.`
+      :"Le coach compile vos réponses et vos inspirations en un fil rouge commun (ambiance, palette, matières, ce que vous ne voulez pas), puis en un brief par prestataire, avec les questions à leur poser. À envoyer en PDF avant chaque échange."}</p>
+    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
+      ${failed?`<p class="brief-err">La rédaction a échoué : ${esc(/credit balance/i.test(b.lastError||"")?"le crédit Claude est épuisé (à recharger sur console.anthropic.com).":b.lastError||"erreur inconnue.")} Vous pouvez réessayer.</p>`:""}
+      ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
+}
+const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
+function briefBlocks(k){
+  const b=S.briefs,x=b.categories[k];if(!x)return [];
+  // budget : seulement le « budget cible » que vous avez choisi d'indiquer dans Nos envies (jamais vos lignes de budget)
+  const m=bMeta(k),bud=num(m.budget);
+  const d=wDate(),st=S.settings;
+  const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
+  const imgs=S.inspirations.filter(i=>i.cat===k&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  return [{h2:"Brief · "+BRIEF_LABEL[k]},
+    {kpis:[["Date",d?fmtD(d):"à fixer",""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
+    {p:x.intention},...list("Nos essentiels",x.essentiels),...list("L'ambiance, dans le détail",x.details),...list("Ce que nous ne voulons pas",x.aEviter),
+    ...list("En accord avec nos autres prestataires",x.liens),...list("Nos questions pour vous",x.questions),
+    ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
+}
+function filRougeBlocks(){
+  const f=S.briefs.filRouge||{},list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
+  const imgs=S.inspirations.filter(i=>i.cat==="vision"&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  return [{h2:"Notre fil rouge"},...(f.titre?[{h3:f.titre}]:[]),{p:f.ambiance||""},...(f.motsCles&&f.motsCles.length?[{tags:f.motsCles}]:[]),
+    ...list("Palette",f.palette),...list("Matières et textures",f.matieres),...list("L'expérience de nos invités",f.experience),...list("Ce que nous ne voulons surtout pas",f.aEviter),
+    ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
+}
+function pdfBriefs(k){
+  const b=S.briefs;if(!b||!b.categories)return;
+  if(k==="all"){const ks=Object.keys(BRIEF_LABEL).filter(x=>b.categories[x]);
+    return makePdf(`Briefs prestataires - ${COUPLE()}.pdf`,{docTitle:"Nos briefs prestataires",blocks:[...filRougeBlocks(),...ks.flatMap(x=>[{page:true},...briefBlocks(x)])]})}
+  // le métier d'abord (c'est ce que le prestataire lit en premier), puis notre vision d'ensemble, commune à tous les briefs
+  const fr=filRougeBlocks();fr[0]={h2:"Notre vision d'ensemble (commune à tous nos prestataires)"};
+  makePdf(`Brief ${BRIEF_LABEL[k]} - ${COUPLE()}.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...briefBlocks(k).slice(1),...fr]});
+}
 function vEnvies(){
   const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
-  const chatCta=S.canWrite?`<div class="chat-cta"><div><b>Plus simple : répondez en discutant avec le coach</b><span>Il vous pose les questions une par une et remplit le questionnaire pour vous.</span></div><button class="btn primary" data-act="chat" data-m="brief">Commencer l'entretien</button></div>`:"";
   const pr=S.profil||{};
-  const nav=`<nav class="env-nav" aria-label="Catégories du questionnaire">${QCATS.map(x=>{const p=catProg(x.k);return `<button data-bcat="${x.k}" aria-current="${x.k===c}"><span>${x.label}</span><span class="pbar" title="${p.n}/${p.t}"><i style="width:${p.p*100}%"></i></span></button>`}).join("")}</nav>`;
   const qhtml=cat.qs.map(([id,type,q,opts],i)=>{
-    const a=bGet(c,id),done=answered(a),base=`q-${c}-${id}`;
+    const a=bGet(c,id),done=answered(a),base=`search-q-${c}-${id}`;
     const choix=Array.isArray(a.choix)?a.choix:[];
     const chips=opts?`<div class="opts" role="group" aria-label="${esc(q)}">${opts.map(o=>`<button class="opt" data-bchip="${c}|${id}|${type}" data-o="${esc(o)}" aria-pressed="${choix.includes(o)}" ${dis}>${esc(o)}</button>`).join("")}</div>`:"";
-    const main=`<textarea id="${base}-commun" data-bq="${c}|${id}|commun" placeholder="${opts?"Une précision ?":"Votre réponse commune…"}" ${opts?'style="min-height:44px"':""} ${dis}>${esc(a.commun||"")}</textarea>`;
-    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">Claire</span><textarea id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">Julien</span><textarea id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
+    const main=`<textarea autocomplete="off" name="search_text" id="${base}-commun" data-bq="${c}|${id}|commun" placeholder="${opts?"Une précision ?":"Votre réponse commune…"}" ${opts?'style="min-height:44px"':""} ${dis}>${esc(a.commun||"")}</textarea>`;
+    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">${esc(P1())}</span><textarea autocomplete="off" name="search_text" id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">${esc(P2())}</span><textarea autocomplete="off" name="search_text" id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
     return `<div class="q ${done?"done":""}"><label class="ql" for="${base}-commun"><span class="n">${i+1}.</span><span>${esc(q)}</span></label>${chips}${main}
       <label class="diff"><input type="checkbox" id="${base}-dz" data-bq="${c}|${id}|desaccord" ${a.desaccord?"checked":""} ${dis}> Nos avis diffèrent</label>${duo}</div>`;
   }).join("");
   const metaH=c==="vision"?"":`<div class="q"><div class="ql" style="font-weight:500">Pour conclure sur ${esc(cat.label.toLowerCase())}</div>
     <div class="field"><span class="lab">Importance pour vous</span><div class="seg" role="group">${IMPORT.map((l,i)=>`<button data-bimp="${c}|${i+1}" aria-pressed="${m.importance===i+1}" ${dis}>${l}</button>`).join("")}</div></div>
-    <div class="duo"><div class="field"><label for="q-${c}-_m-budget" class="lab">Budget cible (€)</label><input type="number" min="0" step="50" inputmode="numeric" id="q-${c}-_m-budget" data-bm="${c}|budget" value="${esc(m.budget??"")}" ${dis}></div><div></div></div>
-    <div class="field"><label for="q-${c}-_m-reussite" class="lab">Ce qui en fera une vraie réussite</label><textarea id="q-${c}-_m-reussite" data-bm="${c}|reussite" ${dis}>${esc(m.reussite||"")}</textarea></div>
-    <div class="field"><label for="q-${c}-_m-redhibitoire" class="lab">Ce qui serait rédhibitoire</label><textarea id="q-${c}-_m-redhibitoire" data-bm="${c}|redhibitoire" ${dis}>${esc(m.redhibitoire||"")}</textarea></div></div>`;
+    <div class="duo"><div class="field"><label for="search-q-${c}-_m-budget" class="lab">Budget cible (€)</label><input type="number" min="0" step="50" inputmode="numeric" id="search-q-${c}-_m-budget" data-bm="${c}|budget" value="${esc(m.budget??"")}" ${dis}></div><div></div></div>
+    <div class="field"><label for="search-q-${c}-_m-reussite" class="lab">Ce qui en fera une vraie réussite</label><textarea autocomplete="off" name="search_text" id="search-q-${c}-_m-reussite" data-bm="${c}|reussite" ${dis}>${esc(m.reussite||"")}</textarea></div>
+    <div class="field"><label for="search-q-${c}-_m-redhibitoire" class="lab">Ce qui serait rédhibitoire</label><textarea autocomplete="off" name="search_text" id="search-q-${c}-_m-redhibitoire" data-bm="${c}|redhibitoire" ${dis}>${esc(m.redhibitoire||"")}</textarea></div></div>`;
   const synth=pr.resume?`<div class="synth"><div class="panel-h"><h3>Ce que nous retenons de vous</h3>${pr.completude!=null?`<span class="chip ${pr.completude>=70?"ok":"warn"} num">Brief complet à ${Math.round(pr.completude)} %</span>`:""}</div>
     <p>${esc(pr.resume)}</p>
-    ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">Claire :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">Julien :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
+    ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">${esc(P1())} :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">${esc(P2())} :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
     ${Array.isArray(pr.questionsOuvertes)&&pr.questionsOuvertes.length?`<h3 class="sec" style="margin-top:14px">Ce qu'il nous manque pour bien choisir</h3><ul class="blist">${pr.questionsOuvertes.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}</div>`:"";
-  const tot=allProg();
-  return `<div class="vh"><div><h2>Nos envies</h2><p>Le questionnaire de votre wedding planner. Répondez ensemble ; quand vos avis diffèrent, chacun écrit le sien. Tout s'enregistre dès que vous quittez un champ.</p></div><span class="chip ${tot>=.7?"ok":"gold"} num" style="font-size:13px;padding:6px 12px">${Math.round(tot*100)} % rempli</span></div>
-  ${chatCta}${analyseBar("envies")}${synth}
-  <div class="env">${nav}<section style="min-width:0">
-    <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p></div>
-    <div class="qs">${qhtml}${metaH}</div>
-    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:18px;flex-wrap:wrap">${(()=>{const i=QCATS.findIndex(x=>x.k===c);return `${i>0?`<button class="btn" data-bcat="${QCATS[i-1].k}">← ${esc(QCATS[i-1].label)}</button>`:"<span></span>"}${i<QCATS.length-1?`<button class="btn primary" data-bcat="${QCATS[i+1].k}">${esc(QCATS[i+1].label)} →</button>`:""}`})()}</div>
-  </section></div>`;
+  const tot=allProg(),tab=["mood","quest","synth"].includes(S.f.envTab)?S.f.envTab:(S.inspirations.length?"mood":"quest");
+  const fr=(S.briefs||{}).filRouge||{},anyAns=S.brief.some(d=>answered(d));
+  const firstSentence=t=>String(t||"").split(/(?<=[.!?])\s/)[0];
+  const hero=`<div class="env-hero"><div class="eh-top"><div style="min-width:0"><span class="eh-k">Nos envies</span><h2>${esc(fr.titre||"Votre mariage, en images et en mots")}</h2>
+      ${fr.motsCles&&fr.motsCles.length?`<div class="eh-tags">${fr.motsCles.slice(0,5).map(x=>`<span>${esc(x)}</span>`).join("")}</div>`:`<p>${esc(pr.resume?firstSentence(pr.resume):"Tout ce qui fait votre mariage au même endroit : vos photos coup de cœur, vos réponses au coach et ce qu'il en retient pour vos prestataires.")}</p>`}</div>
+      <div class="eh-ring" title="Questionnaire rempli à ${Math.round(tot*100)} %">${ring(tot,"var(--gold)")}</div></div>
+    ${S.canWrite?`<div class="eh-acts"><button class="btn eh-main" data-act="chatcat" data-c="">${anyAns?"Continuer avec le coach":"Parler au coach"}</button><button class="btn eh-ghost" data-act="inspadd">+ Photo</button></div>`:""}</div>`;
+  const nI=S.inspirations.length;
+  const tabs=`<div class="seg env-tabs" role="tablist" aria-label="Nos envies">${[["mood",`Moodboard${nI?` <span class="num">${nI}</span>`:""}`],["quest",`Questions <span class="num">${Math.round(tot*100)} %</span>`],["synth","Synthèse"]].map(([k,l])=>`<button role="tab" data-act="envtab" data-v="${k}" aria-selected="${tab===k}" aria-pressed="${tab===k}">${l}</button>`).join("")}</div>`;
+  let body="";
+  if(tab==="mood")body=moodboard();
+  else if(tab==="synth")body=`${analyseBar("envies")}${synth||`<div class="synth"><p class="plan-when" style="margin:0">La synthèse du coach apparaîtra ici dès que vous aurez répondu à quelques questions : vos priorités, vos points d'accord et ce qu'il reste à trancher.</p></div>`}${briefsPanel(null)}`;
+  else if(!S.f.bcatOpen)body=questGrid();
+  else{
+    const i=QCATS.findIndex(x=>x.k===c),p=catProg(c);
+    body=`<div class="env-detail"><button class="link env-back" data-act="envgrid">${BACK_SVG}<span>Toutes les catégories</span></button>
+      <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p><div class="eh-prog"><span class="pbar"><i style="width:${p.p*100}%"></i></span><span>${p.n}/${p.t} réponses</span></div></div>
+      ${inspStrip(c)}
+      ${briefsState().ready&&S.briefs.categories[c]?`<div class="env-brief"><span>Le brief « ${esc(BRIEF_LABEL[c])} » est prêt à envoyer à vos prestataires.</span><button class="btn sm" data-act="briefpdf" data-c="${c}">Brief PDF</button></div>`:""}
+      ${S.canWrite?`<div class="chat-cta"><div><b>Plus simple : en discutant</b><span>Le coach vous pose les questions de « ${esc(cat.label)} » une par une et remplit pour vous.</span></div><button class="btn primary" data-act="chatcat" data-c="${c}">Remplir avec le coach</button></div>`:""}
+      <div class="qs">${qhtml}${metaH}</div>
+      <div class="env-pn">${i>0?`<button class="btn" data-bcat="${QCATS[i-1].k}">← ${esc(QCATS[i-1].label)}</button>`:"<span></span>"}${i<QCATS.length-1?`<button class="btn primary" data-bcat="${QCATS[i+1].k}">${esc(QCATS[i+1].label)} →</button>`:""}</div></div>`;
+  }
+  return `${hero}${tabs}<div class="env-body">${body}</div>`;
 }
-
+/* Moodboard : toutes les inspirations en mur de photos, filtrables par catégorie ; un toucher ouvre la photo en grand */
+const inspSorted=()=>S.inspirations.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+const moodList=()=>{const f=S.f.moodCat||"all";return inspSorted().filter(x=>f==="all"||x.cat===f)};
+function moodboard(){
+  const all=inspSorted(),f=QC[S.f.moodCat]?S.f.moodCat:"all",list=moodList();
+  if(!all.length)return `<div class="mood-empty"><b>Votre moodboard est vide</b><p>Ajoutez une photo de lieu, de déco, de tenue ou de fleurs qui vous plaît : le coach la décrit, en tire vos goûts et la range ici. Vous pouvez aussi relier un tableau Pinterest.</p>
+    ${S.canWrite?`<div class="eh-acts"><button class="btn primary" data-act="inspadd">Ajouter une photo</button><button class="btn" data-go="reglages-ia">Relier Pinterest</button></div>`:""}</div>`;
+  const cats=QCATS.filter(q=>all.some(x=>x.cat===q.k));
+  const chips=`<div class="mood-f" role="group" aria-label="Filtrer par catégorie"><button class="chip" data-act="moodcat" data-v="all" aria-pressed="${f==="all"}">Tout · ${all.length}</button>${cats.map(q=>`<button class="chip" data-act="moodcat" data-v="${q.k}" aria-pressed="${f===q.k}">${esc(q.label)} · ${all.filter(x=>x.cat===q.k).length}</button>`).join("")}</div>`;
+  const tiles=list.map(x=>`<button class="mood-i" data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"><span class="mood-c">${esc((QC[x.cat]||{}).label||"")}${x.source==="pinterest"?" · Pinterest":""}</span></button>`).join("");
+  return `${chips}<div class="mood">${S.canWrite?`<button class="mood-add" data-act="inspadd"><span aria-hidden="true">+</span>Ajouter une photo</button>`:""}${tiles}</div>
+    <p class="plan-when mood-n">Touchez une photo pour la voir en grand, la changer de catégorie ou en parler au coach.${S.pinterest&&(S.pinterest.boards||[]).length?"":` <button class="link" data-go="reglages-ia">Relier un tableau Pinterest</button>`}</p>`;
+}
+function inspStrip(c){
+  const list=inspSorted().filter(x=>x.cat===c);
+  if(!list.length&&!S.canWrite)return "";
+  return `<div class="strip-insp"><div class="insp-h"><h3>Inspirations${list.length?` · ${list.length}`:""}</h3></div><div class="strip-row">
+    ${S.canWrite?`<button class="mood-add sm" data-act="inspadd"><span aria-hidden="true">+</span>Photo</button>`:""}
+    ${list.map(x=>`<button class="strip-i" data-act="inspopen" data-id="${x.id}" data-scope="${c}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"></button>`).join("")}
+    ${!list.length?`<p class="plan-when" style="margin:0;align-self:center">Une photo vaut mieux qu'un long discours : montrez au coach ce qui vous plaît.</p>`:""}</div></div>`;
+}
+function questGrid(){
+  return `<div class="qcats">${QCATS.map(q=>{const p=catProg(q.k),m=bMeta(q.k),th=inspSorted().filter(x=>x.cat===q.k).slice(0,3);
+    return `<button class="qcat ${p.p>=1?"done":""}" data-bcat="${q.k}"><span class="qcat-img ${th.length?"":"none"}">${th.length?th.map(x=>`<img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy">`).join(""):`<span>${esc(q.label.charAt(0))}</span>`}</span>
+      <span class="qcat-b"><b>${esc(q.label)}</b><span class="qcat-s">${p.p>=1?"Complet":`${p.n}/${p.t} réponses`}${m.importance>=4?` · ${esc(IMPORT[m.importance-1])}`:""}</span><span class="pbar"><i style="width:${p.p*100}%"></i></span></span></button>`}).join("")}</div>`;
+}
+/* Visionneuse d'une inspiration : grande photo, description, catégorie, source, en parler au coach */
+function openInsp(id,scope){
+  const list=scope?inspSorted().filter(x=>x.cat===scope):moodList(),i=list.findIndex(x=>x.id===id),x=list[i];if(!x)return;
+  const nav=(d,l)=>list[i+d]?`<button class="lb-arrow ${d<0?"prev":"next"}" data-act="inspopen" data-id="${list[i+d].id}" ${scope?`data-scope="${scope}"`:""} aria-label="${l}">${d<0?"‹":"›"}</button>`:"<span></span>";
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal lb" role="dialog" aria-modal="true" aria-label="Inspiration">
+    <div class="lb-img"><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description||"")}">${nav(-1,"Photo précédente")}${nav(1,"Photo suivante")}</div>
+    <p class="lb-n">${i+1} / ${list.length}${x.by?` · ${esc(x.by)}`:""}${x.pinUrl?` · <a href="${esc(x.pinUrl)}" target="_blank" rel="noopener noreferrer">Voir sur Pinterest</a>`:""}</p>
+    <p class="lb-d">${esc(x.description||"")}</p>
+    ${S.canWrite?`<div class="field"><label for="search-insp-cat">Catégorie</label><select id="search-insp-cat" data-inspcat="${x.id}">${QCATS.map(q=>`<option value="${q.k}" ${q.k===x.cat?"selected":""}>${esc(q.label)}</option>`).join("")}</select></div>
+    <div class="lb-acts"><button class="btn primary" data-act="inspask" data-id="${x.id}">En parler au coach</button><button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button></div>`:""}</div></div>`;
+}
 /* ---------- Day-of ---------- */
 const dayKey=t=>{if(!t)return "99";const h=+String(t).slice(0,2);return (h<6?String(h+24):String(h).padStart(2,"0"))+String(t).slice(2)};
 const scheduleRows=()=>S.schedule.slice().sort((a,b)=>dayKey(a.time).localeCompare(dayKey(b.time)));
@@ -814,7 +972,7 @@ function vAssistant(){
     <div style="min-width:0"><span class="pill-live ${on?"on":""}"><i></i>${on?"Actif":"Non connecté"}</span><h3 style="margin-top:10px">Assistant e-mails</h3>
       <p>${on?`Lit la boîte ${esc(ag.mailbox||"dédiée")} ${esc(planLabel("mail"))}. Dernier passage ${ag.lastRun?esc(relDay(pd(ag.lastRun))):"inconnu"}.`:"Il lira la boîte mail dédiée au mariage et vous proposera les prestataires, devis, échéances, rendez-vous et réponses d'invités qu'il y trouve."}</p></div>
     <div style="display:grid;gap:14px;justify-items:end"><div class="ag-stat"><div><b class="num">${ps.length}</b><span>à valider</span></div><div><b class="num">${acc}</b><span>ajoutés</span></div><div><b class="num">${S.inbox.length}</b><span>mails analysés</span></div></div>
-      <button class="btn" data-act="runnow" data-job="mail" ${S.canWrite?"":"disabled"}>Lire la boîte au prochain passage</button></div>
+      <button class="btn" data-act="runnow" data-job="mail" ${S.canWrite&&!agentBusy("mail")?"":"disabled"}>${busyLabel("mail")||"Lire la boîte maintenant"}</button></div>
   </div>
   <div class="grid2">
     <section>
@@ -833,13 +991,19 @@ function vAssistant(){
       <form class="panel form" id="agent-form">
         <div class="panel-h" style="margin-bottom:0"><h3>Réglages de l'assistant</h3></div>
         <div class="field"><label for="a-mailbox">Adresse de la boîte dédiée</label><input type="email" id="a-mailbox" name="mailbox" value="${esc(ag.mailbox||"")}" placeholder="adresse@gmail.com" ${dis}></div>
-        <p class="plan-when" style="margin:0">Lecture automatique : <b>${esc(planLabel("mail"))}</b>. <button type="button" class="btn ghost sm" data-go="reglages" style="padding:0 4px;min-height:0">Modifier dans Réglages</button></p>
+        <p class="plan-when" style="margin:0">Lecture automatique : <b>${esc(planLabel("mail"))}</b>. <button type="button" class="btn ghost sm" data-go="reglages-ia" style="padding:0 4px;min-height:0">Modifier dans Réglages</button></p>
         <div class="field"><span class="lab">Ce qu'il doit repérer</span><div class="checks">${Object.entries(SUGTYPE).map(([k,[l]])=>`<label><input type="checkbox" id="a-t-${k}" name="t-${k}" ${types[k]!==false?"checked":""} ${dis}> ${l}</label>`).join("")}</div></div>
-        <div class="field"><label for="a-notes">Consignes particulières</label><textarea id="a-notes" name="consignes" placeholder="Ex. ignorer les newsletters, toujours attribuer les tenues à la bonne personne…" ${dis}>${esc(ag.consignes||"")}</textarea></div>
+        <div class="field"><label for="a-notes">Consignes particulières</label><textarea autocomplete="off" id="a-notes" name="consignes" placeholder="Ex. ignorer les newsletters, toujours attribuer les tenues à la bonne personne…" ${dis}>${esc(ag.consignes||"")}</textarea></div>
         <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
       </form>
     </section>
   </div>`;
+}
+function devisFromMail(s,p){
+  const e={id:s.id,montant:num(p.prix),recuLe:String(s.receivedAt||new Date().toISOString()).slice(0,10),source:"mail",resume:s.summary||""};
+  if(p.acompte!=null)e.acompte=num(p.acompte);["dateAcompte","dateSolde","validite","conditions","fichier"].forEach(k=>{if(p[k])e[k]=p[k]});
+  if(p.invites)e.invites=num(p.invites);if(Array.isArray(p.inclus)&&p.inclus.length)e.inclus=p.inclus;if(Array.isArray(p.options)&&p.options.length)e.options=p.options;
+  if(s.threadUrl)e.mailUrl=s.threadUrl;return e;
 }
 async function acceptSug(id,quiet){
   const s=S.inbox.find(x=>x.id===id);if(!s)return false;
@@ -849,8 +1013,11 @@ async function acceptSug(id,quiet){
     const v=findVendor(p.name||p.vendorName);
     const data={name:p.name||p.vendorName||"Sans nom",cat:VCATS.includes(p.cat)?p.cat:"Autre",contact:p.contact||"",tel:p.tel||""};
     if(p.prix!=null)data.prix=num(p.prix);if(p.acompte!=null)data.acompte=num(p.acompte);if(p.dateAcompte)data.dateAcompte=p.dateAcompte;if(p.dateSolde)data.dateSolde=p.dateSolde;
-    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&VSTAT_RANK[v.status]<3)upd.status="devis";ok=await patch("vendors",v.id,upd)}
-    else ok=await save("vendors",null,Object.assign({status:s.type==="quote"?"devis":"contacte",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,stamp));
+    // un devis reçu rejoint l'historique des devis de la fiche (le plus récent en premier)
+    const entry=s.type==="quote"&&p.prix!=null?devisFromMail(s,p):null;
+    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&VSTAT_RANK[v.status]<3)upd.status="devis";
+      if(entry){upd.devis=[entry,...(v.devis||[]).filter(d=>d.id!==entry.id)].slice(0,12);upd.updatedAt=Date.now()}ok=await patch("vendors",v.id,upd)}
+    else ok=await save("vendors",null,Object.assign({status:s.type==="quote"?"devis":"contacte",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,entry?{devis:[entry]}:{},stamp));
   }else if(s.type==="task"){
     ok=await save("tasks",null,Object.assign({title:p.title||s.subject||"Tâche",phase:PH[p.phase]?p.phase:(currentPhase()||PHASES[0]).k,owner:OWNERS[p.owner]?p.owner:"deux",status:"todo",due:p.due||"",note:p.note||s.summary||"",order:999},stamp));
   }else if(s.type==="payment"){
@@ -869,25 +1036,74 @@ async function acceptSug(id,quiet){
 }
 
 /* ---------- Settings ---------- */
+const IA_FEAT={coach:["Coach","Vos conversations au quotidien"],brief:["Entretien Nos envies","Questions sur vos goûts, photos d'inspiration"],mail:["Lecture des mails","Tri de la boîte, devis et pièces jointes"],analyse:["Analyse des prestataires","Avis en ligne et note de fit"],synthese:["Synthèse et point de la semaine","Résumé de vos envies, point du lundi, briefs prestataires"],pinterest:["Pinterest","Description et rangement des épingles importées"]};
+const IA_LVL=[["eco","Éco"],["equilibre","Équilibré"],["max","Max"]];
+const IA_EFF={low:"réflexion courte",medium:"réflexion moyenne",high:"réflexion poussée"};
+const euro=usd=>(usd*USD_EUR).toLocaleString("fr-FR",{style:"currency",currency:"EUR",minimumFractionDigits:2,maximumFractionDigits:2});
+function iaPanel(){
+  const ia=S.ia||{},u=S.usage.cur||{},prev=S.usage.prev||{},budget=+ia.budget||DEFAULT_BUDGET_EUR,dis=S.canWrite?"":"disabled";
+  const spent=(u.usd||0)*USD_EUR,pct=Math.min(100,Math.round(spent/budget*100)),tone=pct>=100?"bad":pct>=80?"warn":"ok";
+  const rows=FEATURES.map(f=>{
+    const lvl=PROFILES[f][(ia.niveaux||{})[f]]?(ia.niveaux||{})[f]:"equilibre",p=PROFILES[f][lvl],st=(u.f||{})[f]||{};
+    const hint=`${/opus/.test(p.model)?"Opus 5.5":"Sonnet 5.5"} · ${IA_EFF[p.effort]||p.effort}${p.maxSearches?` · ${p.maxSearches} recherches web`:""}`;
+    return `<div class="ia-row"><div class="ia-t"><b>${IA_FEAT[f][0]}</b><span>${IA_FEAT[f][1]}</span></div>
+      <div class="ia-c"><b class="num">${euro(st.usd||0)}</b><span>${st.calls||0} appel${(st.calls||0)>1?"s":""}</span></div>
+      <div class="ia-l"><div class="seg" role="group" aria-label="Niveau pour ${IA_FEAT[f][0]}">${IA_LVL.map(([k,l])=>`<button type="button" data-act="ialvl" data-feat="${f}" data-v="${k}" aria-pressed="${k===lvl}" ${dis}>${l}</button>`).join("")}</div><span class="ia-h">${hint}</span></div></div>`}).join("");
+  const resetDay=new Date(new Date().getFullYear(),new Date().getMonth()+1,1).toLocaleDateString("fr-FR",{day:"numeric",month:"long"});
+  return `<div class="formpanel" style="margin-top:28px" id="ia"><div class="panel-h" style="margin-bottom:6px"><h3>Coût de l'IA</h3><span class="chip ${tone==="ok"?"ok":""}">${pct} % du budget</span></div>
+    ${pct>=100?`<div class="banner warn" style="margin:6px 0 12px">Budget du mois atteint : les passages automatiques des agents sont suspendus jusqu'au ${resetDay}. Le coach et les boutons « maintenant » restent disponibles.</div>`:""}
+    <div class="ia-sum"><div><span class="ia-k">Ce mois-ci</span><b class="num">${euro(u.usd||0)}</b><span class="ia-k">sur ${budget.toLocaleString("fr-FR")} €</span></div><div><span class="ia-k">Mois dernier</span><b class="num ia-prev">${euro(prev.usd||0)}</b></div></div>
+    <div class="ia-bar ${tone}" role="progressbar" aria-label="Budget du mois utilisé" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+    <div class="ia-rows">${rows}</div>
+    <p class="plan-when" style="margin:14px 0 10px"><b>Éco</b> : le modèle Sonnet, environ deux fois moins cher, très bien pour trier des mails ou les questions simples. <b>Équilibré</b> (recommandé) : Opus là où le jugement compte (coach, entretien, synthèse), Sonnet pour les tâches répétitives. <b>Max</b> : Opus partout, avec une réflexion plus poussée.</p>
+    <div class="ia-web"><div><b>Le coach et internet</b><span>${(S.ia.web||"ask")==="off"?"Le coach n'utilise jamais internet.":(S.ia.web||"ask")==="libre"?"Le coach cherche sur internet quand il le juge utile (3 recherches par message au plus).":"Le coach propose une recherche (inspiration, idées, avis) ; vous l'autorisez ou non, une à la fois."}</span></div>
+      <div class="seg" role="group" aria-label="Accès du coach à internet">${[["off","Jamais"],["ask","Avec notre accord"],["libre","Automatique"]].map(([k,l])=>`<button type="button" data-act="iaweb" data-v="${k}" aria-pressed="${(S.ia.web||"ask")===k}" ${dis}>${l}</button>`).join("")}</div></div>
+    <form class="ia-budget" id="ia-form"><label for="search-ia-budget">Budget mensuel (€)</label><input type="number" inputmode="numeric" min="1" step="1" id="search-ia-budget" name="budget" value="${esc(budget)}" ${dis}><button class="btn sm" type="submit" ${dis}>Enregistrer</button></form>
+    <p class="plan-when" style="margin:10px 0 0">Estimation calculée à partir des tokens consommés (tarifs publics, 1 $ ≈ ${String(USD_EUR).replace(".",",")} €). La facture exacte est sur console.anthropic.com, où vous pouvez aussi fixer une limite de dépense stricte.</p></div>`;
+}
+/* Tableaux Pinterest publics → inspirations (agent pinterest-agent.js, meta/pinterest) */
+const pinBoard=u=>{try{const x=new URL(String(u||"").trim());if(/^pin\.it$/i.test(x.hostname)&&x.pathname.length>2)return `https://pin.it${x.pathname}`;if(!/(^|\.)pinterest\.[a-z.]+$/i.test(x.hostname))return null;const p=x.pathname.split("/").filter(Boolean);return p.length>=2&&p[0]!=="pin"?`https://www.pinterest.com/${p[0]}/${p[1].replace(/\.rss$/i,"")}/`:null}catch(e){return null}};
+const pinName=u=>{if(/^https:\/\/pin\.it\//.test(u))return "Lien partagé (le nom s'affiche après la synchronisation)";const p=new URL(u).pathname.split("/").filter(Boolean),n=decodeURIComponent(p[1]||"").replace(/-/g," ");return n.charAt(0).toUpperCase()+n.slice(1)+" · "+p[0]};
+function pinterestPanel(){
+  const m=S.pinterest||{},boards=m.boards||[],dis=S.canWrite?"":"disabled",running=(S.locks.pinterest||0)>Date.now()||((m.requestedAt||0)>(m.lastSyncAt||0)&&Date.now()-(m.requestedAt||0)<10*60000);
+  const n=S.inspirations.filter(x=>x.source==="pinterest").length;
+  const last=m.lastSyncAt?`Dernière synchronisation ${relDay(new Date(m.lastSyncAt))} à ${new Date(m.lastSyncAt).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}${m.lastImported!=null?` · ${m.lastImported} nouvelle${m.lastImported>1?"s":""} épingle${m.lastImported>1?"s":""}`:""}${m.remaining?` · ${m.remaining} en attente (prochain passage)`:""}.`:"Jamais synchronisé.";
+  const opts=c=>`<option value="auto" ${!c||c==="auto"?"selected":""}>Rangement automatique</option>${QCATS.map(q=>`<option value="${q.k}" ${c===q.k?"selected":""}>${esc(q.label)}</option>`).join("")}`;
+  return `<div class="formpanel" style="margin-top:8px" id="pinterest"><div class="panel-h" style="margin-bottom:6px"><h3>Tableaux Pinterest</h3>${n?`<span class="chip ok">${n} épingle${n>1?"s":""} importée${n>1?"s":""}</span>`:""}</div>
+    <p class="plan-when" style="margin:0 0 12px">Sur Pinterest, ouvrez un tableau <b>public</b>, touchez « Partager » puis « Copier le lien » et collez-le ici. Ses nouvelles épingles arrivent dans vos inspirations (Nos envies), décrites et rangées par catégorie par le coach, puis nourrissent votre fil rouge et vos briefs. Synchronisation chaque jour, 12 épingles au plus par passage.</p>
+    ${boards.length?`<div class="pin-list">${boards.map((b,i)=>`<div class="pin-row"><div class="pin-t"><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(pinName(b.url))}</a></div>
+      <label class="sr" for="search-pin-cat-${i}">Catégorie de ce tableau</label><select id="search-pin-cat-${i}" data-pincat="${i}" ${dis}>${opts(b.cat)}</select>
+      ${S.canWrite?`<button type="button" class="link" data-act="pindel" data-i="${i}">Retirer</button>`:""}</div>`).join("")}</div>`:""}
+    ${S.canWrite?`<form class="pin-add" id="pin-form"><label class="sr" for="search-pin-url">Lien du tableau Pinterest</label><input type="url" inputmode="url" autocomplete="off" id="search-pin-url" name="url" placeholder="https://pin.it/… ou lien du tableau"><button class="btn sm" type="submit">Ajouter</button></form>`:""}
+    <div class="pin-foot"><span class="plan-when" style="margin:0">${running?"Synchronisation en cours…":esc(last)}${m.status==="erreur"&&m.lastError?` <b style="color:var(--bad)">Problème : ${esc(m.lastError)}</b>`:""}</span>
+      ${boards.length&&S.canWrite?`<button class="btn sm primary" data-act="pinsync" ${running?"disabled":""}>${running?"Synchronisation…":"Synchroniser maintenant"}</button>`:""}</div></div>`;
+}
+function vReglagesIA(){
+  return `${subnav([["reglages","Général"],["reglages-ia","Agents IA"]])}<div class="vh"><div><h2>Agents IA</h2><p>Ce que font le coach et les agents, quand ils tournent, ce qu'ils coûtent et ce qu'ils peuvent consulter.</p></div></div>
+  ${pinterestPanel()}
+  <div style="margin-top:28px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Planning des agents</h3>
+    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes s'ils ont du travail et tournent selon le planning ci-dessous. Un passage demandé depuis l'app démarre tout de suite.</p>
+    <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
+  ${iaPanel()}`;
+}
 function vReglages(){
   const s=S.settings,dis=S.canWrite?"":"disabled";
   if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported";render()}),0);
-  return `<div class="vh"><div><h2>Réglages</h2><p>Les infos de base qui alimentent le compte à rebours, les échéances et le budget.</p></div></div>
+  return `${subnav([["reglages","Général"],["reglages-ia","Agents IA"]])}<div class="vh"><div><h2>Réglages</h2><p>Les infos de base qui alimentent le compte à rebours et les échéances. Le budget total se règle dans Budget.</p></div></div>
   <form class="formpanel form" id="settings-form">
     <div class="cols2">
-      <div class="field"><label for="s-date">Date du mariage</label><input type="date" id="s-date" name="date" value="${esc(s.date||"")}" ${dis}></div>
-      <div class="field"><label for="s-budget">Budget total (€)</label><input type="number" inputmode="numeric" min="0" step="100" id="s-budget" name="budgetTotal" value="${esc(s.budgetTotal??"")}" ${dis}></div>
-      <div class="field"><label for="s-lieu">Lieu de réception</label><input type="text" id="s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
-      <div class="field"><label for="s-ville">Ville</label><input type="text" id="s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
-      <div class="field"><label for="s-mairie">Mairie</label><input type="text" id="s-mairie" name="mairie" value="${esc(s.mairie||"")}" placeholder="Commune où le mariage est célébré" ${dis}></div>
-      <div class="field"><label for="s-cible">Nombre d'invités visé</label><input type="number" inputmode="numeric" min="0" id="s-cible" name="invitesCible" value="${esc(s.invitesCible??"")}" ${dis}></div>
+      <div class="field"><label for="search-s-p1">Prénom (partenaire 1)</label><input type="text" autocomplete="off" id="search-s-p1" name="prenom1" value="${esc(s.prenom1||"")}" ${dis}></div>
+      <div class="field"><label for="search-s-p2">Prénom (partenaire 2)</label><input type="text" autocomplete="off" id="search-s-p2" name="prenom2" value="${esc(s.prenom2||"")}" ${dis}></div>
+      <div class="field"><label for="search-s-date">Date du mariage</label><input type="date" id="search-s-date" name="date" value="${esc(s.date||"")}" ${dis}></div>
+      <div class="field"><label for="search-s-lieu">Lieu de réception</label><input type="text" autocomplete="off" id="search-s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
+      <div class="field"><label for="search-s-ville">Ville</label><input type="text" autocomplete="off" id="search-s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
+      <div class="field"><label for="search-s-mairie">Mairie</label><input type="text" autocomplete="off" id="search-s-mairie" name="mairie" value="${esc(s.mairie||"")}" placeholder="Commune où le mariage est célébré" ${dis}></div>
+      <div class="field"><label for="search-s-cible">Nombre d'invités visé</label><input type="number" inputmode="numeric" min="0" id="search-s-cible" name="invitesCible" value="${esc(s.invitesCible??"")}" ${dis}></div>
     </div>
-    <div class="field"><label for="s-notes">Notes communes</label><textarea id="s-notes" name="notes" ${dis}>${esc(s.notes||"")}</textarea></div>
+    <div class="field"><label for="search-s-notes">Notes communes</label><textarea autocomplete="off" id="search-s-notes" name="notes" ${dis}>${esc(s.notes||"")}</textarea></div>
     <div><button class="btn primary" type="submit" ${dis}>Enregistrer</button></div>
   </form>
-  <div style="margin-top:34px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Agents IA</h3>
-    <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes (GitHub Actions) s'ils ont du travail et ne tournent que selon le planning ci-dessous. Un passage demandé démarre dans les 10 à 15 minutes.</p>
-    <div class="plans">${planForm("mail")}${planForm("analyse")}</div></div>
+
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Photo du couple</h3></div>
     <div class="photo-row">${coupleAvatar()}<div><p class="plan-when" style="margin:0 0 10px">Affichée sur l'accueil, à côté du « Bonjour ». La même pour vous deux.</p>
     ${S.canWrite?`<button class="btn sm" data-act="couplephoto">${S.photo&&S.photo.data?"Changer":"Ajouter une photo"}</button>${S.photo&&S.photo.data?` <button class="btn sm" data-act="couplephotox">Retirer</button>`:""}`:""}</div></div></div>
@@ -901,8 +1117,8 @@ function vReglages(){
   <div class="help" style="margin-top:28px">
     <h3 class="sec">Travailler à deux</h3>
     <ul>
-      <li>Claire et Julien se connectent chacun avec leur propre compte (Google ou lien par e-mail) : les données sont les mêmes et se mettent à jour en direct sur vos deux téléphones.</li>
-      <li>Chaque tâche a un responsable (Claire, Julien ou les deux). Le filtre du Planning montre ce qui revient à chacun, tâches communes comprises.</li>
+      <li>${esc(COUPLE())} se connectent chacun avec leur propre compte (Google ou lien par e-mail) : les données sont les mêmes et se mettent à jour en direct sur vos deux téléphones.</li>
+      <li>Chaque tâche a un responsable (${esc(P1())}, ${esc(P2())} ou les deux). Le filtre du Planning montre ce qui revient à chacun, tâches communes comprises.</li>
       <li>Pour la mairie, retirez le dossier tôt : les pièces demandées (actes de naissance récents, justificatifs de domicile, liste des témoins) ont une durée de validité.</li>
     </ul>
   </div>`;
@@ -915,8 +1131,8 @@ async function makePdf(name,spec){
   try{
     const {buildPdf}=await import("./pdf.js");
     const st=S.settings,d=wDate();
-    const blob=buildPdf(Object.assign({title:"Claire & Julien",subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
-      footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis l'app du mariage de Claire & Julien`},spec));
+    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
+      footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
     showPdf(new File([blob],name,{type:"application/pdf"}));
   }catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
 }
@@ -932,7 +1148,7 @@ function showPdf(file){
 const dayKeyPdf=r=>dayKey(r.time);
 function pdfJourJ(){
   const rows=scheduleRows(),vs=S.vendors.filter(v=>v.status==="reserve");
-  makePdf("Jour J - Claire et Julien.pdf",{docTitle:"Déroulé du jour J",blocks:[
+  makePdf(`Jour J - ${COUPLE()}.pdf`,{docTitle:"Déroulé du jour J",blocks:[
     {table:{head:["Heure","Moment","Lieu","Qui"],widths:[18,null,40,38],boldFirst:true,body:rows.map(r=>[r.time||"—",r.title+(r.note?"\n"+r.note:""),r.lieu||"",r.qui||""])}},
     ...(vs.length?[{h2:"Prestataires"},{table:{head:["Prestataire","Catégorie","Contact"],boldFirst:true,body:vs.map(v=>[v.name,v.cat||"",[v.contact,v.tel].filter(Boolean).join(" · ")])}}]:[]),
   ]});
@@ -963,7 +1179,7 @@ function pdfReport(){
   blocks.push({h2:"Invités"},{p:`${g.length} invités dont ${g.filter(x=>x.enfant).length} enfants · ${yes} présents, ${no} absents, ${g.length-yes-no} en attente · ${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length} au dîner.`},
     {note:"Par groupe : "+groups.map(([k,v])=>`${k} ${v}`).join(" · ")+(g.some(x=>x.regime)?"\nRégimes : "+g.filter(x=>x.regime).map(x=>x.name+" ("+x.regime+")").join(", "):"")});
   blocks.push({h2:"Nos envies"},{note:`Rempli à ${Math.round(allProg()*100)} % · `+QCATS.map(c=>{const p=catProg(c.k);return `${c.label} ${p.n}/${p.t}`}).join(" · ")});
-  makePdf(`Rapport - Claire et Julien - ${isoD(today())}.pdf`,{docTitle:"Rapport d'organisation · "+fmtD(today()),blocks});
+  makePdf(`Rapport - ${COUPLE()} - ${isoD(today())}.pdf`,{docTitle:"Rapport d'organisation · "+fmtD(today()),blocks});
 }
 
 /* ---------- Assistant IA intégré ---------- */
@@ -981,18 +1197,74 @@ const CHAT_SUGG={chat:["Que devons-nous faire cette semaine ?","Compare nos lieu
 // Un mail rédigé par le coach commence par « Objet : … »
 function mailOf(t){const m=String(t||"").match(/(?:^|\n)\s*\**Objet\s*:\**\s*(.+)\n([\s\S]+)/i);return m?{subject:m[1].replace(/\*+/g,"").trim(),body:m[2].replace(/\*\*/g,"").trim()}:null}
 const mailHref=m=>`mailto:?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
-function chatMsgsHTML(){
-  const c=S.chat;
-  const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u"><div class="bub">${esc(m.text)}</div></div>`
-    :`<div class="cm a"><div class="bub">${mdLite(m.text)}</div>${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).length?`<div class="acts-done">${m.actions.map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
-      ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`).join("");
-  const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`:"";
-  const intro=!c.messages.length?`<div class="chat-intro"><b>${c.mode==="brief"?"Entretien « Nos envies »":"Bonjour, je suis votre coach mariage"}</b><p>${c.mode==="brief"?"Je vous pose les questions du questionnaire une par une, en langage naturel, et je note vos réponses au fur et à mesure.":"Comme un wedding planner : je connais votre date, votre budget, vos envies et vos prestataires. Posez-moi une question ou demandez-moi d'agir (ajouter une tâche, ranger des invités, noter un devis, préparer une visite). Chaque action s'annule d'un toucher."}</p></div>`:"";
-  return intro+msgs+(c.busy?`<div class="cm a"><div class="bub typing" role="status"><i></i><i></i><i></i><span class="typing-l">${esc(c.busyLabel||"Je regarde vos données…")}</span></div></div>`:"")+sugg;
+/* Intercepteur internet : le coach propose une recherche, l'un des deux l'autorise (une recherche à la fois) */
+function webAsk(m,i){
+  const w=(m.actions||[]).find(a=>a.web);if(!w)return "";
+  const last=S.chat.messages.length-1===i;
+  if(m.webDecided||!last||S.chat.busy||!S.canWrite)return m.webDecided?`<div class="webask done">${m.webDecided==="ok"?"Recherche autorisée":"Recherche refusée"} : « ${esc(w.web.requete)} »</div>`:"";
+  return `<div class="webask" role="group" aria-label="Recherche sur internet proposée"><b>Le coach propose de chercher sur internet</b>
+    <p>« ${esc(w.web.requete)} »</p>${w.web.pourquoi?`<span>${esc(w.web.pourquoi)}</span>`:""}
+    <div class="webask-a"><button class="btn sm primary" data-act="webok" data-i="${i}">Autoriser cette recherche</button><button class="link" data-act="webno" data-i="${i}">Non merci</button></div></div>`;
 }
-function renderChat(){
-  const box=document.getElementById("chat-msgs");if(!box)return;
-  box.innerHTML=chatMsgsHTML();box.scrollTop=box.scrollHeight;
+function chatItems(){
+  const c=S.chat;
+  const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u">${(m.thumbs||[]).length?`<div class="cm-thumbs">${m.thumbs.map(u=>`<img src="${u}" alt="Photo envoyée">`).join("")}</div>`:""}<div class="bub">${esc(m.text)}</div></div>`
+    :`<div class="cm a"><div class="bub">${mdLite(m.text)}${(m.sources||[]).length?`<div class="srcs"><span>Sources</span>${m.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.url)}</a>`).join("")}</div>`:""}</div>${webAsk(m,i)}${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).filter(a=>!a.web).length?`<div class="acts-done">${m.actions.filter(a=>!a.web).map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
+      ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`);
+  const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`
+    :!c.busy&&c.mode==="brief"&&S.canWrite?`<div class="chat-sugg"><button class="chip" data-act="chatfile">Montrer une photo au coach</button></div>`:"";
+  const intro=!c.messages.length?`<div class="chat-intro"><b>${c.mode==="brief"?"Entretien « Nos envies »":"Bonjour, je suis votre coach mariage"}</b><p>${c.mode==="brief"?"Je vous pose les questions du questionnaire une par une, en langage naturel, et je note vos réponses au fur et à mesure.":"Comme un wedding planner : je connais votre date, votre budget, vos envies et vos prestataires. Posez-moi une question ou demandez-moi d'agir (ajouter une tâche, ranger des invités, noter un devis, préparer une visite). Chaque action s'annule d'un toucher."}</p></div>`:"";
+  return [["intro",intro],...msgs.map((h,i)=>["m"+i,h]),["busy",c.busy?`<div class="cm a"><div class="bub typing" role="status"><i></i><i></i><i></i><span class="typing-l">${esc(c.busyLabel||"Je regarde vos données…")}</span></div></div>`:""],["sugg",sugg]].filter(x=>x[1]);
+}
+/* Met à jour la liste sans la reconstruire : les messages déjà affichés ne bougent pas (sélection,
+   position de lecture, images), seuls les nouveaux ou les modifiés sont insérés. */
+function patchKeyed(box,items){
+  const want=new Set(items.map(x=>x[0])),added=[];
+  [...box.children].forEach(n=>{if(!want.has(n.dataset.k))n.remove()});
+  let prev=null;
+  for(const [k,h] of items){
+    let n=[...box.children].find(x=>x.dataset.k===k);
+    if(!n||n._h!==h){const t=document.createElement("template");t.innerHTML=h.trim();const nn=t.content.firstElementChild;nn.dataset.k=k;nn._h=h;if(n)n.replaceWith(nn);else added.push(nn);n=nn}
+    const at=prev?prev.nextElementSibling:box.firstElementChild;
+    if(n!==at)box.insertBefore(n,at);
+    prev=n;
+  }
+  return added;
+}
+const chatMotion=()=>window.matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth";
+const chatGap=box=>box.scrollHeight-box.scrollTop-box.clientHeight;
+function chatPill(){
+  const box=document.getElementById("chat-msgs"),pill=document.getElementById("chat-new");if(!box||!pill)return;
+  const c=S.chat,far=chatGap(box)>160;
+  // la nouvelle réponse est-elle déjà à l'écran ?
+  if(c.unseen){const n=[...box.children].find(x=>x.dataset.k===c.unseen);if(!n||n.offsetTop<box.scrollTop+box.clientHeight-40)c.unseen=null}
+  pill.hidden=!(c.unseen||far);
+  pill.innerHTML=c.unseen?'Nouvelle réponse <span aria-hidden="true">↓</span>':'<span aria-hidden="true">↓</span>';
+  pill.setAttribute("aria-label",c.unseen?"Aller à la nouvelle réponse":"Aller en bas de la conversation");
+  pill.classList.toggle("round",!c.unseen);
+}
+function chatJump(){
+  const box=document.getElementById("chat-msgs");if(!box)return;const c=S.chat;
+  const n=c.unseen&&[...box.children].find(x=>x.dataset.k===c.unseen);
+  box.scrollTo({top:n?Math.max(0,n.offsetTop-56):box.scrollHeight,behavior:chatMotion()});
+  c.unseen=null;setTimeout(chatPill,400);
+}
+/* intent : "open" (en bas, sans animation), "send" (on suit son message), "answer" (on montre le début de la
+   réponse si l'on suivait la conversation ; sinon on ne bouge pas et on propose « Nouvelle réponse »). */
+function renderChat(intent){
+  const box=document.getElementById("chat-msgs");if(!box)return;const c=S.chat;
+  const pinned=chatGap(box)<80,first=!box.children.length;
+  const added=patchKeyed(box,chatItems());
+  if(intent==="open"||first){box.scrollTop=box.scrollHeight}
+  else if(intent==="send"){c.unseen=null;box.scrollTo({top:box.scrollHeight,behavior:chatMotion()})}
+  else if(intent==="answer"){
+    const n=added.filter(x=>x.classList.contains("a")).pop()||[...box.children].filter(x=>x.dataset.k&&x.dataset.k[0]==="m").pop();
+    if(n){n.classList.add("enter");
+      if(pinned){c.unseen=null;box.scrollTo({top:Math.min(Math.max(0,n.offsetTop-56),box.scrollHeight-box.clientHeight),behavior:chatMotion()})}
+      else c.unseen=n.dataset.k}
+  }
+  else if(pinned&&added.length)box.scrollTo({top:box.scrollHeight,behavior:chatMotion()});
+  chatPill();
   const b=document.getElementById("chat-send");if(b)b.disabled=S.chat.busy;
   const md=document.getElementById("chat-mode");if(md)md.innerHTML=S.chat.mode==="brief"?`<span class="chip acc">Entretien Nos envies</span><button class="link" data-act="chatmode" data-m="chat">Quitter</button>`:`<button class="link" data-act="chatmode" data-m="brief">Remplir nos envies avec le coach</button>`;
 }
@@ -1008,48 +1280,60 @@ function toggleMic(btn){
 }
 const b64Of=blob=>new Promise((ok,ko)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(",")[1]);fr.onerror=ko;fr.readAsDataURL(blob)});
 async function loadImage(file){const url=URL.createObjectURL(file);try{return await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ko;i.src=url})}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}}
-async function pickFile(file){
-  if(!file)return;
-  try{
-    if(file.type==="application/pdf"){if(file.size>6e6){toast("PDF trop lourd (6 Mo au plus)");return}S.chat.att={media_type:"application/pdf",data:await b64Of(file),name:file.name||"document.pdf"}}
-    else if(/^image\//.test(file.type)){
-      const img=await loadImage(file),k=Math.min(1,1600/Math.max(img.naturalWidth,img.naturalHeight));
-      const cv=document.createElement("canvas");cv.width=Math.round(img.naturalWidth*k);cv.height=Math.round(img.naturalHeight*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);
-      const blob=await new Promise(ok=>cv.toBlob(ok,"image/jpeg",.82));S.chat.att={media_type:"image/jpeg",data:await b64Of(blob),name:file.name||"photo.jpg",preview:URL.createObjectURL(blob)};
-    }else{toast("Photo ou PDF uniquement");return}
-  }catch(e){toast("Impossible de lire ce fichier");return}
-  renderAtt();document.getElementById("chat-text")?.focus();
+async function resizeJpeg(img,max,q){const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const cv=document.createElement("canvas");cv.width=Math.round(img.naturalWidth*k);cv.height=Math.round(img.naturalHeight*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);return new Promise(ok=>cv.toBlob(ok,"image/jpeg",q))}
+async function pickFiles(files){
+  const c=S.chat;c.atts=c.atts||[];
+  for(const file of [...(files||[])]){
+    if(c.atts.length>=3){toast("3 pièces jointes au plus par message");break}
+    try{
+      if(file.type==="application/pdf"){if(file.size>6e6){toast("PDF trop lourd (6 Mo au plus)");continue}c.atts.push({media_type:"application/pdf",data:await b64Of(file),name:file.name||"document.pdf"})}
+      else if(/^image\//.test(file.type)){
+        const img=await loadImage(file),blob=await resizeJpeg(img,1600,.82),th=await resizeJpeg(img,480,.72);
+        c.atts.push({media_type:"image/jpeg",data:await b64Of(blob),thumb:await b64Of(th),name:file.name||"photo.jpg",preview:URL.createObjectURL(th)});
+      }else toast("Photo ou PDF uniquement");
+    }catch(e){toast("Impossible de lire ce fichier")}
+  }
+  renderAtt();
 }
-function renderAtt(){const box=document.getElementById("chat-att");if(!box)return;const a=S.chat.att;
-  box.innerHTML=a?`<div class="att">${a.preview?`<img src="${a.preview}" alt="">`:'<span class="att-pdf">PDF</span>'}<span>${esc(a.name)} prêt à envoyer</span><button type="button" class="link" data-act="chatattx" aria-label="Retirer la pièce jointe">Retirer</button></div>`:""}
+const pickFile=f=>pickFiles(f?[f]:[]);
+function renderAtt(){const box=document.getElementById("chat-att");if(!box)return;const as=S.chat.atts||[];
+  box.innerHTML=as.length?`<div class="atts">${as.map((a,i)=>`<div class="att" title="${esc(a.name)}">${a.preview?`<img src="${a.preview}" alt="${esc(a.name)}">`:'<span class="att-pdf">PDF</span>'}<button type="button" class="att-x" data-act="chatattx" data-i="${i}" aria-label="Retirer ${esc(a.name)}">×</button></div>`).join("")}${as.length<3?`<button type="button" class="att-more" data-act="chatfile" aria-label="Ajouter une photo">+</button>`:""}</div>`:"";
+  const ta=document.getElementById("chat-text");if(ta)ta.placeholder=as.length?(as.length>1?"Dites au coach ce qu'il doit regarder…":"Dites au coach ce qui vous plaît…"):"Message ou photo…";
+  const ms=document.getElementById("chat-msgs");if(ms)ms.scrollTop=ms.scrollHeight}
 async function openChat(mode,prefill){
   const c=S.chat,switched=!!mode&&mode!==c.mode;if(switched)c.mode=mode;
   document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal chat" role="dialog" aria-modal="true" aria-label="Coach mariage">
     <div class="chat-h"><h3>Votre coach</h3><button class="link" data-act="chatreset" ${c.busy?"disabled":""}>Nouvelle conversation</button></div>
     <div class="chat-mode" id="chat-mode"></div>
-    <div class="chat-msgs" id="chat-msgs" aria-live="polite"></div>
-    <div id="chat-att"></div>
-    <form class="chat-in" id="chat-form"><input type="file" id="chat-file" accept="image/*,application/pdf" hidden>
-    <button type="button" class="ch-ic" data-act="chatfile" aria-label="Joindre une photo ou un PDF" ${S.canWrite?"":"disabled"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
+    <div class="chat-wrap"><div class="chat-msgs" id="chat-msgs" aria-live="polite"></div><button type="button" class="chat-new" id="chat-new" data-act="chatbottom" hidden></button></div>
+    <form class="chat-in" id="chat-form"><input type="file" id="chat-file" accept="image/*,application/pdf" multiple hidden>
+    <div class="cmp"><div id="chat-att"></div>
+    <label class="sr" for="chat-text">Votre message</label><textarea autocomplete="off" name="search_message" enterkeyhint="send" id="chat-text" rows="1" placeholder="Message ou photo…" ${S.canWrite?"":"disabled"}></textarea>
+    <div class="cmp-bar"><button type="button" class="ch-ic" data-act="chatfile" aria-label="Joindre une photo ou un PDF" ${S.canWrite?"":"disabled"}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-2h6l2 2h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     ${SR?`<button type="button" class="ch-ic" id="chat-mic" data-act="chatmic" aria-label="Dicter" ${S.canWrite?"":"disabled"}><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>`:""}
-    <label class="sr" for="chat-text">Votre message</label><textarea id="chat-text" rows="1" placeholder="Écrivez ou dictez…" ${S.canWrite?"":"disabled"}></textarea>
-    <button class="btn primary" id="chat-send" type="submit" aria-label="Envoyer">Envoyer</button></form></div></div>`;
-  renderChat();renderAtt();
+    <button class="cmp-send" id="chat-send" type="submit" aria-label="Envoyer"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button></div></div></form></div></div>`;
+  renderChat("open");renderAtt();
+  { // suivi de la lecture : bouton « Nouvelle réponse », et bas de conversation conservé quand le clavier se ferme
+    const box=document.getElementById("chat-msgs");let pinned=true;
+    box.addEventListener("scroll",()=>{pinned=chatGap(box)<80;chatPill()},{passive:true});
+    if(window.ResizeObserver)new ResizeObserver(()=>{if(pinned)box.scrollTop=box.scrollHeight}).observe(box);
+  }
   if(prefill!=null){const ta=document.getElementById("chat-text");ta.value=prefill;ta.focus();ta.setSelectionRange(ta.value.length,ta.value.length)}
-  if(!c.loaded&&S.db&&S.user){try{const d=(await S.db.doc("chats/"+String(S.user.email).toLowerCase()).get()).data();c.loaded=true;if(d&&Array.isArray(d.messages)&&!c.messages.length){c.messages=d.messages;if(d.mode&&!mode)c.mode=d.mode}renderChat()}catch(e){}}
+  if(!c.loaded&&S.db&&S.user){try{const d=(await S.db.doc("chats/"+String(S.user.email).toLowerCase()).get()).data();c.loaded=true;if(d&&Array.isArray(d.messages)&&!c.messages.length){c.messages=d.messages;if(d.mode&&!mode)c.mode=d.mode}renderChat("open")}catch(e){}}
   if(mode==="brief"&&(switched||!c.messages.length))sendChat("Commençons le questionnaire Nos envies.");
 }
-async function sendChat(text){
-  const c=S.chat;text=String(text||"").trim();const att=c.att;if((!text&&!att)||c.busy||!S.canWrite)return;
-  c.att=null;renderAtt();
-  c.messages.push({role:"user",text:(text+(att?` [${att.media_type==="application/pdf"?"PDF joint":"photo jointe"}]`:"")).trim()});c.busy=true;c.busyLabel="Je regarde vos données…";renderChat();
+async function sendChat(text,opts={}){
+  const c=S.chat;text=String(text||"").trim();const atts=c.atts||[];if((!text&&!atts.length)||c.busy||!S.canWrite)return;
+  c.atts=[];renderAtt();
+  const nI=atts.filter(a=>a.media_type!=="application/pdf").length,nP=atts.length-nI,tag=[nI?(nI>1?`${nI} photos jointes`:"photo jointe"):"",nP?(nP>1?`${nP} PDF joints`:"PDF joint"):""].filter(Boolean).join(", ");
+  c.messages.push({role:"user",text:(text+(tag?` [${tag}]`:"")).trim(),thumbs:atts.filter(a=>a.preview).map(a=>a.preview)});c.busy=true;c.busyLabel="Je regarde vos données…";renderChat("send");
   // Libellé d'attente qui évolue (la réponse prend souvent 10 à 20 secondes)
   const steps=["Je regarde vos données…","Je prépare la réponse…","Encore un instant…"];let k=0;
   const tick=setInterval(()=>{if(!c.busy){clearInterval(tick);return}k=Math.min(k+1,steps.length-1);c.busyLabel=steps[k];const l=document.querySelector(".typing-l");if(l)l.textContent=steps[k]},6000);
-  try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(att?{attachment:{media_type:att.media_type,data:att.data}}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[]})}
-  catch(e){const msg=e&&e.code==="functions/resource-exhausted"?e.message:e&&e.code==="functions/permission-denied"?"Coach réservé à Claire et Julien.":e&&/not-found|internal|unavailable/.test(e.code||"")?"Le coach ne répond pas pour l'instant. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
+  try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(opts.web?{web:true}:{}),...(atts.length?{attachments:atts.map(a=>({media_type:a.media_type,data:a.data,...(a.thumb?{thumb:a.thumb}:{})}))}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[],sources:r.sources||[]});(r.actions||[]).forEach(a=>a.kick&&kick(a.kick))}
+  catch(e){const msg=e&&/functions\/(resource-exhausted|failed-precondition)/.test(e.code||"")||e&&e.code==="functions/unavailable"&&e.message&&!/^unavailable$/i.test(e.message)?e.message:e&&e.code==="functions/permission-denied"?`Coach réservé à ${COUPLE()}.`:e&&/not-found|internal|unavailable/.test(e.code||"")?"Le coach ne répond pas pour l'instant. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
     c.messages.push({role:"assistant",text:msg,actions:[],error:true})}
-  c.busy=false;renderChat();
+  c.busy=false;renderChat("answer");
 }
 async function undoChat(i){
   const m=S.chat.messages[i];if(!m||m.undone)return;
@@ -1058,7 +1342,7 @@ async function undoChat(i){
       const ref=S.db.doc(op.path);op.before?await ref.set(op.before):await ref.delete();
     }
     m.undone=true;renderChat();toast("Actions annulées");
-    await S.db.doc("chats/"+String(S.user.email).toLowerCase()).set({messages:S.chat.messages.filter(x=>!x.error),mode:S.chat.mode,updatedAt:Date.now()});
+    await S.db.doc("chats/"+String(S.user.email).toLowerCase()).set({messages:S.chat.messages.filter(x=>!x.error).map(({thumbs,...x})=>x),mode:S.chat.mode,updatedAt:Date.now()});
   }catch(e){writeErr(e)}
 }
 
@@ -1080,7 +1364,7 @@ function onboarding(){
   const s=S.settings,g=S.guests;
   const other=Object.keys(S.presence||{}).filter(k=>k!==presKey());
   return [
-    ["Date du mariage",!!s.date,"reglages"],["Budget total",!!num(s.budgetTotal),"reglages"],
+    ["Date du mariage",!!s.date,"reglages"],["Budget total",!!num(s.budgetTotal),"budget"],
     ["Ville et nombre d'invités visé",!!(s.ville&&num(s.invitesCible)),"reglages"],
     ["Invités rangés par groupe",g.length>0&&g.filter(x=>!x.group).length<=g.length*.2,"invites"],
     ["Nos envies remplies (70 %)",allProg()>=.7,"brief"],
@@ -1095,7 +1379,7 @@ function onboardH(){
   if(hidden||done===items.length)return "";
   const open=S.ui.onb;
   return `<div class="panel c12 onboard ${open?"open":""}"><button class="ob-h" data-act="uionb" aria-expanded="${!!open}"><b>Bien démarrer</b><span class="ob-bar"><i style="width:${done/items.length*100}%"></i></span><span class="num ob-n">${done}/${items.length}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-    ${open?`<ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec le coach</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:'<span class="ob-hint">Claire et Julien se connectent chacun une fois</span>'}</li>`).join("")}</ul>
+    ${open?`<ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec le coach</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:`<span class="ob-hint">${esc(COUPLE())} se connectent chacun une fois</span>`}</li>`).join("")}</ul>
     <button class="link ob-off" data-act="onboardoff">Ne plus afficher</button>`:""}</div>`;
 }
 
@@ -1146,7 +1430,7 @@ function applyTheme(t){
 function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t)}</b>${esc(s)}</div></div>`}
 
 /* ---------- Render ---------- */
-const VIEWFN={apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
+const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
 function render(){
   renderHero();renderTabs();
   const main=document.getElementById("main");
@@ -1156,7 +1440,7 @@ function render(){
   let pre="";
   document.body.classList.toggle("noauth",S.mode==="login"||S.mode==="locked");
   if(S.mode==="login"){setHTML(main,loginView());return}
-  if(S.mode==="locked"){setHTML(main,`<div class="lock"><h2>Accès réservé</h2><p style="color:var(--muted);margin:0 0 16px">Cette app est réservée à Claire et Julien. Le compte <b>${esc(S.user&&S.user.email||"")}</b> n'est pas autorisé.</p><button class="btn" data-act="logout">Changer de compte</button></div>`);return}
+  if(S.mode==="locked"){setHTML(main,`<div class="lock"><h2>Accès réservé</h2><p style="color:var(--muted);margin:0 0 16px">Cette app est réservée à ${esc(COUPLE())}. Le compte <b>${esc(S.user&&S.user.email||"")}</b> n'est pas autorisé.</p><button class="btn" data-act="logout">Changer de compte</button></div>`);return}
   if(S.mode==="loading")pre=`<div class="banner">Chargement de vos données…</div>`;
   else if(S.mode==="offline")pre=`<div class="banner warn">Connexion à la base impossible. Vérifiez votre réseau puis rechargez la page.</div>`;
   if(S.mode==="live"&&S.stale)pre=`<div class="banner warn">Les données ne répondent pas pour l'instant. Ce qui s'affiche peut ne pas être à jour.</div>`;
@@ -1215,14 +1499,14 @@ const flat=fs=>fs.flatMap(f=>f.row?f.row:[f]);
 const defOf=f=>typeof f.def==="function"?f.def():f.def;
 
 function fieldHTML(f,v){
-  const id="m-"+f.k,dis=S.canWrite?"":"disabled",dv=v??defOf(f);
+  const id="search-m-"+f.k,dis=S.canWrite?"":"disabled",dv=v??defOf(f);
   if(f.type==="seg")return `<div class="field"><span class="lab">${f.label}</span><div class="seg" role="radiogroup">${f.options.map(([k,l])=>`<label><input type="radio" name="${f.k}" value="${k}" id="${id}-${k}" ${dv===k?"checked":""} ${dis}><span>${l}</span></label>`).join("")}</div></div>`;
   if(f.type==="select")return `<div class="field"><label for="${id}">${f.label}</label><select id="${id}" name="${f.k}" ${dis}>${f.options.map(([k,l])=>`<option value="${esc(k)}" ${dv===k?"selected":""}>${esc(l)}</option>`).join("")}</select></div>`;
-  if(f.type==="textarea")return `<div class="field"><label for="${id}">${f.label}</label><textarea id="${id}" name="${f.k}" ${dis}>${esc(v||"")}</textarea></div>`;
+  if(f.type==="textarea")return `<div class="field"><label for="${id}">${f.label}</label><textarea autocomplete="off" id="${id}" name="${f.k}" ${dis}>${esc(v||"")}</textarea></div>`;
   if(f.type==="check")return `<div class="field"><label class="toggle" style="color:var(--ink);font-weight:500;font-size:14px"><input type="checkbox" id="${id}" name="${f.k}" ${v?"checked":""} ${dis}> ${f.label}</label></div>`;
   if(f.type==="checks")return `<div class="field"><span class="lab">${f.label}</span><div class="checks">${f.options.map(([k,l])=>`<label><input type="checkbox" id="${id}-${k}" name="${k}" ${v&&v[k]===false?"":"checked"} ${dis}> ${l}</label>`).join("")}</div></div>`;
   const t=f.type==="number"?'type="number" inputmode="decimal" step="any" min="0"':`type="${f.type}"`;
-  return `<div class="field"><label for="${id}">${f.label}</label><input ${t} id="${id}" name="${f.k}" value="${esc(v??"")}" ${f.req?"required":""} ${f.list?`list="${id}-l"`:""} ${dis}>${f.list?`<datalist id="${id}-l">${f.list.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`:""}</div>`;
+  return `<div class="field"><label for="${id}">${f.label}</label><input ${t} ${f.type==="email"?"":'autocomplete="off"'} id="${id}" name="${f.k}" value="${esc(v??"")}" ${f.req?"required":""} ${f.list?`list="${id}-l"`:""} ${dis}>${f.list?`<datalist id="${id}-l">${f.list.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`:""}</div>`;
 }
 
 function openEditor(col,id){
@@ -1238,7 +1522,8 @@ function openEditor(col,id){
     <div class="acts"><div>${!isNew&&S.canWrite?`<button type="button" class="btn danger" data-act="del">Supprimer</button>`:""}</div>
     <div><button type="button" class="btn" data-close="1">Annuler</button>${S.canWrite?`<button type="submit" class="btn primary">${isNew?"Ajouter":"Enregistrer"}</button>`:""}</div></div></form></div>`;
   const form=document.getElementById("editor");
-  const first=form.querySelector("input:not([type=radio]):not([type=checkbox]),select,textarea");if(first)first.focus();
+  // Pas de curseur automatique sur téléphone : le clavier ne s'ouvre que quand on touche un champ pour le modifier
+  if(!window.matchMedia("(pointer:coarse)").matches){const first=form.querySelector("input:not([type=radio]):not([type=checkbox]),select,textarea");if(first)first.focus()}
   form.addEventListener("submit",async e=>{
     e.preventDefault();
     const out=Object.assign({},cur);delete out.id;
@@ -1251,11 +1536,13 @@ function openEditor(col,id){
     });
     delete out._ev;delete out.template;
     if(col==="tasks"&&isNew){const same=S.tasks.filter(t=>t.phase===out.phase);out.order=same.reduce((m,t)=>Math.max(m,t.order||0),0)+1}
+    if(col==="vendors")out.updatedAt=Date.now();
     if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim())out.fitRequestedAt=Date.now();
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
     const ok=await save(col,id,out);
-    if(ok){closeModal();toast(out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000?"Enregistré : la note sera recalculée d'ici 15 minutes":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
+    const refit=out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000;
+    if(ok){closeModal();if(refit)kick("analyse");toast(refit?"Enregistré : la note est recalculée (1 à 2 minutes)":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
   });
   const del=form.querySelector('[data-act="del"]');
   if(del)del.addEventListener("click",async ev=>{
@@ -1288,9 +1575,9 @@ function openBulk(){
   const layer=document.getElementById("layer");
   layer.innerHTML=`<div class="ov" data-close="1"><form class="modal form" id="bulk" role="dialog" aria-modal="true" aria-label="Ajout rapide d'invités">
     <h3>Ajout rapide</h3>
-    <div class="field"><label for="b-names">Un nom par ligne</label><textarea id="b-names" style="min-height:160px" placeholder="Marie Dupont&#10;Paul Dupont&#10;Léa Martin" required></textarea></div>
+    <div class="field"><label for="b-names">Un nom par ligne</label><textarea autocomplete="off" name="search_text" id="b-names" style="min-height:160px" placeholder="Marie Dupont&#10;Paul Dupont&#10;Léa Martin" required></textarea></div>
     <div class="field"><span class="lab">Côté</span><div class="seg" role="radiogroup">${Object.entries(SIDES).map(([k,l])=>`<label><input type="radio" name="side" value="${k}" ${k==="commun"?"checked":""}><span>${l}</span></label>`).join("")}</div></div>
-    <div class="field"><label for="b-group">Groupe</label><input type="text" id="b-group" list="b-gl" placeholder="Famille, Amis…"><datalist id="b-gl">${GROUPS.map(g=>`<option value="${g}">`).join("")}</datalist></div>
+    <div class="field"><label for="b-group">Groupe</label><input type="text" autocomplete="off" id="b-group" list="b-gl" placeholder="Famille, Amis…"><datalist id="b-gl">${GROUPS.map(g=>`<option value="${g}">`).join("")}</datalist></div>
     <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Annuler</button><button type="submit" class="btn primary">Ajouter</button></div></div></form></div>`;
   const form=document.getElementById("bulk");form.querySelector("textarea").focus();
   form.addEventListener("submit",async e=>{
@@ -1319,8 +1606,8 @@ document.addEventListener("click",async e=>{
   if(t.dataset.close){if(e.target===t||t.tagName==="BUTTON")closeModal();return}
   if(t.dataset.go){go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
-  if(t.dataset.bgo){S.f.bcat=t.dataset.bgo;saveF();go("envies");return}
-  if(t.dataset.bcat){S.f.bcat=t.dataset.bcat;saveF();render();const n=document.querySelector(".env");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView({behavior:"smooth"});return}
+  if(t.dataset.bgo){S.f.bcat=t.dataset.bgo;S.f.envTab="quest";S.f.bcatOpen=true;saveF();go("envies");return}
+  if(t.dataset.bcat){S.f.bcat=t.dataset.bcat;S.f.envTab="quest";S.f.bcatOpen=true;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView({behavior:"smooth"});return}
   if(t.dataset.bchip){if(!S.canWrite)return;const [c,q,type]=t.dataset.bchip.split("|"),o=t.dataset.o;const cur=Array.isArray(bGet(c,q).choix)?bGet(c,q).choix.slice():[];let next;if(type==="c")next=cur.includes(o)?[]:[o];else next=cur.includes(o)?cur.filter(x=>x!==o):cur.concat(o);t.setAttribute("aria-pressed",next.includes(o));await saveBrief(c,q,{choix:next});return}
   if(t.dataset.bimp){if(!S.canWrite)return;const [c,n]=t.dataset.bimp.split("|");await saveBrief(c,"_meta",{importance:+n});return}
   if(t.dataset.who){S.f.owner=t.dataset.who;S.f.hideDone=true;saveF();go("planning");return}
@@ -1343,6 +1630,32 @@ document.addEventListener("click",async e=>{
     if(await patch("tasks",A.id,{status:st,note,due:A.due||B.due||null})&&await remove("tasks",B.id))toast("Tâches fusionnées");return}
   if(a==="dupkeep"){if(S.canWrite&&await mergeDoc("meta/prefs",{notDupes:[...(S.prefs.notDupes||[]),t.dataset.k]}))toast("C'est noté");return}
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
+  if(a==="envtab"){S.f.envTab=t.dataset.v;if(t.dataset.v==="quest")S.f.bcatOpen=false;saveF();render();return}
+  if(a==="envgrid"){S.f.bcatOpen=false;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView();return}
+  if(a==="moodcat"){S.f.moodCat=t.dataset.v;saveF();render();return}
+  if(a==="devisadd"){const v=S.vendors.find(x=>x.id===t.dataset.id);if(!v||!S.canWrite)return;closeModal();S.chat.mode="chat";
+    await openChat(undefined,`Voici le devis de ${v.name} (id ${v.id}) : lis-le et enregistre-le sur sa fiche. `);setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
+  if(a==="inspopen"){openInsp(t.dataset.id,t.dataset.scope);return}
+  if(a==="inspask"){const x=S.inspirations.find(y=>y.id===t.dataset.id);if(!x)return;
+    S.chat.atts=[{media_type:"image/jpeg",data:x.thumb,name:"inspiration.jpg",preview:"data:image/jpeg;base64,"+x.thumb}];
+    closeModal();await openChat("chat","Que penses-tu de cette inspiration pour notre mariage ? ");renderAtt();return}
+  if(a==="chatcat"){const c=t.dataset.c;if(!S.canWrite)return;
+    if(!c){openChat("brief");return}
+    S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
+  if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
+  if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;t.disabled=true;t.textContent="Rédaction en cours…";if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
+  if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
+    document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Budget total"><h3>Budget total</h3>
+      <form class="form" id="budget-total-form"><div class="field"><label for="search-b-total">Budget total du mariage (€)</label><input type="number" inputmode="numeric" min="0" step="100" id="search-b-total" name="budgetTotal" value="${tot||""}"></div>
+      <p class="plan-when" style="margin:0 0 12px">Sert à calculer la marge et la part de chaque poste.</p>
+      <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Annuler</button> <button class="btn primary" type="submit">Enregistrer</button></div></div></form></div></div>`;return}
+  if(a==="pinsync"){if(!S.canWrite)return;if(await mergeDoc("meta/pinterest",{requestedAt:Date.now()})){kick("pinterest");toast("Synchronisation lancée : vos épingles arrivent dans Nos envies");render()}return}
+  if(a==="pindel"){if(!S.canWrite)return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer";return}
+    const b=(S.pinterest.boards||[]).slice();b.splice(+t.dataset.i,1);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Tableau retiré (les épingles déjà importées restent)");return}
+  if(a==="iaweb"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{web:t.dataset.v,updatedAt:Date.now()}))toast("Réglage enregistré");return}
+  if(a==="ialvl"){if(!S.canWrite)return;if(await mergeDoc("meta/ia",{niveaux:{[t.dataset.feat]:t.dataset.v},updatedAt:Date.now()}))toast("Réglage enregistré : appliqué dès le prochain appel");return}
+  if(a==="fireall"){if(!S.canWrite||agentBusy("analyse"))return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer : refaire toutes les fiches";return}
+    const now=Date.now();if(await mergeDoc("meta/analyse",{requestedAt:now,fullRequestedAt:now,status:"demandée"})){kick("analyse");toast("Toutes les fiches sont refaites : quelques minutes");render()}return}
   if(a==="theme"){applyTheme(t.dataset.v);S.view==="reglages"&&(document.getElementById("main")._h=null);render();return}
   if(a==="unseat"){if(S.canWrite)await patch("guests",id,{table:""});return}
   if(a==="bulk"){if(S.canWrite)openBulk();return}
@@ -1357,7 +1670,9 @@ document.addEventListener("click",async e=>{
   if(a==="cmpnone"){S.cmp.ids=[];openCompare(S.cmp.cat);return}
   if(a==="homephoto"){openChat("chat");setTimeout(()=>document.getElementById("chat-file")?.click(),50);return}
   if(a==="chatfile"){document.getElementById("chat-file")?.click();return}
-  if(a==="chatattx"){S.chat.att=null;renderAtt();return}
+  if(a==="chatattx"){(S.chat.atts||[]).splice(+t.dataset.i,1);renderAtt();return}
+  if(a==="inspdel"){if(!S.canWrite)return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer";return}if(await remove("inspirations",id)){if(document.querySelector(".modal.lb"))closeModal();toast("Inspiration retirée")};return}
+  if(a==="inspadd"){openChat("brief");setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
   if(a==="chatmic"){toggleMic(t);return}
   if(a==="mailcopy"){const m=mailOf((S.chat.messages[+t.dataset.i]||{}).text);if(!m)return;const txt=`Objet : ${m.subject}\n\n${m.body}`;try{await navigator.clipboard.writeText(txt);toast("Mail copié")}catch(e){toast("Copie impossible : sélectionnez le texte")}return}
   if(a==="pdfshare"){try{await navigator.share({files:[S.pdfFile],title:S.pdfFile.name})}catch(e){if(e&&e.name!=="AbortError")toast("Partage impossible : utilisez « Ouvrir le PDF »")}return}
@@ -1365,7 +1680,11 @@ document.addEventListener("click",async e=>{
   if(a==="pdfreport"){pdfReport();return}
   if(a==="chat"){openChat(t.dataset.m||null);return}
   if(a==="chatsugg"){sendChat(t.dataset.t);return}
+  if(a==="webok"||a==="webno"){const m=S.chat.messages[+t.dataset.i],w=m&&(m.actions||[]).find(x=>x.web);if(!w||m.webDecided||S.chat.busy)return;
+    m.webDecided=a==="webok"?"ok":"no";
+    if(a==="webok")sendChat(`Oui, tu peux chercher sur internet : « ${w.web.requete} ».`,{web:true});else renderChat();return}
   if(a==="chatundo"){if(S.canWrite)await undoChat(+t.dataset.i);return}
+  if(a==="chatbottom"){chatJump();return}
   if(a==="chatmode"){S.chat.mode=t.dataset.m;renderChat();if(t.dataset.m==="brief")sendChat("Commençons le questionnaire Nos envies.");return}
   if(a==="chatreset"){if(S.chat.busy)return;S.chat.messages=[];renderChat();try{await callAssistant({reset:true})}catch(e){}return}
   if(a==="onboardoff"){try{localStorage.setItem("mariage-onboard-off","1")}catch(e){}render();return}
@@ -1383,8 +1702,8 @@ document.addEventListener("click",async e=>{
   if(a==="dismiss"){if(S.canWrite&&await patch("inbox",id,{status:"dismissed",decidedAt:Date.now()}))toast("Ignoré");return}
   if(a==="restore"){if(S.canWrite)await patch("inbox",id,{status:"new"});return}
   if(a==="more"){openMore();return}
-  if(a==="fire"){t.disabled=true;await fireAnalysis();t.disabled=false;return}
-  if(a==="runnow"){t.disabled=true;await runNow(t.dataset.job);t.disabled=false;return}
+  if(a==="fire"){t.disabled=true;await fireAnalysis();render();return}
+  if(a==="runnow"){t.disabled=true;await runNow(t.dataset.job);render();return}
   if(a==="editv"){openEditor("vendors",id);return}
   if(a==="logout"){await signOut();return}
   if(a==="google"){try{await signInGoogle()}catch(err){toast(authErr(err))}return}
@@ -1396,11 +1715,15 @@ function renderInvitesPart(){
   if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
 document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
-  if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,140)+"px"}});
+  if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,180,Math.round((window.visualViewport?.height||innerHeight)*.3))+"px"}});
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
   const el=e.target;
-  if(el.id==="chat-file"){await pickFile(el.files&&el.files[0]);el.value="";return}
+  if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
+  if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
+  if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
+    // curseur directement sous la photo pour la commenter (sans faire remonter la conversation)
+    const ta=document.getElementById("chat-text");if(ta&&(S.chat.atts||[]).length){ta.focus({preventScroll:true});ta.setSelectionRange(ta.value.length,ta.value.length);ta.scrollIntoView({block:"nearest"})}return}
   if(el.id==="hide-done"){S.f.hideDone=el.checked;saveF();render();return}
   if(el.dataset.bq){const [c,q,fld]=el.dataset.bq.split("|");const val=fld==="desaccord"?el.checked:el.value.trim();if(fld!=="desaccord"&&(bGet(c,q)[fld]||"")===val)return;await saveBrief(c,q,{[fld]:val});if(fld==="desaccord")render();return}
   if(el.dataset.bm){const [c,fld]=el.dataset.bm.split("|");const val=fld==="budget"?(el.value===""?null:num(el.value)):el.value.trim();if((bMeta(c)[fld]??"")===(val??""))return;await saveBrief(c,"_meta",{[fld]:val});return}
@@ -1410,11 +1733,19 @@ document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.tar
 document.addEventListener("submit",async e=>{
   const f=e.target;
   if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-text");const v=inp.value.trim();if(!v)return;inp.value="";openChat("chat");await sendChat(v);return}
-  if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";await sendChat(v);ta.focus();return}
+  if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
+  if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
+    if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
+  if(f.id==="pin-form"){e.preventDefault();const u=pinBoard(f.elements.url.value);
+    if(!u){toast("Lien non reconnu : sur Pinterest, ouvrez le tableau, touchez Partager puis Copier le lien");return}
+    const b=(S.pinterest.boards||[]).slice();if(b.some(x=>x.url===u)){toast("Ce tableau est déjà ajouté");return}
+    b.push({url:u,cat:"auto"});if(await mergeDoc("meta/pinterest",{boards:b,requestedAt:Date.now()})){kick("pinterest");f.reset();document.activeElement&&document.activeElement.blur();toast("Tableau ajouté : première synchronisation lancée")}return}
+  if(f.id==="ia-form"){e.preventDefault();const v=num(f.elements.budget.value);if(!(v>0)){toast("Indiquez un budget en euros");return}
+    if(await mergeDoc("meta/ia",{budget:v,updatedAt:Date.now()})){document.activeElement&&document.activeElement.blur();toast("Budget enregistré")}return}
   if(f.id==="settings-form"){
     e.preventDefault();
-    const d={updatedAt:Date.now()};["date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
-    ["budgetTotal","invitesCible"].forEach(k=>{const v=f.elements[k].value;d[k]=v===""?null:num(v)});
+    const d={updatedAt:Date.now()};["prenom1","prenom2","date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
+    ["invitesCible"].forEach(k=>{const v=f.elements[k].value;d[k]=v===""?null:num(v)});
     if(await setDoc("meta/settings",S.settings,d)){mergeDoc("meta/analyse",{profilRequestedAt:Date.now()});document.activeElement&&document.activeElement.blur();toast("Réglages enregistrés");render()}
     return;
   }
@@ -1482,7 +1813,9 @@ function boot(){
     let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
-    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");
+    meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");meta("briefs","briefs");meta("pinterest","pinterest");
+    { const d=new Date(),prev=monthKey(new Date(d.getFullYear(),d.getMonth()-1,15));
+      for(const [k,m] of [["cur",monthKey(d)],["prev",prev]])unsubs.push(db.doc("usage/"+m).onSnapshot(LIVE,x=>{S.usage[k]=x.exists?x.data():{};later()},()=>{})); }
     db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});
     COLS.forEach(c=>{
       unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));

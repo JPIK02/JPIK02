@@ -13,6 +13,8 @@
     "test": "node --test agents/test/*.test.js"
   },
   "dependencies": {
+    "@fontsource/cormorant-garamond": "^5.3.0",
+    "@fontsource/jost": "^5.3.0",
     "firebase": "^10.14.1",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4"

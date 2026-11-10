@@ -15,11 +15,15 @@ const toNum = v => {
   return isFinite(n) ? n : undefined;
 };
 const str = v => (typeof v === "string" && v.trim() ? v.trim().slice(0, 500) : undefined);
+const strList = v => { const a = (Array.isArray(v) ? v : []).map(x => str(x)).filter(Boolean).map(x => x.slice(0, 200)).slice(0, 15); return a.length ? a : undefined; };
+const optList = v => { const a = (Array.isArray(v) ? v : []).map(o => o && str(o.label) ? { label: str(o.label).slice(0, 200), ...(toNum(o.prix) !== undefined ? { prix: toNum(o.prix) } : {}) } : null).filter(Boolean).slice(0, 15); return a.length ? a : undefined; };
+const posInt = v => { const n = toNum(v); return n !== undefined && n > 0 ? Math.round(n) : undefined; };
 
 const SPEC = {
   vendor: { name: str, cat: v => (CATS.includes(v) ? v : "Autre"), contact: str, tel: str },
   quote: { name: str, cat: v => (CATS.includes(v) ? v : "Autre"), prix: toNum, acompte: toNum,
-    dateAcompte: v => (isDate(v) ? v : undefined), dateSolde: v => (isDate(v) ? v : undefined), contact: str, tel: str },
+    dateAcompte: v => (isDate(v) ? v : undefined), dateSolde: v => (isDate(v) ? v : undefined), contact: str, tel: str,
+    validite: v => (isDate(v) ? v : undefined), invites: posInt, inclus: strList, options: optList, conditions: str, fichier: str },
   task: { title: str, owner: v => (["deux", "claire", "julien"].includes(v) ? v : "deux"),
     phase: v => (PHASES.includes(v) ? v : undefined), due: v => (isDate(v) ? v : undefined) },
   payment: { vendorName: str, amount: toNum, date: v => (isDate(v) ? v : undefined),

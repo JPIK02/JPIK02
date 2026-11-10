@@ -51,10 +51,20 @@ export const vendorsRequested = vendors =>
   vendors.filter(v => v.status !== "ecarte" && (+v.fitRequestedAt || 0) > (+(v.fit && v.fit.updatedAt) || 0));
 
 /** Prestataires à (ré)analyser : non écartés, sans fiche, fiche > 30 j, antérieure à une demande ou à des notes de visite. */
-export function vendorsToAnalyse(vendors, requestedAt = 0, now = Date.now()) {
-  return vendors.filter(v => v.status !== "ecarte" &&
-    (!v.fit || !v.fit.updatedAt || now - v.fit.updatedAt > MONTH || (requestedAt && v.fit.updatedAt < requestedAt)
-      || (+v.fitRequestedAt || 0) > v.fit.updatedAt));
+/**
+ * Prestataires à (ré)analyser. Une analyse coûte des recherches web : on ne refait que ce qui a changé.
+ * opts.requestedAt : bouton « Demander une analyse » → fiches manquantes, prestataires modifiés depuis
+ *   leur fiche (updatedAt) ou envies/réglages modifiés depuis (opts.changedAt = meta/analyse.profilRequestedAt).
+ * opts.fullAt : « Tout réanalyser » → toutes les fiches plus anciennes. Un nombre seul vaut fullAt.
+ */
+export function vendorsToAnalyse(vendors, opts = {}, now = Date.now()) {
+  const { requestedAt = 0, changedAt = 0, fullAt = 0 } = typeof opts === "number" ? { fullAt: opts } : opts || {};
+  return vendors.filter(v => {
+    if (v.status === "ecarte") return false;
+    const at = v.fit?.updatedAt;
+    if (!at || now - at > MONTH || (+v.fitRequestedAt || 0) > at || (fullAt && at < fullAt)) return true;
+    return !!requestedAt && at < requestedAt && ((+v.updatedAt || 0) > at || (+changedAt || 0) > at);
+  });
 }
 
 /**

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" width="1200" height="840">
+  <title>Lamaelle – logo complet</title>
+  <rect width="600" height="420" fill="#F7F3EC"/>
+  <g transform="translate(225 30) scale(1.25)">
+    <circle cx="60" cy="60" r="54" fill="none" stroke="#1E2A3A" stroke-width="2"/>
+    <circle cx="60" cy="62" r="26" fill="none" stroke="#D98C6A" stroke-width="7"/>
+    <path d="M60 32 L32 25 M60 32 L88 25" fill="none" stroke="#C9A46A" stroke-width="1.6" stroke-linecap="round"/>
+    <polygon points="54.5,90 65.5,90 63.5,41 56.5,41" fill="#1E2A3A"/>
+    <rect x="55.5" y="31" width="9" height="10" fill="#1E2A3A"/>
+    <polygon points="54,31 66,31 60,23" fill="#1E2A3A"/>
+    <path d="M24 90 L96 90 M34 97 L86 97 M46 104 L74 104" fill="none" stroke="#1E2A3A" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <text x="300" y="250" text-anchor="middle" font-family="Jost, 'Helvetica Neue', Arial, sans-serif" font-weight="300" font-size="48" letter-spacing="15" fill="#1E2A3A">LAMAELLE</text>
+  <text x="300" y="300" text-anchor="middle" font-family="'Cormorant Garamond', Georgia, serif" font-style="italic" font-size="26" fill="#4F5866">Le mariage qui vous ressemble</text>
+</svg>
