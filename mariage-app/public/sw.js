@@ -4,8 +4,8 @@ self.addEventListener("activate", e => e.waitUntil(self.clients.claim()));
 self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || "Mariage Claire & Julien", {
-    body: d.body || "", tag: d.tag, data: { url: d.url || "/" }, icon: "/icon.svg", badge: "/icon.svg",
+  e.waitUntil(self.registration.showNotification(d.title || "Lamaelle", {
+    body: d.body || "", tag: d.tag, data: { url: d.url || "/" }, icon: "/icon-192.png", badge: "/icon-192.png",
   }));
 });
 self.addEventListener("notificationclick", e => {
