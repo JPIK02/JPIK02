@@ -10,7 +10,7 @@ const SYSTEM = readFileSync(new URL("./prompts/analyse.md", import.meta.url), "u
 
 const PROFIL_OUT = {
   name: "enregistrer_profil",
-  description: "Enregistre la synthèse du brief de Claire et Julien.",
+  description: "Enregistre la synthèse du brief du couple.",
   input_schema: {
     type: "object",
     properties: {

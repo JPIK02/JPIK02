@@ -177,3 +177,9 @@ test("Pinterest : lien de tableau → flux RSS, lecture des épingles, rythme", 
   assert.equal(pinterestDue({ boards: [{ url: "u" }], lastSyncAt: now - 3600_000, requestedAt: now }, now), true);
   assert.equal(pinterestDue({ boards: [{ url: "u" }], lastSyncAt: now - 3600_000, remaining: 5 }, now), true);
 });
+
+test("prénoms du couple : marqueurs remplis depuis les réglages, jamais en dur", async () => {
+  const { fillCouple, coupleNames } = await import("../lib/couple.js");
+  assert.equal(fillCouple("Coach de {{COUPLE}} ; avis de {{P1}} ou {{P2}} ({{COUPLE_EMAILS}})", { prenom1: "Sophie", prenom2: "Karim" }), "Coach de Sophie et Karim ; avis de Sophie ou Karim ({{COUPLE_EMAILS}})");
+  assert.equal(coupleNames({}).couple, "le premier partenaire et le second partenaire");
+});

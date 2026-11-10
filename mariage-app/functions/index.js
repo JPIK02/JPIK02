@@ -1,4 +1,4 @@
-// Assistant IA intégré à l'app : fonction appelable par Claire et Julien uniquement.
+// Assistant IA intégré à Lamaelle : fonction appelable par les deux comptes du couple uniquement.
 // La clé Claude reste côté serveur (variable d'environnement écrite au déploiement depuis les secrets GitHub).
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -12,6 +12,7 @@ import { converse, userContent } from "./converse.js";
 import { QCATS } from "./questions.js";
 import { FieldValue } from "firebase-admin/firestore";
 import { profileFor, recordUsage } from "./agents/lib/usage.js";
+import { coupleNames } from "./agents/lib/couple.js";
 
 initializeApp();
 const db = getFirestore();
@@ -19,7 +20,9 @@ setGlobalOptions({ region: "europe-west1", maxInstances: 3 });
 
 const MODEL = process.env.ANTHROPIC_MODEL || ""; // vide : modèle choisi dans Réglages → Coût de l'IA (meta/ia)
 const ALLOWED = String(process.env.ALLOWED_EMAILS || "").split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
-const PRENOMS = { "julienpicquet@gmail.com": "Julien", "duquesne.claire@yahoo.fr": "Claire", "claiire.duquesne59@gmail.com": "Claire" };
+// Quel partenaire est connecté (compte → emplacement « claire » = partenaire 1, « julien » = partenaire 2) ;
+// les prénoms viennent des réglages de l'app (meta/settings.prenom1 / prenom2), jamais du code.
+const PARTNER = { "julienpicquet@gmail.com": "julien", "duquesne.claire@yahoo.fr": "claire", "claiire.duquesne59@gmail.com": "claire" };
 const DAILY_LIMIT = 150;   // messages par jour, à vous deux (garde-fou de coût)
 const HISTORY = 16;        // derniers messages repris comme contexte
 let client;
@@ -27,7 +30,7 @@ let client;
 export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async req => {
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email))
-    throw new HttpsError("permission-denied", "Coach réservé à Claire et Julien.");
+    throw new HttpsError("permission-denied", "Coach réservé au couple.");
   const { message, mode = "chat", view = "", reset = false, attachment = null, web = false } = req.data || {};
   const atts = (Array.isArray(req.data?.attachments) ? req.data.attachments : attachment ? [attachment] : []).slice(0, 4);
   const chatRef = db.doc(`chats/${email}`);
@@ -61,8 +64,10 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const fresh = atts.map(a => (typeof a.thumb === "string" && a.thumb.length < 400_000 ? a.thumb : null));
   const pending = chatDoc.pendingThumbs && Date.now() - (chatDoc.pendingThumbs.at || 0) < 24 * 3600_000 ? chatDoc.pendingThumbs.list || [] : [];
   const thumbs = fresh.some(Boolean) ? fresh : pending;
-  const exec = makeTools(db, { qcats: QCATS, thumbs, author: PRENOMS[email] || "" });
-  const system = systemPrompt({ prenom: PRENOMS[email] || "l'un des mariés", today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
+  const names = coupleNames((await db.doc("meta/settings").get()).data() || {});
+  const me = PARTNER[email] === "claire" ? names.p1 : PARTNER[email] === "julien" ? names.p2 : "";
+  const exec = makeTools(db, { qcats: QCATS, thumbs, author: me });
+  const system = systemPrompt({ prenom: me || "l'un des mariés", couple: names, today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
   const feature = mode === "brief" ? "brief" : "coach";
@@ -113,7 +118,7 @@ export const agents = onSchedule(
 // sans attendre le prochain réveil. Un verrou (agents/lib/lock.js) évite les doubles passages.
 export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstances: 2 }, async req => {
   const email = String(req.auth?.token?.email || "").toLowerCase();
-  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé à Claire et Julien.");
+  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
   const job = req.data?.job;
   if (!["mail", "analyse", "hebdo", "briefs", "pinterest"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
   const { runAll } = await import("./agents/main.js");

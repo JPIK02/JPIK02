@@ -78,14 +78,14 @@ export const TOOL_DEFS = [
     date: T("AAAA-MM-JJ"), budget_total: N("€"), lieu: T(""), ville: T(""), mairie: T(""), invites_cible: N("") }) },
   { name: "enregistrer_envie", description: "Enregistre la réponse à une question de « Nos envies ». Reformule fidèlement ce qui a été dit, n'invente rien.", input_schema: S({
     categorie: T("clé de catégorie"), question: T("id de la question"), commun: T("réponse commune"),
-    claire: T("avis de Claire si différent"), julien: T("avis de Julien si différent"),
+    claire: T("avis du partenaire 1 si différent"), julien: T("avis du partenaire 2 si différent"),
     choix: { type: "array", items: { type: "string" }, description: "options choisies, telles qu'écrites dans la question" }, desaccord: { type: "boolean" } }, ["categorie", "question"]) },
   { name: "enregistrer_priorites", description: "Importance (1 à 5), budget cible, critère de réussite et rédhibitoire d'une catégorie de « Nos envies ».", input_schema: S({
     categorie: T(""), importance: { type: "integer", minimum: 1, maximum: 5 }, budget: N("€"), reussite: T(""), redhibitoire: T("") }, ["categorie"]) },
   { name: "noter_inspiration", description: "Garde une photo jointe à ce message, ou au dernier message qui contenait des photos (par ex. après leur « oui »), comme inspiration dans « Nos envies » (catégorie), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
     photo: { type: "integer", minimum: 1, maximum: 3, description: "numéro de la photo jointe (1 si une seule)" }, categorie: T("clé de catégorie, ex. lieu, fleurs, tenues, vision"),
     description: T("ce que montre la photo et ce qui leur plaît : style, couleurs, matières, ambiance (2 phrases)") }, ["photo", "categorie", "description"]) },
-  { name: "demander_recherche_web", description: "Tu n'as pas accès à internet sans accord. Quand une recherche aiderait vraiment (inspiration, tendances, idées de déco ou de menu, infos ou avis sur un lieu ou un prestataire), propose-la avec une requête précise. Claire ou Julien l'autorise ou non dans l'app : arrête-toi ensuite et dis en une phrase ce que tu veux chercher et pourquoi.", input_schema: S({
+  { name: "demander_recherche_web", description: "Tu n'as pas accès à internet sans accord. Quand une recherche aiderait vraiment (inspiration, tendances, idées de déco ou de menu, infos ou avis sur un lieu ou un prestataire), propose-la avec une requête précise. l'un des deux l'autorise ou non dans l'app : arrête-toi ensuite et dis en une phrase ce que tu veux chercher et pourquoi.", input_schema: S({
     requete: T("ce que tu veux chercher, précis (ex. « décoration mariage champêtre vert sauge terracotta »)"), pourquoi: T("en une phrase, ce que ça leur apportera") }, ["requete", "pourquoi"]) },
   { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) qui démarre aussitôt (résultats en 2 à 3 minutes). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
 ];

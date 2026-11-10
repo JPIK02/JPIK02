@@ -1,6 +1,11 @@
-# Mariage Claire & Julien — notes pour Claude Code
+# Lamaelle — notes pour Claude Code
 
-App d'organisation du mariage de Claire et Julien (2028). Tout est en français : interface, messages, commits.
+Lamaelle, app d'organisation de mariage, conçue pour servir demain de nombreux couples ; premier couple : Claire et Julien (2028). Tout est en français : interface, messages, commits.
+
+## Identité et personnalisation
+- **Charte** : fichiers de marque dans `brand/` (symbole, logo, icône). Couleurs **uniquement par variables de rôle** dans `src/styles.css` (`:root` clair + mode sombre, voir le commentaire en tête) : aucune couleur en dur ailleurs (le symbole inline de l'en-tête et les SVG de `brand/` exceptés). Contrastes WCAG vérifiés : texte ≥ 4,5:1 (`--link`/`--coral-ink` pour le texte corail ; `--coral` seul jamais en texte sur clair), icônes/barres ≥ 3:1 (`--coral-ui`). PDF : même palette (`src/pdf.js`), police Jost intégrée (`public/fonts/`).
+- **Polices** : Jost 300 à 600 (interface) et Cormorant Garamond italique (`--f-accroche`, accroches), hébergées via `@fontsource` (pas de Google Fonts, RGPD).
+- **Prénoms du couple** : `meta/settings.prenom1` / `prenom2` (Réglages > Général), affichés via `P1()`, `P2()`, `COUPLE()` (app.js) ; jamais de prénom en dur. Les clés de données restent `claire` (partenaire 1) et `julien` (partenaire 2). Côté serveur : `agents/lib/couple.js` (marqueurs `{{P1}}`, `{{P2}}`, `{{COUPLE}}` remplis par `runForOutput`) et `systemPrompt({couple})` du coach. Le lien compte → partenaire (`PARTNER`, app.js et functions/index.js) et la liste des comptes autorisés restent à généraliser avec de vrais comptes multi-couples.
 
 ## Architecture
 - **Front** : `index.html` + `src/app.js` (vanilla JS, rendu par template strings, aucun framework) + `src/styles.css`. Build Vite, hébergé sur Firebase Hosting. Mobile d'abord (barre de navigation du bas sous 760 px).

@@ -1,5 +1,5 @@
 // Agent e-mails : lit la boîte dédiée et dépose des propositions dans inbox (status "new").
-// Ne touche jamais aux prestataires, tâches, invités ou budget : Claire et Julien valident dans l'app.
+// Ne touche jamais aux prestataires, tâches, invités ou budget : le couple valide dans l'app.
 import { readFileSync } from "node:fs";
 import { getMeta, listAll, batchWrite, mergeMeta } from "./lib/firestore.js";
 import { gmailClient, recentThreads, threadUrl, attachmentData } from "./lib/gmail.js";
@@ -73,7 +73,7 @@ export async function runMailAgent({ log = console.log } = {}) {
 
     const user = [
       `Types activés : ${enabled.join(", ")}`,
-      `Consignes de Claire et Julien : ${agent.consignes || "(aucune)"}`,
+      `Consignes du couple ({{COUPLE}}) : ${agent.consignes || "(aucune)"}`,
       `Aujourd'hui : ${parisClock().isoDate}`,
       `Déjà dans l'app : ${JSON.stringify(known)}`,
       `Messages à traiter (ids) : ${fresh.map(m => m.id).join(", ")}`,

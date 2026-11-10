@@ -1,0 +1,7 @@
+{
+ "name": "prenoms-2026-11",
+ "source": "Lamaelle : les prénoms du couple passent dans les réglages (modifiables dans Réglages > Général)",
+ "ops": [
+  { "op": "merge", "path": "meta/settings", "data": { "prenom1": "Claire", "prenom2": "Julien" } }
+ ]
+}

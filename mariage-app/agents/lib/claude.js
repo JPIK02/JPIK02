@@ -4,6 +4,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { FieldValue } from "firebase-admin/firestore";
 import { getDb, getMeta } from "./firestore.js";
 import { profileFor, recordUsage } from "./usage.js";
+import { fillCouple, FIELDS_NOTE } from "./couple.js";
 
 // Modèle et effort : réglés par fonction dans l'app (Réglages → Coût de l'IA, meta/ia, voir lib/usage.js).
 // ANTHROPIC_MODEL force un modèle pour tout (tests, dépannage).
@@ -32,6 +33,12 @@ const api = () => (client ||= new Anthropic()); // lit ANTHROPIC_API_KEY
  */
 export async function runForOutput({ system, user, output, feature = "synthese", webSearch = false, maxSearches, maxTokens = 16000, effort }) {
   const prof = profileFor(await iaConfig(), feature);
+  // prénoms du couple dans les consignes et la demande ({{P1}}, {{P2}}, {{COUPLE}})
+  let settings = {}; try { settings = await getMeta("settings"); } catch {}
+  const fill = x => typeof x === "string" ? fillCouple(x, settings) : Array.isArray(x) ? x.map(b => b && b.type === "text" ? { ...b, text: fillCouple(b.text, settings) } : b) : x;
+  if (typeof system === "string") system = `${system}\n\n${FIELDS_NOTE}`;
+  else if (Array.isArray(system) && system[0]?.type === "text") system = [{ ...system[0], text: `${system[0].text}\n\n${FIELDS_NOTE}` }, ...system.slice(1)];
+  system = fill(system); user = fill(user);
   const model = MODEL || prof.model;
   effort = effort || prof.effort;
   maxSearches = maxSearches || prof.maxSearches || 3;

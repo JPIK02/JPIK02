@@ -1,3 +1,6 @@
+// Polices Lamaelle hébergées avec l'app (pas de Google Fonts : RGPD) : Jost pour l'interface, Cormorant Garamond italique pour les accroches
+import "@fontsource/jost/300.css";import "@fontsource/jost/400.css";import "@fontsource/jost/500.css";import "@fontsource/jost/600.css";
+import "@fontsource/cormorant-garamond/400-italic.css";import "@fontsource/cormorant-garamond/500-italic.css";
 import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
 import {QCATS} from "./questions.js";
 import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
@@ -22,9 +25,14 @@ const JOBS={
 };
 const JOURS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
 const MODES=[["hourly","Toutes les heures"],["daily","1 fois par jour"],["twice","2 fois par jour"],["weekly","1 fois par semaine"]];
-const OWNERS={claire:"Claire",julien:"Julien",deux:"Les deux"};
+/* Prénoms du couple : saisis dans Réglages (meta/settings.prenom1 et prenom2), jamais écrits dans le code.
+   Les emplacements internes restent "claire" (partenaire 1) et "julien" (partenaire 2) : ce sont des clés de données. */
+const P1=()=>String(S.settings&&S.settings.prenom1||"").trim()||"Partenaire 1";
+const P2=()=>String(S.settings&&S.settings.prenom2||"").trim()||"Partenaire 2";
+const COUPLE=(sep=" et ")=>`${P1()}${sep}${P2()}`;
+const OWNERS={get claire(){return P1()},get julien(){return P2()},deux:"Les deux"};
 const STATUS={todo:"À faire",doing:"En cours",done:"Fait"};
-const SIDES={claire:"Claire",julien:"Julien",commun:"Commun"};
+const SIDES={get claire(){return P1()},get julien(){return P2()},commun:"Commun"};
 const RSVP={attente:"En attente",oui:"Présent",non:"Absent"};
 const RSVP_CLS={attente:"warn",oui:"ok",non:"bad"};
 const VSTAT={repere:"Repéré",contacte:"Contacté",devis:"Devis reçu",reserve:"Réservé",ecarte:"Écarté"};
@@ -133,8 +141,9 @@ function alerts(){
 }
 const alertRow=a=>`<button class="alert ${a.lvl}" ${a.fiche?`data-fiche="${a.fiche}"`:a.edit?`data-edit="rdv" data-id="${a.edit}"`:`data-go="${a.go}"`}><span class="adot" aria-hidden="true"></span><span class="atx"><b>${esc(a.t)}</b><span>${esc(a.s)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
 /* ---------- Le coach à l'accueil : réponses rapides en un toucher ---------- */
-const PRENOMS={"julienpicquet@gmail.com":"Julien","duquesne.claire@yahoo.fr":"Claire","claiire.duquesne59@gmail.com":"Claire"};
-const prenom=()=>PRENOMS[String(S.user&&S.user.email||"").toLowerCase()]||"";
+// Quel partenaire est connecté (compte → emplacement) ; le prénom vient des réglages
+const PARTNER={"julienpicquet@gmail.com":"julien","duquesne.claire@yahoo.fr":"claire","claiire.duquesne59@gmail.com":"claire"};
+const prenom=()=>{const k=PARTNER[String(S.user&&S.user.email||"").toLowerCase()];return k==="claire"?P1():k==="julien"?P2():""};
 const SPARK='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg>';
 function qrFor(a){
   const v=a.v;
@@ -162,7 +171,7 @@ function visitsToTell(){
 }
 function coupleAvatar(){
   const ph=S.photo&&S.photo.data;
-  return `<button class="ch-photo ${ph?"has":""}" data-act="couplephoto" aria-label="${ph?"Changer la photo du couple":"Ajouter une photo du couple"}" ${S.canWrite?"":"disabled"}>${ph?`<img src="data:image/jpeg;base64,${ph}" alt="Claire et Julien">`:`<span>C&amp;J</span><i aria-hidden="true">+</i>`}</button>`;
+  return `<button class="ch-photo ${ph?"has":""}" data-act="couplephoto" aria-label="${ph?"Changer la photo du couple":"Ajouter une photo du couple"}" ${S.canWrite?"":"disabled"}>${ph?`<img src="data:image/jpeg;base64,${ph}" alt="${esc(COUPLE())}">`:`<span>${esc(P1().charAt(0))}&amp;${esc(P2().charAt(0))}</span><i aria-hidden="true">+</i>`}</button>`;
 }
 // Une carte « point du jour » : titre, une phrase, UN bouton principal ; les autres options à la demande
 function dayCard(id,lvl,title,text,qr){
@@ -264,6 +273,8 @@ function renderHero(){
   if(st.mairie)sub.push(`<span>Mairie de ${esc(st.mairie)}</span>`);
   if(!sub.length)sub.push(`<span>${S.mode==="live"?"Date et lieu à renseigner dans Réglages":"Notre mariage"}</span>`);
   setHTML(document.getElementById("hero-sub"),sub.join(""));
+  // prénoms du couple, depuis les réglages (rien avant la connexion)
+  setHTML(document.getElementById("names"),S.mode==="live"||S.mode==="demo"?`${esc(P1())}<span class="amp">&amp;</span>${esc(P2())}`:"");
   const c=document.getElementById("count");
   if(d){
     const n=days(today(),d);
@@ -334,7 +345,7 @@ function vApercu(){
   const d=wDate(),cur=currentPhase();
 
   const kpis=`
-    <div class="kpi t1 c3">${ring(S.tasks.length?done/S.tasks.length:0,"var(--accent)")}<div><div class="k">Préparation</div><div class="v num">${done}<small>/ ${S.tasks.length} tâches</small></div><div class="s">${late.length?`<span class="over">${late.length} en retard</span>`:"Rien en retard"}</div></div></div>
+    <div class="kpi t1 c3">${ring(S.tasks.length?done/S.tasks.length:0,"var(--coral-ui)")}<div><div class="k">Préparation</div><div class="v num">${done}<small>/ ${S.tasks.length} tâches</small></div><div class="s">${late.length?`<span class="over">${late.length} en retard</span>`:"Rien en retard"}</div></div></div>
     <div class="kpi t2 c3">${ring(g.length?yes/g.length:0,"var(--julien)")}<div><div class="k">Invités</div><div class="v num">${yes}<small>/ ${g.length} présents</small></div><div class="s">${wait} réponse${wait>1?"s":""} attendue${wait>1?"s":""}</div></div></div>
     <div class="kpi t3 c3">${ring(ref?engage/ref:0,"var(--gold)")}<div><div class="k">Budget engagé</div><div class="v num">${eur(engage)}</div><div class="s">${ref?"sur "+eur(ref)+(tot?"":" prévus"):"Budget à fixer"}</div></div></div>
     <div class="kpi t4 c3">${ring(keyRes/KEY_VCATS.length,"var(--ok)")}<div><div class="k">Prestataires clés</div><div class="v num">${keyRes}<small>/ ${KEY_VCATS.length} réservés</small></div><div class="s">${KEY_VCATS.filter(c=>!S.vendors.some(v=>v.cat===c&&v.status==="reserve")).slice(0,2).join(", ")||"Tout est réservé"}</div></div></div>`;
@@ -372,7 +383,7 @@ function vApercu(){
   const cnt=k=>open.filter(t=>(t.owner||"deux")===k).length,lateOf=k=>late.filter(t=>(t.owner||"deux")===k).length;
   const mx=Math.max(1,cnt("claire"),cnt("julien"),cnt("deux"));
   const whoH=`<div class="panel c4"><div class="panel-h"><h3>Qui fait quoi</h3><span class="chip num">${open.length} ouvertes</span></div>
-    <div class="who">${[["claire","Claire","var(--claire)"],["julien","Julien","var(--julien)"],["deux","Ensemble","var(--muted)"]].map(([k,l,c])=>`<button class="who-row" data-who="${k}" style="background:none;border:0;padding:0;cursor:pointer;text-align:left"><span style="font-weight:600">${l}</span><span class="hb-track"><i style="width:${cnt(k)/mx*100}%;background:${c}"></i></span><span class="num" style="font-size:13px;color:var(--muted)">${cnt(k)}${lateOf(k)?` · <span class="over">${lateOf(k)} en retard</span>`:""}</span></button>`).join("")}</div>
+    <div class="who">${[["claire",P1(),"var(--claire)"],["julien",P2(),"var(--julien)"],["deux","Ensemble","var(--muted)"]].map(([k,l,c])=>`<button class="who-row" data-who="${k}" style="background:none;border:0;padding:0;cursor:pointer;text-align:left"><span style="font-weight:600">${l}</span><span class="hb-track"><i style="width:${cnt(k)/mx*100}%;background:${c}"></i></span><span class="num" style="font-size:13px;color:var(--muted)">${cnt(k)}${lateOf(k)?` · <span class="over">${lateOf(k)} en retard</span>`:""}</span></button>`).join("")}</div>
     <div class="mini"><div><b class="num">${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length}</b><span>couverts</span></div><div><b class="num">${g.filter(x=>x.rsvp!=="non"&&x.regime).length}</b><span>régimes</span></div><div><b class="num">${g.filter(x=>x.enfant&&x.rsvp!=="non").length}</b><span>enfants</span></div></div></div>`;
 
   const lines=S.budget.filter(b=>num(b.prevu)||num(b.engage)).sort((a,b)=>Math.max(num(b.prevu),num(b.engage))-Math.max(num(a.prevu),num(a.engage))).slice(0,6);
@@ -381,7 +392,7 @@ function vApercu(){
   const perGuest=guestsBase?(engage||prevu)/guestsBase:0;
   const budH=`<div class="panel c7"><div class="panel-h"><h3>Budget par poste</h3><button class="link" data-go="budget">Détail</button></div>
     ${lines.length?`<div class="hbars">${lines.map(b=>{const p=num(b.prevu),e=num(b.engage),ov=p&&e>p;return `<div class="hb-row"><span class="lab">${esc(b.label)}</span><span class="amt num">${e?eur(e):"—"} / ${p?eur(p):"—"}</span><div class="hb-track"><i class="plan" style="width:${p/bmx*100}%"></i><i class="eng ${ov?"over":""}" style="width:${e/bmx*100}%"></i></div></div>`}).join("")}</div>
-      <div class="legend"><span><i style="background:var(--accent)"></i>Engagé</span><span><i style="border:1.5px solid var(--accent)"></i>Prévu</span><span><i style="background:var(--bad)"></i>Dépassement</span></div>`
+      <div class="legend"><span><i style="background:var(--coral-ui)"></i>Engagé</span><span><i style="border:1.5px solid var(--accent)"></i>Prévu</span><span><i style="background:var(--bad)"></i>Dépassement</span></div>`
     :`<div class="empty" style="padding:14px 0">Renseignez les montants prévus dans Budget pour voir la répartition.</div>`}
     <div class="mini"><div><b class="num">${eur(paye)}</b><span>déjà payé</span></div><div><b class="num">${eur(Math.max(0,engage-paye))}</b><span>reste à payer</span></div><div><b class="num">${perGuest?eur(perGuest):"—"}</b><span>par invité</span></div></div></div>`;
 
@@ -429,7 +440,7 @@ function vPlanning(){
   return `${subnav([["planning","Tâches"],["agenda","Agenda"]])}<div class="vh"><div><h2>Rétroplanning</h2><p>${d?"Les échéances se calculent à partir de la date du mariage. Une échéance précise sur une tâche prend le dessus.":"Fixez la date dans Réglages pour voir les échéances."}</p></div>
     <button class="btn primary" data-new="tasks" ${S.canWrite?"":"disabled"}>Ajouter une tâche</button></div>
   <div class="filters">
-    <div class="seg" role="group" aria-label="Filtrer par personne">${[["all","Tout"],["claire","Claire"],["julien","Julien"],["deux","Ensemble"]].map(([k,l])=>`<button data-f="owner" data-v="${k}" aria-pressed="${f.owner===k}">${l}</button>`).join("")}</div>
+    <div class="seg" role="group" aria-label="Filtrer par personne">${[["all","Tout"],["claire",P1()],["julien",P2()],["deux","Ensemble"]].map(([k,l])=>`<button data-f="owner" data-v="${k}" aria-pressed="${f.owner===k}">${l}</button>`).join("")}</div>
     <label class="toggle"><input type="checkbox" id="hide-done" ${f.hideDone?"checked":""}> Masquer les tâches faites</label>
   </div>
   ${dupH}${groups||emptyBlock("Aucune tâche pour l'instant","Ajoutez la première avec le bouton ci-dessus.")}`;
@@ -513,7 +524,7 @@ function vInvites(){
     <div class="kpi t1"><div><div class="k">Invités</div><div class="v num">${g.length}${cible?`<small>/ ${cible} visés</small>`:""}</div><div class="s">${g.filter(x=>x.enfant).length} enfants</div></div></div>
     <div class="kpi t4"><div><div class="k">Présents</div><div class="v num">${yes}</div><div class="s">${g.length-yes-no} réponses attendues · ${no} absents</div></div></div>
     <div class="kpi t3"><div><div class="k">Au dîner</div><div class="v num">${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length}</div><div class="s">Présents et en attente</div></div></div>
-    <div class="kpi t2"><div><div class="k">Claire · Julien · Commun</div><div class="v num" style="font-size:26px">${g.filter(x=>x.side==="claire").length} · ${g.filter(x=>x.side==="julien").length} · ${g.filter(x=>x.side==="commun"||!x.side).length}</div><div class="s">Répartition par côté</div></div></div>
+    <div class="kpi t2"><div><div class="k">${esc(P1())} · ${esc(P2())} · Commun</div><div class="v num" style="font-size:26px">${g.filter(x=>x.side==="claire").length} · ${g.filter(x=>x.side==="julien").length} · ${g.filter(x=>x.side==="commun"||!x.side).length}</div><div class="s">Répartition par côté</div></div></div>
   </div>`;
   return `${subnav([["invites","Liste"],["tables","Plan de table"]])}<div class="vh"><div><h2>Invités</h2><p>Touchez la réponse d'un invité pour la changer. « Ranger » classe plusieurs invités d'un coup par groupe ou par côté.</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${g.length&&S.canWrite?`<button class="btn" data-act="gselstart" aria-pressed="${S.selMode}">Ranger</button>`:""}<button class="btn primary" data-new="guests" ${S.canWrite?"":"disabled"}>Ajouter</button></div></div>
@@ -818,10 +829,10 @@ function filRougeBlocks(){
 function pdfBriefs(k){
   const b=S.briefs;if(!b||!b.categories)return;
   if(k==="all"){const ks=Object.keys(BRIEF_LABEL).filter(x=>b.categories[x]);
-    return makePdf("Briefs prestataires - Claire et Julien.pdf",{docTitle:"Nos briefs prestataires",blocks:[...filRougeBlocks(),...ks.flatMap(x=>[{page:true},...briefBlocks(x)])]})}
+    return makePdf(`Briefs prestataires - ${COUPLE()}.pdf`,{docTitle:"Nos briefs prestataires",blocks:[...filRougeBlocks(),...ks.flatMap(x=>[{page:true},...briefBlocks(x)])]})}
   // le métier d'abord (c'est ce que le prestataire lit en premier), puis notre vision d'ensemble, commune à tous les briefs
   const fr=filRougeBlocks();fr[0]={h2:"Notre vision d'ensemble (commune à tous nos prestataires)"};
-  makePdf(`Brief ${BRIEF_LABEL[k]} - Claire et Julien.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...briefBlocks(k).slice(1),...fr]});
+  makePdf(`Brief ${BRIEF_LABEL[k]} - ${COUPLE()}.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...briefBlocks(k).slice(1),...fr]});
 }
 function vEnvies(){
   const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
@@ -831,7 +842,7 @@ function vEnvies(){
     const choix=Array.isArray(a.choix)?a.choix:[];
     const chips=opts?`<div class="opts" role="group" aria-label="${esc(q)}">${opts.map(o=>`<button class="opt" data-bchip="${c}|${id}|${type}" data-o="${esc(o)}" aria-pressed="${choix.includes(o)}" ${dis}>${esc(o)}</button>`).join("")}</div>`:"";
     const main=`<textarea autocomplete="off" name="search_text" id="${base}-commun" data-bq="${c}|${id}|commun" placeholder="${opts?"Une précision ?":"Votre réponse commune…"}" ${opts?'style="min-height:44px"':""} ${dis}>${esc(a.commun||"")}</textarea>`;
-    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">Claire</span><textarea autocomplete="off" name="search_text" id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">Julien</span><textarea autocomplete="off" name="search_text" id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
+    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">${esc(P1())}</span><textarea autocomplete="off" name="search_text" id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">${esc(P2())}</span><textarea autocomplete="off" name="search_text" id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
     return `<div class="q ${done?"done":""}"><label class="ql" for="${base}-commun"><span class="n">${i+1}.</span><span>${esc(q)}</span></label>${chips}${main}
       <label class="diff"><input type="checkbox" id="${base}-dz" data-bq="${c}|${id}|desaccord" ${a.desaccord?"checked":""} ${dis}> Nos avis diffèrent</label>${duo}</div>`;
   }).join("");
@@ -842,7 +853,7 @@ function vEnvies(){
     <div class="field"><label for="search-q-${c}-_m-redhibitoire" class="lab">Ce qui serait rédhibitoire</label><textarea autocomplete="off" name="search_text" id="search-q-${c}-_m-redhibitoire" data-bm="${c}|redhibitoire" ${dis}>${esc(m.redhibitoire||"")}</textarea></div></div>`;
   const synth=pr.resume?`<div class="synth"><div class="panel-h"><h3>Ce que nous retenons de vous</h3>${pr.completude!=null?`<span class="chip ${pr.completude>=70?"ok":"warn"} num">Brief complet à ${Math.round(pr.completude)} %</span>`:""}</div>
     <p>${esc(pr.resume)}</p>
-    ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">Claire :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">Julien :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
+    ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">${esc(P1())} :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">${esc(P2())} :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
     ${Array.isArray(pr.questionsOuvertes)&&pr.questionsOuvertes.length?`<h3 class="sec" style="margin-top:14px">Ce qu'il nous manque pour bien choisir</h3><ul class="blist">${pr.questionsOuvertes.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}</div>`:"";
   const tot=allProg(),tab=["mood","quest","synth"].includes(S.f.envTab)?S.f.envTab:(S.inspirations.length?"mood":"quest");
   const fr=(S.briefs||{}).filRouge||{},anyAns=S.brief.some(d=>answered(d));
@@ -1081,6 +1092,8 @@ function vReglages(){
   return `${subnav([["reglages","Général"],["reglages-ia","Agents IA"]])}<div class="vh"><div><h2>Réglages</h2><p>Les infos de base qui alimentent le compte à rebours et les échéances. Le budget total se règle dans Budget.</p></div></div>
   <form class="formpanel form" id="settings-form">
     <div class="cols2">
+      <div class="field"><label for="search-s-p1">Prénom (partenaire 1)</label><input type="text" autocomplete="off" id="search-s-p1" name="prenom1" value="${esc(s.prenom1||"")}" ${dis}></div>
+      <div class="field"><label for="search-s-p2">Prénom (partenaire 2)</label><input type="text" autocomplete="off" id="search-s-p2" name="prenom2" value="${esc(s.prenom2||"")}" ${dis}></div>
       <div class="field"><label for="search-s-date">Date du mariage</label><input type="date" id="search-s-date" name="date" value="${esc(s.date||"")}" ${dis}></div>
       <div class="field"><label for="search-s-lieu">Lieu de réception</label><input type="text" autocomplete="off" id="search-s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
       <div class="field"><label for="search-s-ville">Ville</label><input type="text" autocomplete="off" id="search-s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
@@ -1104,8 +1117,8 @@ function vReglages(){
   <div class="help" style="margin-top:28px">
     <h3 class="sec">Travailler à deux</h3>
     <ul>
-      <li>Claire et Julien se connectent chacun avec leur propre compte (Google ou lien par e-mail) : les données sont les mêmes et se mettent à jour en direct sur vos deux téléphones.</li>
-      <li>Chaque tâche a un responsable (Claire, Julien ou les deux). Le filtre du Planning montre ce qui revient à chacun, tâches communes comprises.</li>
+      <li>${esc(COUPLE())} se connectent chacun avec leur propre compte (Google ou lien par e-mail) : les données sont les mêmes et se mettent à jour en direct sur vos deux téléphones.</li>
+      <li>Chaque tâche a un responsable (${esc(P1())}, ${esc(P2())} ou les deux). Le filtre du Planning montre ce qui revient à chacun, tâches communes comprises.</li>
       <li>Pour la mairie, retirez le dossier tôt : les pièces demandées (actes de naissance récents, justificatifs de domicile, liste des témoins) ont une durée de validité.</li>
     </ul>
   </div>`;
@@ -1118,8 +1131,8 @@ async function makePdf(name,spec){
   try{
     const {buildPdf}=await import("./pdf.js");
     const st=S.settings,d=wDate();
-    const blob=buildPdf(Object.assign({title:"Claire & Julien",subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
-      footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis l'app du mariage de Claire & Julien`},spec));
+    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
+      footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
     showPdf(new File([blob],name,{type:"application/pdf"}));
   }catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
 }
@@ -1135,7 +1148,7 @@ function showPdf(file){
 const dayKeyPdf=r=>dayKey(r.time);
 function pdfJourJ(){
   const rows=scheduleRows(),vs=S.vendors.filter(v=>v.status==="reserve");
-  makePdf("Jour J - Claire et Julien.pdf",{docTitle:"Déroulé du jour J",blocks:[
+  makePdf(`Jour J - ${COUPLE()}.pdf`,{docTitle:"Déroulé du jour J",blocks:[
     {table:{head:["Heure","Moment","Lieu","Qui"],widths:[18,null,40,38],boldFirst:true,body:rows.map(r=>[r.time||"—",r.title+(r.note?"\n"+r.note:""),r.lieu||"",r.qui||""])}},
     ...(vs.length?[{h2:"Prestataires"},{table:{head:["Prestataire","Catégorie","Contact"],boldFirst:true,body:vs.map(v=>[v.name,v.cat||"",[v.contact,v.tel].filter(Boolean).join(" · ")])}}]:[]),
   ]});
@@ -1166,7 +1179,7 @@ function pdfReport(){
   blocks.push({h2:"Invités"},{p:`${g.length} invités dont ${g.filter(x=>x.enfant).length} enfants · ${yes} présents, ${no} absents, ${g.length-yes-no} en attente · ${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length} au dîner.`},
     {note:"Par groupe : "+groups.map(([k,v])=>`${k} ${v}`).join(" · ")+(g.some(x=>x.regime)?"\nRégimes : "+g.filter(x=>x.regime).map(x=>x.name+" ("+x.regime+")").join(", "):"")});
   blocks.push({h2:"Nos envies"},{note:`Rempli à ${Math.round(allProg()*100)} % · `+QCATS.map(c=>{const p=catProg(c.k);return `${c.label} ${p.n}/${p.t}`}).join(" · ")});
-  makePdf(`Rapport - Claire et Julien - ${isoD(today())}.pdf`,{docTitle:"Rapport d'organisation · "+fmtD(today()),blocks});
+  makePdf(`Rapport - ${COUPLE()} - ${isoD(today())}.pdf`,{docTitle:"Rapport d'organisation · "+fmtD(today()),blocks});
 }
 
 /* ---------- Assistant IA intégré ---------- */
@@ -1184,7 +1197,7 @@ const CHAT_SUGG={chat:["Que devons-nous faire cette semaine ?","Compare nos lieu
 // Un mail rédigé par le coach commence par « Objet : … »
 function mailOf(t){const m=String(t||"").match(/(?:^|\n)\s*\**Objet\s*:\**\s*(.+)\n([\s\S]+)/i);return m?{subject:m[1].replace(/\*+/g,"").trim(),body:m[2].replace(/\*\*/g,"").trim()}:null}
 const mailHref=m=>`mailto:?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
-/* Intercepteur internet : le coach propose une recherche, Claire ou Julien l'autorise (une recherche à la fois) */
+/* Intercepteur internet : le coach propose une recherche, l'un des deux l'autorise (une recherche à la fois) */
 function webAsk(m,i){
   const w=(m.actions||[]).find(a=>a.web);if(!w)return "";
   const last=S.chat.messages.length-1===i;
@@ -1318,7 +1331,7 @@ async function sendChat(text,opts={}){
   const steps=["Je regarde vos données…","Je prépare la réponse…","Encore un instant…"];let k=0;
   const tick=setInterval(()=>{if(!c.busy){clearInterval(tick);return}k=Math.min(k+1,steps.length-1);c.busyLabel=steps[k];const l=document.querySelector(".typing-l");if(l)l.textContent=steps[k]},6000);
   try{const r=await callAssistant({message:text,mode:c.mode,view:VIEW_LABEL(),...(opts.web?{web:true}:{}),...(atts.length?{attachments:atts.map(a=>({media_type:a.media_type,data:a.data,...(a.thumb?{thumb:a.thumb}:{})}))}:{})});c.messages.push({role:"assistant",text:r.text,actions:r.actions||[],sources:r.sources||[]});(r.actions||[]).forEach(a=>a.kick&&kick(a.kick))}
-  catch(e){const msg=e&&/functions\/(resource-exhausted|failed-precondition)/.test(e.code||"")||e&&e.code==="functions/unavailable"&&e.message&&!/^unavailable$/i.test(e.message)?e.message:e&&e.code==="functions/permission-denied"?"Coach réservé à Claire et Julien.":e&&/not-found|internal|unavailable/.test(e.code||"")?"Le coach ne répond pas pour l'instant. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
+  catch(e){const msg=e&&/functions\/(resource-exhausted|failed-precondition)/.test(e.code||"")||e&&e.code==="functions/unavailable"&&e.message&&!/^unavailable$/i.test(e.message)?e.message:e&&e.code==="functions/permission-denied"?`Coach réservé à ${COUPLE()}.`:e&&/not-found|internal|unavailable/.test(e.code||"")?"Le coach ne répond pas pour l'instant. Réessayez dans un moment.":"Erreur : "+(e&&e.message||e);
     c.messages.push({role:"assistant",text:msg,actions:[],error:true})}
   c.busy=false;renderChat("answer");
 }
@@ -1366,7 +1379,7 @@ function onboardH(){
   if(hidden||done===items.length)return "";
   const open=S.ui.onb;
   return `<div class="panel c12 onboard ${open?"open":""}"><button class="ob-h" data-act="uionb" aria-expanded="${!!open}"><b>Bien démarrer</b><span class="ob-bar"><i style="width:${done/items.length*100}%"></i></span><span class="num ob-n">${done}/${items.length}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-    ${open?`<ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec le coach</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:'<span class="ob-hint">Claire et Julien se connectent chacun une fois</span>'}</li>`).join("")}</ul>
+    ${open?`<ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec le coach</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:`<span class="ob-hint">${esc(COUPLE())} se connectent chacun une fois</span>`}</li>`).join("")}</ul>
     <button class="link ob-off" data-act="onboardoff">Ne plus afficher</button>`:""}</div>`;
 }
 
@@ -1427,7 +1440,7 @@ function render(){
   let pre="";
   document.body.classList.toggle("noauth",S.mode==="login"||S.mode==="locked");
   if(S.mode==="login"){setHTML(main,loginView());return}
-  if(S.mode==="locked"){setHTML(main,`<div class="lock"><h2>Accès réservé</h2><p style="color:var(--muted);margin:0 0 16px">Cette app est réservée à Claire et Julien. Le compte <b>${esc(S.user&&S.user.email||"")}</b> n'est pas autorisé.</p><button class="btn" data-act="logout">Changer de compte</button></div>`);return}
+  if(S.mode==="locked"){setHTML(main,`<div class="lock"><h2>Accès réservé</h2><p style="color:var(--muted);margin:0 0 16px">Cette app est réservée à ${esc(COUPLE())}. Le compte <b>${esc(S.user&&S.user.email||"")}</b> n'est pas autorisé.</p><button class="btn" data-act="logout">Changer de compte</button></div>`);return}
   if(S.mode==="loading")pre=`<div class="banner">Chargement de vos données…</div>`;
   else if(S.mode==="offline")pre=`<div class="banner warn">Connexion à la base impossible. Vérifiez votre réseau puis rechargez la page.</div>`;
   if(S.mode==="live"&&S.stale)pre=`<div class="banner warn">Les données ne répondent pas pour l'instant. Ce qui s'affiche peut ne pas être à jour.</div>`;
@@ -1731,7 +1744,7 @@ document.addEventListener("submit",async e=>{
     if(await mergeDoc("meta/ia",{budget:v,updatedAt:Date.now()})){document.activeElement&&document.activeElement.blur();toast("Budget enregistré")}return}
   if(f.id==="settings-form"){
     e.preventDefault();
-    const d={updatedAt:Date.now()};["date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
+    const d={updatedAt:Date.now()};["prenom1","prenom2","date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
     ["invitesCible"].forEach(k=>{const v=f.elements[k].value;d[k]=v===""?null:num(v)});
     if(await setDoc("meta/settings",S.settings,d)){mergeDoc("meta/analyse",{profilRequestedAt:Date.now()});document.activeElement&&document.activeElement.blur();toast("Réglages enregistrés");render()}
     return;
