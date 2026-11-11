@@ -1449,7 +1449,7 @@ function render(){
   setHTML(main,pre+(VIEWFN[S.view]||vApercu)());
   if(aid){const el=document.getElementById(aid);if(el){el.focus();if(sel)try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
-function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);const sc=document.getElementById("scroller");if(sc)sc.scrollTop=0}
+function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0)}
 
 /* ---------- Modal editor ---------- */
 const SCHEMAS={
