@@ -64,10 +64,11 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const fresh = atts.map(a => (typeof a.thumb === "string" && a.thumb.length < 400_000 ? a.thumb : null));
   const pending = chatDoc.pendingThumbs && Date.now() - (chatDoc.pendingThumbs.at || 0) < 24 * 3600_000 ? chatDoc.pendingThumbs.list || [] : [];
   const thumbs = fresh.some(Boolean) ? fresh : pending;
-  const names = coupleNames((await db.doc("meta/settings").get()).data() || {});
+  const settingsDoc = (await db.doc("meta/settings").get()).data() || {};
+  const names = coupleNames(settingsDoc);
   const me = PARTNER[email] === "claire" ? names.p1 : PARTNER[email] === "julien" ? names.p2 : "";
   const exec = makeTools(db, { qcats: QCATS, thumbs, author: me });
-  const system = systemPrompt({ prenom: me || "l'un des mariés", couple: names, today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
+  const system = systemPrompt({ prenom: me || "l'un des mariés", couple: names, dateIndicative: !!settingsDoc.dateIndicative, today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
   const feature = mode === "brief" ? "brief" : "coach";

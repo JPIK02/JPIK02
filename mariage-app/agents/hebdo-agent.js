@@ -39,7 +39,7 @@ export async function buildContext(now = new Date()) {
   const open = tasks.filter(t => t.status !== "done").map(t => ({ titre: t.title, qui: t.owner || "deux", echeance: due(t, settings.date), statut: t.status }));
   const sum = k => budget.reduce((s, b) => s + (+b[k] || 0), 0);
   return {
-    aujourdhui: today, mariage: settings.date || null, lieu: settings.lieu || null, ville: settings.ville || null,
+    aujourdhui: today, mariage: settings.date || null, dateIndicative: !!settings.dateIndicative, lieu: settings.lieu || null, ville: settings.ville || null,
     taches_en_retard: open.filter(t => t.echeance && t.echeance < today),
     taches_3_semaines: open.filter(t => t.echeance && t.echeance >= today && t.echeance <= in21),
     avancement: `${tasks.filter(t => t.status === "done").length}/${tasks.length} tâches faites`,

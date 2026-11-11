@@ -105,6 +105,17 @@ const budgetLineFor=cat=>{const re=CAT_BUDGET[cat];return re?S.budget.find(b=>re
 const lastBriefAt=()=>S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0);
 async function mergeDoc(path,data){try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
 /* Points à regarder : incohérences entre date, budget, devis, capacité, et actions en attente. */
+/* Capacité d'accueil lue dans les notes (texte sans accents, en minuscules) : le plus grand nombre de personnes cité
+   sur la ligne « capacité » (« 3 salles de 40 à 240 personnes » → 240 ; « jusqu'à 70 » → 70 ; « 100-200 » → 200).
+   Les nombres de salles, d'espaces ou de chambres sont ignorés. Null si rien de sûr. */
+function capacityFrom(n){
+  const line=(String(n).split(/\n/).find(l=>/capacite/.test(l))||"").replace(/.*?capacite\s*:?/,"");
+  if(!line)return null;
+  const nums=[];const re=/(\d+)\s*(salles?|espaces?|chambres?|pieces?|lieux|couchages?)?/g;let m;
+  while((m=re.exec(line))){if(!m[2])nums.push(+m[1])}
+  const big=nums.filter(x=>x>=10);
+  return big.length?Math.max(...big):null;
+}
 function alerts(){
   const out=[],d=wDate(),tot=num(S.settings.budgetTotal);
   const prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
@@ -113,13 +124,13 @@ function alerts(){
   const guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
   S.vendors.filter(v=>v.status!=="ecarte").forEach(v=>{
     const note=String(v.note||""),n=fold(note);
-    if(d&&/complet/.test(n)){
+    if(d&&!S.settings.dateIndicative&&/complet/.test(n)){
       const line=note.split(/\n/).find(l=>/complet/i.test(fold(l)))||"";
       if(new RegExp("complet[^\\n]*\\b"+MOIS[d.getMonth()]+"\\b").test(fold(line)))
         out.push({k:"complet",v,lvl:"bad",t:`${v.name} semble complet en ${MOIS[d.getMonth()].replace("fevrier","février").replace("aout","août")}`,s:`Vos notes : « ${line.trim()} ». La date retenue est le ${fmtD(d)}.`,fiche:v.id});
     }
-    const cap=n.match(/capacite\s*:?\s*(\d+)(?:\s*-\s*(\d+))?/);
-    if(cap&&v.cat==="Lieu"){const mx=+(cap[2]||cap[1]);if(guests>mx)out.push({k:"cap",v,lvl:"warn",t:`${v.name} : capacité trop juste`,s:`${mx} personnes au maximum pour ${guests} invités au dîner.`,fiche:v.id})}
+    const mx=v.cat==="Lieu"?capacityFrom(n):null;
+    if(mx){if(guests>mx)out.push({k:"cap",v,lvl:"warn",t:`${v.name} : capacité trop juste`,s:`${mx} personnes au maximum pour ${guests} invités au dîner.`,fiche:v.id})}
     const px=num(v.prix),line=budgetLineFor(v.cat);
     if(px&&line&&num(line.prevu)&&px>num(line.prevu)&&["devis","reserve"].includes(v.status))
       out.push({k:"devis",v,line,px,lvl:"warn",t:`Devis ${v.name} au-dessus de l'enveloppe`,s:`${eur(px)} pour ${eur(num(line.prevu))} prévus au poste « ${line.label} » (+${eur(px-num(line.prevu))}).`,fiche:v.id});
@@ -190,7 +201,7 @@ function coachHome(al){
   const hebdoH=hbFresh?`<div class="hb ${ui.hebdo?"open":""}"><button class="hb-h" data-act="uihebdo" aria-expanded="${!!ui.hebdo}"><span class="ch-k">Point de la semaine</span><b>${esc(hb.titre||"")}</b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
       ${ui.hebdo?`<div class="hb-b">${Array.isArray(hb.points)?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}${hb.question?`<p class="ch-q">${esc(hb.question)}</p>`:""}<div class="dc-acts">${hb.question?`<button class="btn sm primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:""}<button class="link" data-act="qr" data-do="hebdo">Refaire le point</button></div></div>`:""}</div>`:"";
   return `<section class="coach-home c12" aria-label="Aujourd'hui">
-    <div class="ch-head">${coupleAvatar()}<div class="ch-hi"><h2>Bonjour${prenom()?" "+esc(prenom()):""}</h2><span>${d?`${esc(fmtLong(d).replace(/^./,c=>c.toUpperCase()))} · <b>J-${n}</b>`:`<button class="link" data-go="reglages">Fixer la date du mariage</button>`}</span></div></div>
+    <div class="ch-head">${coupleAvatar()}<div class="ch-hi"><h2>Bonjour${prenom()?" "+esc(prenom()):""}</h2><span>${d?`${esc(fmtLong(d).replace(/^./,c=>c.toUpperCase()))}${S.settings.dateIndicative?" (indicative)":""} · <b>J-${n}</b>`:`<button class="link" data-go="reglages">Fixer la date du mariage</button>`}</span></div></div>
     ${hebdoH}
     <div class="ch-sec"><h3>${cards.length?`Aujourd'hui · ${cards.length} point${cards.length>1?"s":""}`:"Aujourd'hui"}</h3>${!hbFresh?`<button class="link" data-act="qr" data-do="hebdo">Point de la semaine</button>`:""}</div>
     ${cards.length?`<div class="dcs">${shown.join("")}</div>${rest>0||ui.more&&cards.length>3?`<button class="link more-pts" data-act="uimore">${ui.more?"Afficher moins":`Voir les ${rest} autre${rest>1?"s":""} point${rest>1?"s":""}`}</button>`:""}`
@@ -268,7 +279,7 @@ function writeErr(e){
 function renderHero(){
   const d=wDate(),st=S.settings;
   const sub=[];
-  if(d){const L=fmtLong(d);sub.push(`<b>${esc(L.charAt(0).toUpperCase()+L.slice(1))}</b>`)}
+  if(d){const L=fmtLong(d);sub.push(`<b>${esc(L.charAt(0).toUpperCase()+L.slice(1))}</b>${st.dateIndicative?" <span>(date indicative)</span>":""}`)}
   if(st.lieu||st.ville)sub.push(`<span>${esc([st.lieu,st.ville].filter(Boolean).join(", "))}</span>`);
   if(st.mairie)sub.push(`<span>Mairie de ${esc(st.mairie)}</span>`);
   if(!sub.length)sub.push(`<span>${S.mode==="live"?"Date et lieu à renseigner dans Réglages":"Notre mariage"}</span>`);
@@ -815,7 +826,7 @@ function briefBlocks(k){
   const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
   const imgs=S.inspirations.filter(i=>i.cat===k&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
   return [{h2:"Brief · "+BRIEF_LABEL[k]},
-    {kpis:[["Date",d?fmtD(d):"à fixer",""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
+    {kpis:[["Date",d?fmtD(d):"à fixer",d&&st.dateIndicative?"indicative, à confirmer":""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
     {p:x.intention},...list("Nos essentiels",x.essentiels),...list("L'ambiance, dans le détail",x.details),...list("Ce que nous ne voulons pas",x.aEviter),
     ...list("En accord avec nos autres prestataires",x.liens),...list("Nos questions pour vous",x.questions),
     ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
@@ -1095,7 +1106,8 @@ function vReglages(){
     <div class="cols2">
       <div class="field"><label for="search-s-p1">Prénom (partenaire 1)</label><input type="text" autocomplete="off" id="search-s-p1" name="prenom1" value="${esc(s.prenom1||"")}" ${dis}></div>
       <div class="field"><label for="search-s-p2">Prénom (partenaire 2)</label><input type="text" autocomplete="off" id="search-s-p2" name="prenom2" value="${esc(s.prenom2||"")}" ${dis}></div>
-      <div class="field"><label for="search-s-date">Date du mariage</label><input type="date" id="search-s-date" name="date" value="${esc(s.date||"")}" ${dis}></div>
+      <div class="field"><label for="search-s-date">Date du mariage</label><input type="date" id="search-s-date" name="date" value="${esc(s.date||"")}" ${dis}>
+        <label class="toggle" style="margin-top:8px"><input type="checkbox" id="search-s-dateind" name="dateIndicative" ${s.dateIndicative?"checked":""} ${dis}> Pas encore fixée : date indicative</label></div>
       <div class="field"><label for="search-s-lieu">Lieu de réception</label><input type="text" autocomplete="off" id="search-s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
       <div class="field"><label for="search-s-ville">Ville</label><input type="text" autocomplete="off" id="search-s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
       <div class="field"><label for="search-s-mairie">Mairie</label><input type="text" autocomplete="off" id="search-s-mairie" name="mairie" value="${esc(s.mairie||"")}" placeholder="Commune où le mariage est célébré" ${dis}></div>
@@ -1132,7 +1144,7 @@ async function makePdf(name,spec){
   try{
     const {buildPdf}=await import("./pdf.js");
     const st=S.settings,d=wDate();
-    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
+    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase())+(st.dateIndicative?" (date indicative, à confirmer)":""):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
       footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
     showPdf(new File([blob],name,{type:"application/pdf"}));
   }catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
@@ -1747,6 +1759,7 @@ document.addEventListener("submit",async e=>{
     e.preventDefault();
     const d={updatedAt:Date.now()};["prenom1","prenom2","date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
     ["invitesCible"].forEach(k=>{const v=f.elements[k].value;d[k]=v===""?null:num(v)});
+    d.dateIndicative=!!f.elements.dateIndicative.checked;
     if(await setDoc("meta/settings",S.settings,d)){mergeDoc("meta/analyse",{profilRequestedAt:Date.now()});document.activeElement&&document.activeElement.blur();toast("Réglages enregistrés");render()}
     return;
   }
