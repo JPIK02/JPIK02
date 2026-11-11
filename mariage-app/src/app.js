@@ -1461,7 +1461,7 @@ function render(){
   setHTML(main,pre+(VIEWFN[S.view]||vApercu)());
   if(aid){const el=document.getElementById(aid);if(el){el.focus();if(sel)try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
-// Haut de page : bande bleu nuit fixe sous la barre d'état tant que l'en-tête est visible (voir styles.css, html.at-top).
+// Haut de page : apparence sombre sous la barre d'état tant que l'en-tête est visible (voir styles.css, html.at-top).
 let topRaf=0;
 function syncTop(){
   topRaf=0;

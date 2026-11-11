@@ -46,7 +46,7 @@ img{max-width:100%}
   --ok:#A3DBBA; --ok-soft:#1C3327; --warn:#F3D98F; --warn-soft:#3A3218; --bad:#F7B7B3; --bad-soft:#3D2226;
   --overlay:rgba(5,9,14,.66); --scrim:rgba(5,9,14,.66); --on-scrim:#F7F3EC;
   --shadow:0 18px 50px rgba(0,0,0,.55); --shadow-s:0 1px 2px rgba(0,0,0,.3);
-  --shadow-up:0 -6px 24px rgba(0,0,0,.35); --shadow-fab:0 10px 26px rgba(0,0,0,.5); --shadow-float:0 6px 18px rgba(0,0,0,.4); color-scheme:dark;
+  --shadow-up:0 -6px 24px rgba(0,0,0,.35); --shadow-fab:0 10px 26px rgba(0,0,0,.5); --shadow-float:0 6px 18px rgba(0,0,0,.4); color-scheme:dark;--scheme:dark;
 }}
 :root[data-theme="dark"]{
   --bg:#0F1722; --surface:#1A2533; --surface-2:#243244; --ink:#F7F3EC; --muted:#B5BCC6; --line:#2A3748; --line-strong:#3B4A5E;
@@ -60,7 +60,7 @@ img{max-width:100%}
   --ok:#A3DBBA; --ok-soft:#1C3327; --warn:#F3D98F; --warn-soft:#3A3218; --bad:#F7B7B3; --bad-soft:#3D2226;
   --overlay:rgba(5,9,14,.66); --scrim:rgba(5,9,14,.66); --on-scrim:#F7F3EC;
   --shadow:0 18px 50px rgba(0,0,0,.55); --shadow-s:0 1px 2px rgba(0,0,0,.3);
-  --shadow-up:0 -6px 24px rgba(0,0,0,.35); --shadow-fab:0 10px 26px rgba(0,0,0,.5); --shadow-float:0 6px 18px rgba(0,0,0,.4); color-scheme:dark;
+  --shadow-up:0 -6px 24px rgba(0,0,0,.35); --shadow-fab:0 10px 26px rgba(0,0,0,.5); --shadow-float:0 6px 18px rgba(0,0,0,.4); color-scheme:dark;--scheme:dark;
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
@@ -1007,13 +1007,13 @@ body.compact .brand-name{font-size:11px;letter-spacing:.28em}
 body.compact .names{font-size:24px}
 
 /* App installée sur iPhone (iOS 26) : iOS pose sous la barre d'état un voile flou, un peu plus bas que l'heure, et
-   aucun réglage ne le retire. Il prend la couleur d'une bande fixe posée tout en haut, sinon celle de la page (crème).
-   Tant que l'en-tête est visible, une bande fixe bleu nuit couvre donc cette zone (html.at-top) : le voile est bleu nuit
-   sur bleu nuit, invisible, et le texte de l'en-tête commence juste dessous. Une fois l'en-tête passé, la bande
-   disparaît et iOS floute normalement le contenu qui défile sous l'heure. */
+   aucun réglage ne le retire ; il ne tient compte ni de la couleur de la page ni d'une bande fixe. Il suit en revanche
+   l'apparence claire ou sombre de la page. Tant que l'en-tête bleu nuit est visible, la page se déclare donc sombre
+   (html.at-top) : voile sombre, invisible sur le bleu nuit, et heure en blanc. Le reste de la page garde son apparence
+   claire (body). Une fois l'en-tête passé, la page redevient claire et iOS floute le contenu qui défile. */
 @media (display-mode: standalone){
   :root{--edge:24px}
   body.compact .hero-in{padding-top:4px}
-  html.at-top{background:var(--hero-a)}
-  html.at-top body::before{content:"";position:fixed;inset:0 0 auto;height:var(--top);z-index:10;background:var(--hero-a);pointer-events:none}
+  html.at-top{color-scheme:dark}
+  html.at-top body{color-scheme:var(--scheme,light)}
 }
