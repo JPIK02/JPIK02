@@ -1,4 +1,4 @@
-:root{--edge:0px;--top:calc(env(safe-area-inset-top,0px) + var(--edge));box-sizing:border-box;padding-top:var(--top);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root{--edge:0px;--top:calc(env(safe-area-inset-top,0px) + var(--edge));--stick:var(--top);box-sizing:border-box;padding-top:var(--top);padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:var(--top)}
 body{margin:0;padding:0}
 img{max-width:100%}
@@ -100,7 +100,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 @media (max-width:720px){.fr-lab{display:none}.fr-step.now .fr-lab{display:block;position:absolute;top:24px;white-space:nowrap}.fr-step.now:nth-child(n+6) .fr-lab{right:0;left:auto}.frieze{padding-bottom:24px}}
 
 /* ---------- Onglets ---------- */
-.tabs{position:sticky;top:var(--top);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);box-shadow:var(--shadow-s)}
+.tabs{position:sticky;top:var(--stick);z-index:5;background:var(--surface);border-bottom:1px solid var(--line);box-shadow:var(--shadow-s)}
 .tabs-in{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;padding-block:9px}
 .tabs-in::-webkit-scrollbar{display:none}
 .tab{flex:none;background:none;border:0;padding:9px 13px;color:var(--muted);font-weight:600;cursor:pointer;border-radius:999px;white-space:nowrap;font-size:15px;display:inline-flex;align-items:center;gap:7px;text-decoration:none}
@@ -345,7 +345,7 @@ form[data-plan]:has(input[name=mode][value=hourly]:checked) .field.not-hourly{di
 /* ---------- Nos envies ---------- */
 .env{display:grid;grid-template-columns:250px minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:860px){.env{grid-template-columns:minmax(0,1fr)}}
-.env-nav{position:sticky;top:calc(var(--top) + 72px);display:grid;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px;box-shadow:var(--shadow-s)}
+.env-nav{position:sticky;top:calc(var(--stick) + 72px);display:grid;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:8px;box-shadow:var(--shadow-s)}
 @media (max-width:860px){.env-nav{position:static;display:flex;overflow-x:auto;scrollbar-width:none;padding:6px}.env-nav button{flex:none}}
 .env-nav button{display:flex;align-items:center;gap:10px;justify-content:space-between;background:none;border:0;border-radius:8px;padding:9px 10px;cursor:pointer;font-weight:600;font-size:15px;color:var(--muted);text-align:left;white-space:nowrap}
 .env-nav button:hover{background:var(--surface-2);color:var(--ink)}
@@ -907,7 +907,7 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .eh-ring{flex:none}.eh-ring .ring text{fill:var(--hero-fg)}.eh-ring .bgc{stroke:var(--hero-glass-2)}
 .eh-acts{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
 .env-hero .eh-ghost{background:transparent;color:var(--hero-fg);border-color:var(--hero-edge)}
-.env-tabs{position:sticky;top:calc(var(--top) + 8px);z-index:4;display:flex;width:100%;margin-bottom:16px;box-shadow:var(--shadow-s)}
+.env-tabs{position:sticky;top:calc(var(--stick) + 8px);z-index:4;display:flex;width:100%;margin-bottom:16px;box-shadow:var(--shadow-s)}
 .env-tabs button{flex:1;padding:9px 6px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:420px){.env-tabs button{font-size:13px;padding:9px 4px}}
 /* moodboard : mur de photos en colonnes */
@@ -979,7 +979,7 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .env-hero .eh-ghost{flex:none}
 .env-tabs button .num{opacity:.75;font-weight:600;margin-left:2px}
 .qcat .pbar{width:100%}
-.env-tabs{top:var(--top);box-shadow:0 -10px 0 var(--bg),var(--shadow-s)}
+.env-tabs{top:var(--stick);box-shadow:0 -10px 0 var(--bg),var(--shadow-s)}
 .env-brief{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;border:1px solid var(--line);border-left:4px solid var(--gold);border-radius:var(--r);background:var(--surface);padding:10px 14px;margin-bottom:14px;font-size:14.5px}
 .brief-err{flex-basis:100%;margin:0;color:var(--bad);font-weight:600;font-size:14.5px}
 .briefs-acts .link:disabled,.ai-acts .link:disabled{color:var(--muted);opacity:.6;cursor:default}
@@ -1008,4 +1008,14 @@ body.compact .names{font-size:24px}
 
 /* App installée sur iPhone (iOS 26) : le système pose un voile flou sous la barre d'état, qu'aucun réglage de la page
    ne désactive. On prolonge la bande bleu nuit du haut de cette hauteur : le voile tombe sur une couleur unie, plus sur le texte. */
-@media (display-mode: standalone){:root{--edge:28px}}
+@media (display-mode: standalone){
+  /* Quand la page défile, iOS fait aussi apparaître sous la barre, flouté, le contenu qui passe derrière (par-dessus tout).
+     Dans l'app installée, la page défile donc dans #scroller, qui commence sous la bande : plus rien ne passe sous la barre. */
+  :root{--edge:28px;--stick:0px;padding-top:0}
+  html,body{height:100%;overflow:hidden}
+  #scroller{position:fixed;inset:var(--top) 0 0 0;overflow-y:auto;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch}
+}
+@media (display-mode: standalone) and (max-width:760px){
+  #scroller{padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+  body.noauth #scroller{padding-bottom:0}
+}
