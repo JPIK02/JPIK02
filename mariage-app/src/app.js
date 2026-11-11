@@ -1461,7 +1461,7 @@ function render(){
   setHTML(main,pre+(VIEWFN[S.view]||vApercu)());
   if(aid){const el=document.getElementById(aid);if(el){el.focus();if(sel)try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
-// Haut de page : tant que l'en-tête est sous la barre d'état, pas de voile flou (voir styles.css, .topveil).
+// Haut de page : bande bleu nuit fixe sous la barre d'état tant que l'en-tête est visible (voir styles.css, html.at-top).
 let topRaf=0;
 function syncTop(){
   topRaf=0;
@@ -1475,7 +1475,7 @@ function syncTop(){
 const queueTop=()=>{if(!topRaf)topRaf=requestAnimationFrame(syncTop)};
 addEventListener("scroll",queueTop,{passive:true,capture:true});
 addEventListener("resize",queueTop);
-function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);const sc=document.getElementById("scroller");if(sc)sc.scrollTop=0;syncTop()}
+function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);syncTop()}
 
 /* ---------- Modal editor ---------- */
 const SCHEMAS={
