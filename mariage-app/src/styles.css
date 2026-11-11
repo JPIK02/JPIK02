@@ -1,4 +1,4 @@
-:root{--edge:0px;--top:calc(env(safe-area-inset-top,0px) + var(--edge));box-sizing:border-box;padding-top:var(--top);padding-bottom:env(safe-area-inset-bottom,0px)}
+:root{--edge:0px;--top:calc(env(safe-area-inset-top,0px) + var(--edge));box-sizing:border-box;padding-bottom:env(safe-area-inset-bottom,0px)}
 html{scroll-padding-top:var(--top)}
 body{margin:0;padding:0}
 img{max-width:100%}
@@ -64,14 +64,15 @@ img{max-width:100%}
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;-webkit-font-smoothing:antialiased}
-body::before{content:"";position:fixed;inset:0 0 auto;height:var(--top);z-index:10;background:linear-gradient(90deg,var(--hero-a) 0%,var(--hero-b) 100%)}
 .wrap{max-width:1140px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 button,input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .num{font-variant-numeric:tabular-nums lining-nums}
 
 /* ---------- Bandeau ---------- */
-.hero{background:linear-gradient(90deg,var(--hero-a) 0%,var(--hero-b) 100%);color:var(--hero-fg)}
+/* L'en-tête commence sous la barre d'état et remonte derrière elle : tout en haut, sa couleur occupe la zone de
+   l'heure ; en descendant, il défile avec la page et iOS floute ce qui passe sous la barre d'état. */
+.hero{background:linear-gradient(90deg,var(--hero-a) 0%,var(--hero-b) 100%);color:var(--hero-fg);padding-top:var(--top)}
 .hero-in{padding-block:30px 24px}
 .hero-top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:18px 40px}
 .eyebrow{font-size:14px;color:var(--hero-gold);font-weight:600}
@@ -665,7 +666,6 @@ body.noauth .fab,body.modal-open .fab{display:none}
 .cmp-ask{width:100%;margin-bottom:6px}
 
 /* ---------- Accueil : le coach ---------- */
-body.on-home .hero{display:none}
 .coach-home{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 16px 14px;box-shadow:var(--shadow-s)}
 .ch-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
 .ch-head b{display:block;font-family:var(--f-display);font-size:24px;font-weight:600;line-height:1.15}
@@ -1006,11 +1006,8 @@ body.compact .brand-mark{width:40px;height:40px}
 body.compact .brand-name{font-size:11px;letter-spacing:.28em}
 body.compact .names{font-size:24px}
 
-/* App installée sur iPhone (iOS 26) : le système pose un voile flou sous la barre d'état, qu'aucun réglage de la page
-   ne désactive. On prolonge la bande bleu nuit du haut de cette hauteur : le voile tombe sur une couleur unie, plus sur le texte. */
+/* App installée sur iPhone (iOS 26) : le système pose un voile flou sous la barre d'état, un peu plus bas que la zone
+   de l'heure. L'en-tête et les éléments collés en haut se placent sous ce voile pour que leur texte reste net. */
 @media (display-mode: standalone){
-  /* La bande du haut défile avec la page (comme une app iPhone) : tout en haut, elle couvre la zone du voile, sur une
-     couleur unie ; en descendant, iOS floute normalement ce qui passe sous la barre d'état. */
   :root{--edge:28px}
-  body::before{position:absolute}
 }
