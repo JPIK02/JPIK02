@@ -1445,7 +1445,7 @@ function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t
 /* ---------- Render ---------- */
 const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
 function render(){
-  renderHero();renderTabs();
+  renderHero();renderTabs();if(!topRaf)topRaf=requestAnimationFrame(syncTop);
   const main=document.getElementById("main");
   const ae=document.activeElement,aid=ae&&main.contains(ae)?ae.id:null,sel=aid&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null;
   if(aid&&aid!=="gq"&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&/^(text|number|email|date|time|search)$/.test(ae.type)))){S.pending=true;return}
@@ -1461,7 +1461,20 @@ function render(){
   setHTML(main,pre+(VIEWFN[S.view]||vApercu)());
   if(aid){const el=document.getElementById(aid);if(el){el.focus();if(sel)try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
-function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0)}
+// Haut de page : bleu nuit derrière la barre d'état tant que l'en-tête y est (voir styles.css, html.at-top).
+let topRaf=0;
+function syncTop(){
+  topRaf=0;
+  const h=document.querySelector(".hero"),b=h&&h.offsetParent!==null?h.getBoundingClientRect().bottom:0;
+  const on=b>Math.max(20,parseFloat(getComputedStyle(h||document.body).paddingTop)||0),root=document.documentElement;
+  if(root.classList.contains("at-top")===on)return;
+  root.classList.toggle("at-top",on);
+  const m=document.querySelector('meta[name="theme-color"]');
+  if(m)m.content=on?getComputedStyle(root).getPropertyValue("--hero-a").trim()||"#1E2A3A":getComputedStyle(document.body).backgroundColor;
+}
+addEventListener("scroll",()=>{if(!topRaf)topRaf=requestAnimationFrame(syncTop)},{passive:true});
+addEventListener("resize",()=>{if(!topRaf)topRaf=requestAnimationFrame(syncTop)});
+function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);syncTop()}
 
 /* ---------- Modal editor ---------- */
 const SCHEMAS={

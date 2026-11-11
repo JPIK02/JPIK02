@@ -1011,3 +1011,8 @@ body.compact .names{font-size:24px}
 @media (display-mode: standalone){
   :root{--edge:28px}
 }
+/* Tant que l'en-tête bleu nuit est sous la barre d'état, la page est bleu nuit derrière elle (fond et bande fixe de la
+   hauteur de l'heure) : iOS teinte son voile de cette couleur, invisible sur l'en-tête. Une fois l'en-tête passé, le
+   voile reprend la couleur de la page et floute le contenu qui défile. */
+html.at-top{background:var(--hero-a)}
+html.at-top body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--hero-a);pointer-events:none}
