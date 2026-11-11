@@ -63,7 +63,7 @@ export async function runBriefs({ log = console.log } = {}) {
   const [settings, brief, profil, inspirations, vendors] = await Promise.all([
     getMeta("settings"), listAll("brief"), getMeta("profil"), listAll("inspirations"), listAll("vendors")]);
   const data = {
-    reglages: { date: settings.date, lieu: settings.lieu, ville: settings.ville, invitesCible: settings.invitesCible },
+    reglages: { date: settings.date, lieu: settings.lieu, ville: settings.ville, invitesCible: settings.invitesCible, dateIndicative: !!settings.dateIndicative },
     entretien: brief.map(({ id, updatedAt, by, ...b }) => ({ id, ...b })),
     synthese: { resume: profil.resume, priorites: profil.priorites, divergences: profil.divergences },
     inspirations: inspirations.map(i => ({ categorie: i.cat, description: i.description })),
