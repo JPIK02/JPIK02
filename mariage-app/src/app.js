@@ -330,7 +330,7 @@ function payments(){
   S.vendors.forEach(v=>{
     if(v.status==="ecarte")return;
     const ac=num(v.acompte),px=num(v.prix);
-    if(ac&&!v.acomptePaye)out.push({v,kind:"Acompte",amount:ac,date:pd(v.dateAcompte)});
+    if(ac&&!v.acomptePaye&&v.status==="reserve")out.push({v,kind:"Acompte",amount:ac,date:pd(v.dateAcompte)});
     if(px&&!v.soldePaye&&v.status==="reserve")out.push({v,kind:"Solde",amount:Math.max(0,px-(v.acomptePaye?ac:0)-(v.acomptePaye?0:ac)),date:pd(v.dateSolde)});
   });
   return out.sort((a,b)=>(a.date?+a.date:9e15)-(b.date?+b.date:9e15));
@@ -655,7 +655,8 @@ function vPrestataires(){
   if(f.vCat&&f.vCat!=="all"&&allCats.includes(f.vCat))vs=vs.filter(v=>v.cat===f.vCat);
   const cats=VCATS.filter(c=>vs.some(v=>v.cat===c));
   const engaged=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
-  const toPay=S.vendors.filter(v=>v.status!=="ecarte"&&num(v.acompte)&&!v.acomptePaye).length;
+  // seulement les prestataires réservés : l'acompte d'un simple devis n'est pas encore dû
+  const toPay=S.vendors.filter(v=>v.status==="reserve"&&num(v.acompte)&&!v.acomptePaye).length;
   const sc=v=>v.status==="ecarte"?-2:(v.fit&&v.fit.score!=null?v.fit.score:-1);
   const groups=cats.map(c=>{
     const list=vs.filter(v=>v.cat===c).sort((a,b)=>sc(b)-sc(a)||VSTAT_RANK[b.status]-VSTAT_RANK[a.status]);
@@ -665,7 +666,7 @@ function vPrestataires(){
     <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">${list.length>1?`<span class="rank">${i+1}</span>`:""}${fitBadge(v)}
       <div class="main" style="flex:1;min-width:0"><div class="t" style="font-weight:500">${esc(v.name)}</div>
         ${fi.verdict?`<div class="verdict">${esc(fi.verdict)}</div>`:""}
-        <div class="m" style="font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 10px">${v.prix?`<span class="num">${eur(v.prix)}</span>`:""}${av.note?`<span class="stars">★ ${esc(String(av.note).replace(".",","))}${av.nombre?` <span style="color:var(--muted);font-weight:500">(${esc(av.nombre)} avis)</span>`:""}</span>`:""}${num(v.acompte)?`<span class="${v.acomptePaye?"":"over"}">Acompte ${eur(v.acompte)} ${v.acomptePaye?"versé":"à verser"}</span>`:""}${v.tel?`<span class="num">${esc(v.tel)}</span>`:""}</div></div>
+        <div class="m" style="font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 10px">${v.prix?`<span class="num">${eur(v.prix)}</span>`:""}${av.note?`<span class="stars">★ ${esc(String(av.note).replace(".",","))}${av.nombre?` <span style="color:var(--muted);font-weight:500">(${esc(av.nombre)} avis)</span>`:""}</span>`:""}${num(v.acompte)?(v.status==="reserve"?`<span class="${v.acomptePaye?"":"over"}">Acompte ${eur(v.acompte)} ${v.acomptePaye?"versé":"à verser"}</span>`:`<span>Acompte demandé ${eur(v.acompte)}</span>`):""}${v.tel?`<span class="num">${esc(v.tel)}</span>`:""}</div></div>
       <div class="end" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${v.source==="mail"?'<span class="chip gold">via e-mail</span>':""}<span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span></div></div>`}).join("")}</div></section>`;
   }).join("");
   return `<div class="vh"><div><h2>Annuaire des prestataires</h2><p>${S.vendors.length} prestataire${S.vendors.length>1?"s":""} · ${S.vendors.filter(v=>v.status==="reserve").length} réservé${S.vendors.filter(v=>v.status==="reserve").length>1?"s":""} pour ${eur(engaged)}${toPay?` · <span class="over">${toPay} acompte${toPay>1?"s":""} à verser</span>`:""}. Classés par note de fit dans chaque catégorie.</p></div>
