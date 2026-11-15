@@ -884,6 +884,7 @@ h1,h2,h3,.panel-h h3,.vh h2,.modal h3,.empty b{letter-spacing:-.02em}
 .briefs-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .briefs-acts .link{color:var(--link);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0;font-size:14.5px}
 /* Coach et internet : demande d'autorisation, sources */
+.open-acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
 .webask{margin-top:8px;border:1px solid var(--line-strong);border-radius:14px;padding:12px 14px;background:var(--surface);display:flex;flex-direction:column;gap:4px;max-width:100%}
 .webask b{font-size:14px;color:var(--link)}
 .webask p{margin:0;font-weight:600;overflow-wrap:anywhere}

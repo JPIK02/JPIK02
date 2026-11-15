@@ -1285,10 +1285,16 @@ function webAsk(m,i){
     <p>« ${esc(w.web.requete)} »</p>${w.web.pourquoi?`<span>${esc(w.web.pourquoi)}</span>`:""}
     <div class="webask-a"><button class="btn sm primary" data-act="webok" data-i="${i}">Autoriser cette recherche</button><button class="link" data-act="webno" data-i="${i}">Non merci</button></div></div>`;
 }
+// Outil ouvrir_page du coach : un bouton « Ouvrir le budget » dans la conversation (jamais de navigation automatique)
+const OPEN_VIEWS=new Set([...VIEWS.map(v=>v[0]),...Object.keys(PARENT_VIEW)]);
+function openBtns(m){
+  const list=(m.actions||[]).filter(a=>a.open&&(a.open.page==="fiche"?a.open.id:OPEN_VIEWS.has(a.open.page)));
+  return list.length?`<div class="open-acts">${list.map(a=>`<button class="btn sm" data-act="chatopen" data-p="${esc(a.open.page)}" data-id="${esc(a.open.id||"")}">${esc(a.label)}</button>`).join("")}</div>`:"";
+}
 function chatItems(){
   const c=S.chat;
   const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u">${(m.thumbs||[]).length?`<div class="cm-thumbs">${m.thumbs.map(u=>`<img src="${u}" alt="Photo envoyée">`).join("")}</div>`:""}<div class="bub">${esc(m.text)}</div></div>`
-    :`<div class="cm a"><div class="bub">${mdLite(m.text)}${(m.sources||[]).length?`<div class="srcs"><span>Sources</span>${m.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.url)}</a>`).join("")}</div>`:""}</div>${webAsk(m,i)}${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).filter(a=>!a.web).length?`<div class="acts-done">${m.actions.filter(a=>!a.web).map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
+    :`<div class="cm a"><div class="bub">${mdLite(m.text)}${(m.sources||[]).length?`<div class="srcs"><span>Sources</span>${m.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.url)}</a>`).join("")}</div>`:""}</div>${webAsk(m,i)}${openBtns(m)}${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).filter(a=>!a.web&&!a.open).length?`<div class="acts-done">${m.actions.filter(a=>!a.web&&!a.open).map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
       ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`);
   const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`
     :!c.busy&&c.mode==="brief"&&S.canWrite?`<div class="chat-sugg"><button class="chip" data-act="chatfile">Montrer une photo au coach</button></div>`:"";
@@ -1751,6 +1757,7 @@ document.addEventListener("click",async e=>{
   if(a==="inspdel"){if(!S.canWrite)return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer";return}if(await remove("inspirations",id)){if(document.querySelector(".modal.lb"))closeModal();toast("Inspiration retirée")};return}
   if(a==="inspadd"){openChat("brief");setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
   if(a==="chatmic"){toggleMic(t);return}
+  if(a==="chatopen"){const p=t.dataset.p;if(p==="fiche"){closeModal();openFiche(t.dataset.id)}else go(p);return}
   if(a==="homemic"){openChat("chat");const b=document.getElementById("chat-mic");if(b)toggleMic(b);return}
   if(a==="mailcopy"){const m=mailOf((S.chat.messages[+t.dataset.i]||{}).text);if(!m)return;const txt=`Objet : ${m.subject}\n\n${m.body}`;try{await navigator.clipboard.writeText(txt);toast("Mail copié")}catch(e){toast("Copie impossible : sélectionnez le texte")}return}
   if(a==="pdfshare"){try{await navigator.share({files:[S.pdfFile],title:S.pdfFile.name})}catch(e){if(e&&e.name!=="AbortError")toast("Partage impossible : utilisez « Ouvrir le PDF »")}return}
