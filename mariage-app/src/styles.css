@@ -1018,57 +1018,86 @@ body.compact .names{font-size:24px}
 
 /* ---------- Accueil (docs/accueil-coach-v1.md) : À faire maintenant, carte Coach, Votre mariage ---------- */
 .home{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
-.home-hi h2{margin:0;font-size:26px;line-height:1.15}
-.home-hi p{margin:4px 0 0;color:var(--muted);font-size:15px}
-.home-hi p b{color:var(--ink)}
+main:has(.home){padding-top:18px}
 .home-h{margin:0 0 10px;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.home-sec .more-pts{margin-top:8px}
-/* la première carte est mise en avant */
-.todo .dc:first-child{border:1.5px solid var(--accent);box-shadow:var(--shadow-s);padding:16px 16px 14px}
-.todo .dc:first-child .dc-body b{font-size:17px}
-.dc.sug .dc-dot{background:var(--gold)}.dc.next .dc-dot{background:var(--accent)}
+.home-sec .more-pts{margin-top:6px}
+/* en-tête de l'accueil (v1.1) : une ligne « 923 jours · date » à la place du grand compteur */
+.hero-line{display:none}
+body.on-home .hero-line{display:block;margin-top:2px;font-size:14px;color:var(--hero-muted)}
+body.on-home .hero-line b{color:var(--hero-gold);font-weight:600}
+body.on-home .hero-line .link{color:var(--hero-gold);background:none;border:0;padding:0;font-weight:600;cursor:pointer;font-size:14px}
+body.on-home .count,body.on-home .hero-sub{display:none}
+/* « À faire maintenant » : une carte mise en avant, les points suivants en lignes compactes */
+.dc.lead{display:block;background:var(--accent-soft);border:0;border-radius:16px;padding:16px}
+.dc.lead .dc-body b{font-size:17px;margin-top:6px}
+.dc-tag{display:inline-block;font-size:12px;font-weight:600;letter-spacing:.04em;border-radius:999px;padding:2px 9px;background:var(--surface);color:var(--link)}
+.dc-tag.bad{background:var(--bad-soft);color:var(--bad)}.dc-tag.warn{background:var(--warn-soft);color:var(--ink)}
+.td-list{margin-top:10px;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.td-row{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px 14px;border:0;border-top:1px solid var(--line);background:none;text-align:left;cursor:pointer;color:var(--ink);font:inherit}
+.td-row:first-child{border-top:0}
+.td-row .dc-dot{margin-top:0}
+.dc-dot.lv-bad{background:var(--bad)}.dc-dot.lv-warn{background:var(--warn)}.dc-dot.lv-sug{background:var(--gold)}.dc-dot.lv-next{background:var(--accent)}
+.td-t{flex:1;min-width:0;display:flex;flex-direction:column}
+.td-t b,.td-t span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.td-t b{font-size:15px;font-weight:600}
+.td-t span{font-size:13.5px;color:var(--muted)}
+.td-row svg{flex:none;width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.td-row:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+@media (hover:hover){.td-row:hover{background:var(--surface-2)}}
 body.on-home .fab{display:none}
-.coach-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 16px 16px;box-shadow:var(--shadow-s)}
-.cc-head{display:flex;gap:12px;align-items:flex-start}
-.cc-ic{flex:none;width:40px;height:40px;border-radius:50%;background:var(--accent);display:grid;place-items:center}
-.cc-ic svg{width:20px;height:20px;fill:var(--fab-icon,var(--on-accent))}
-.cc-body{flex:1;min-width:0}
-.cc-k{display:block;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link)}
-.cc-t{display:block;font-size:17px;line-height:1.3;margin-top:2px}
+/* carte Coach resserrée */
+.coach-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow-s)}
+.cc-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.cc-k{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link)}
+.cc-ic{flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);display:grid;place-items:center}
+.cc-ic svg{width:13px;height:13px;fill:var(--fab-icon,var(--on-accent))}
+.cc-day{font-size:13px;color:var(--muted)}
+.cc-t{display:block;font-size:17px;line-height:1.3;margin-top:8px}
 .cc-q{margin:4px 0 0;font-size:14.5px;color:var(--muted);line-height:1.45}
-.cc-body>.link{font-size:14px;color:var(--link);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0 0}
-.cc-body .hb-b ul{margin:8px 0 0;padding-left:18px;font-size:14.5px}
-.cc-ask{display:flex;align-items:center;gap:8px;margin-top:14px;border:1px solid var(--line-strong);border-radius:999px;padding:4px 4px 4px 16px;background:var(--bg)}
+.cc-more{display:inline;font-size:14.5px;color:var(--link);font-weight:600;background:none;border:0;cursor:pointer;padding:0}
+.coach-card .hb-b ul{margin:8px 0 0;padding-left:18px;font-size:14.5px}
+.cc-ask{display:flex;align-items:center;gap:6px;margin-top:12px;border:0;border-radius:999px;padding:4px 4px 4px 16px;background:var(--surface-2)}
 .cc-ask input{flex:1;min-width:0;border:0;background:transparent;font-size:16px;padding:8px 0;color:var(--ink)}
+.cc-ask input::placeholder{color:var(--muted)}
 .cc-ask input:focus{outline:none}
 .cc-ask:focus-within{outline:3px solid var(--accent);outline-offset:2px}
 .cc-ask .ch-ic{width:38px;height:38px;border:0;background:transparent}
 .cc-ask .cmp-send{margin-left:0}
-.cc-sugg{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
-.cc-sugg .chip{cursor:pointer;background:var(--accent-soft);color:var(--link);font-size:13.5px;padding:7px 12px;white-space:normal;text-align:left}
-.cc-sugg .chip:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.cc-sugg{display:flex;gap:6px;margin:6px -16px 0;padding:0 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.cc-sugg::-webkit-scrollbar{display:none}
+.cc-s{flex:none;min-height:44px;display:flex;align-items:center;background:none;border:0;padding:0;cursor:pointer;font:inherit}
+.cc-s span{border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;font-size:13.5px;font-weight:600;color:var(--link);white-space:nowrap;background:var(--surface)}
+.cc-s:focus-visible{outline:none}.cc-s:focus-visible span{outline:3px solid var(--accent);outline-offset:2px}
+/* « Votre mariage » : Nos envies sur fond bleu nuit, six tuiles régulières */
 .wm{display:flex;flex-direction:column;gap:10px}
-.wm-envies,.wm-tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;width:100%;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);cursor:pointer;box-shadow:var(--shadow-s);font:inherit}
-.wm-envies{padding:16px}
-.wm-k{font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link)}
-.wm-title{font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:22px;line-height:1.2}
+.wm-envies,.wm-tile{display:flex;flex-direction:column;align-items:flex-start;text-align:left;width:100%;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);cursor:pointer;box-shadow:var(--shadow-s);font:inherit}
+.wm-envies{gap:6px;padding:18px;background:var(--hero-b);border-color:transparent;color:var(--hero-fg)}
+.wm-k{font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--coral)}
+.wm-title{font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:26px;line-height:1.2}
 .wm-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
-.wm-s{font-size:14px;color:var(--muted)}
-.wm-go{margin-top:6px;font-size:14px;font-weight:600;color:var(--link)}
+.wm-tags .chip{background:transparent;border:1px solid var(--hero-edge);color:var(--hero-fg)}
+.wm-s{font-size:14px;color:var(--hero-muted)}
+.wm-envies .wm-go{color:var(--coral)}
+.wm-go{font-size:14px;font-weight:600;color:var(--link)}
+.wm-envies.empty{border-style:solid;box-shadow:none}
 .wm-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.wm-tile{padding:14px;min-height:118px}
-.wm-ic{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);display:grid;place-items:center;margin-bottom:4px}
-.wm-ic svg{width:20px;height:20px;stroke:var(--link);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.wm-l{font-weight:600;font-size:16px;display:flex;align-items:center;gap:6px}
-.wm-v{font-size:14px;color:var(--muted);line-height:1.35;width:100%;overflow-wrap:anywhere}
+.wm-tile{position:relative;height:112px;padding:14px;justify-content:flex-end;gap:2px}
+.wm-ic{position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:6px}
+.wm-ic svg{width:24px;height:24px;stroke:var(--coral-ui);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wm-l{font-weight:600;font-size:16px}
+.wm-v{font-size:13.5px;color:var(--muted);width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wm-v .over{color:var(--bad);font-weight:600}
-.wm-bar{display:block;height:6px;border-radius:6px;background:var(--surface-2);margin-top:6px;overflow:hidden}
-.wm-bar i{display:block;height:100%;background:var(--coral-ui);border-radius:6px}
+.wm-bar{position:absolute;left:14px;right:14px;bottom:8px;height:4px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.wm-bar i{display:block;height:100%;background:var(--coral-ui);border-radius:4px}
 .wm-bar.over i{background:var(--bad)}
-.wm-tile.empty,.wm-envies.empty{border-style:dashed;box-shadow:none;background:transparent}
-.wm-envies:hover,.wm-tile:hover{background:var(--surface-2)}
+.wm-tile.empty{border-style:dashed;box-shadow:none}
+@media (hover:hover){.wm-tile:hover{background:var(--surface-2)}.wm-envies:hover{filter:brightness(1.08)}}
 .wm-envies:focus-visible,.wm-tile:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 @media (min-width:761px){.wm-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* feuille Documents */
+.docs-list{display:grid;gap:0;margin-top:18px;border-top:1px solid var(--line)}
+.doc-row{display:flex;align-items:center;gap:12px;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}
+.doc-row b{display:block;font-size:15.5px}.doc-row span{font-size:13.5px;color:var(--muted)}
 /* photo du couple dans l'en-tête : ouvre Réglages */
 .hero-photo{flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--hero-edge);padding:0;cursor:pointer;background:var(--hero-glass-2);color:var(--hero-fg);display:grid;place-items:center;overflow:hidden;font-weight:600;font-size:14px}
 .hero-photo img{width:100%;height:100%;object-fit:cover}

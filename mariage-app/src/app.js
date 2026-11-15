@@ -120,7 +120,7 @@ function alerts(){
   const out=[],d=wDate(),tot=num(S.settings.budgetTotal);
   const prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
   if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:"Engagé au-dessus du budget total",s:`${eur(engage)} engagés pour ${eur(tot)} de budget.`,go:"budget"});
-  else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:"Budget prévu au-dessus du budget total",s:`${eur(prevu)} prévus pour ${eur(tot)} : ${eur(prevu-tot)} à trouver ou à couper.`,go:"budget"});
+  else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:"Budget prévu au-dessus du budget total",ss:`${eur(prevu-tot)} à trouver ou à couper`,s:`${eur(prevu)} prévus pour ${eur(tot)} : ${eur(prevu-tot)} à trouver ou à couper.`,go:"budget"});
   const guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
   S.vendors.filter(v=>v.status!=="ecarte").forEach(v=>{
     const note=String(v.note||""),n=fold(note);
@@ -133,7 +133,7 @@ function alerts(){
     if(mx){if(guests>mx)out.push({k:"cap",v,lvl:"warn",t:`${v.name} : capacité trop juste`,s:`${mx} personnes au maximum pour ${guests} invités au dîner.`,fiche:v.id})}
     const px=num(v.prix),line=budgetLineFor(v.cat);
     if(px&&line&&num(line.prevu)&&px>num(line.prevu)&&["devis","reserve"].includes(v.status))
-      out.push({k:"devis",v,line,px,lvl:"warn",t:`Devis ${v.name} au-dessus de l'enveloppe`,s:`${eur(px)} pour ${eur(num(line.prevu))} prévus au poste « ${line.label} » (+${eur(px-num(line.prevu))}).`,fiche:v.id});
+      out.push({k:"devis",v,line,px,lvl:"warn",t:`Devis ${v.name} au-dessus de l'enveloppe`,ss:`+${eur(px-num(line.prevu))} sur le poste « ${line.label} »`,s:`${eur(px)} pour ${eur(num(line.prevu))} prévus au poste « ${line.label} » (+${eur(px-num(line.prevu))}).`,fiche:v.id});
   });
   const late=S.tasks.filter(isLate).length;
   if(late)out.push({k:"late",lvl:"warn",t:`${late} tâche${late>1?"s":""} en retard`,s:"À reprogrammer ou à faire en priorité.",go:"planning"});
@@ -145,7 +145,9 @@ function alerts(){
     out.push({k:"refit",lvl:"info",t:"Vos envies ont changé depuis l'analyse des prestataires",s:"Relancez l'analyse dans l'Annuaire pour mettre les notes de fit à jour.",go:"prestataires"});
   S.rdv.filter(r=>r.date&&pd(r.date)>=today()&&days(today(),pd(r.date))<=14).forEach(r=>{
     const v=findVendor(r.avec)||S.vendors.find(x=>fold(r.title).includes(fold(x.name)));
-    out.push({k:"rdv",r,v,lvl:"info",t:`${r.title} le ${fmtD(pd(r.date),false)} (${relDay(pd(r.date))})`,s:v&&v.fit&&v.fit.questions&&v.fit.questions.length?`${v.fit.questions.length} questions à poser préparées dans la fiche.`:"Pensez à préparer vos questions.",fiche:v?v.id:null,edit:v?null:r.id});
+    const nq=v&&v.fit&&v.fit.questions?v.fit.questions.length:0;
+    out.push({k:"rdv",r,v,lvl:"info",t:`${r.title} le ${fmtD(pd(r.date),false)} (${relDay(pd(r.date))})`,s:nq?`${nq} questions à poser préparées dans la fiche.`:"Pensez à préparer vos questions.",
+      ts:`${r.title} · ${pd(r.date).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})}`,ss:nq?`${nq} questions à poser, prêtes`:"Questions à préparer",fiche:v?v.id:null,edit:v?null:r.id});
   });
   const rank={bad:0,warn:1,info:2};
   return out.sort((a,b)=>rank[a.lvl]-rank[b.lvl]);
@@ -201,22 +203,38 @@ function nextOpenTask(){
   return S.tasks.filter(t=>t.status!=="done").sort((a,b)=>{const da=taskDue(a),db=taskDue(b);if(da&&db&&+da!==+db)return da-db;if(da&&!db)return -1;if(db&&!da)return 1;return byOrder(a,b)})[0]||null;
 }
 // Ordre : alertes graves, propositions des mails, visites à raconter, alertes à surveiller puis d'information, notifications, sinon la prochaine tâche
+// Un point « À faire » : id, niveau, étiquette, titre et texte (HTML échappé), réponses rapides, version courte pour les lignes
+const todoItem=(id,lvl,tag,title,text,qr,ts,ss)=>({id,lvl,tag,title,text,qr,ts,ss});
+const TODO_TAG={budget:"Budget",complet:"Prestataires",cap:"Prestataires",devis:"Prestataires",refit:"Prestataires",late:"Planning",sugs:"E-mails",brief:"Nos envies",rdv:"Agenda"};
 function todoCards(al){
-  const cards=[],card=(a,i)=>dayCard("al-"+(a.k||"")+"-"+(a.v?a.v.id:a.r?a.r.id:i),a.lvl,esc(a.t),esc(a.s),qrFor(a));
+  const cards=[],card=(a,i)=>todoItem("al-"+(a.k||"")+"-"+(a.v?a.v.id:a.r?a.r.id:i),a.lvl,TODO_TAG[a.k]||"À voir",esc(a.t),esc(a.s),qrFor(a),a.ts&&esc(a.ts),a.ss&&esc(a.ss));
   al.filter(a=>a.lvl==="bad").forEach((a,i)=>cards.push(card(a,i)));
   const ps=pendingSugs().length;
-  if(ps)cards.push(dayCard("sugs","sug",`${ps} proposition${ps>1?"s":""} tirée${ps>1?"s":""} de vos mails`,"Devis, rendez-vous et tâches repérés par l'assistant e-mails : validez-les en un geste.",[["Valider en un geste","go:assistant"]]));
-  visitsToTell().forEach(({r,v})=>cards.push(dayCard("visit-"+r.id,"info",`Comment s'est passée la visite de ${esc(v.name)} ?`,"Racontez-la en deux phrases : je mets la fiche à jour.",[["Raconter la visite",`prefill:Visite de ${v.name} : `]])));
+  if(ps)cards.push(todoItem("sugs","sug","E-mails",`${ps} proposition${ps>1?"s":""} tirée${ps>1?"s":""} de vos mails`,"Devis, rendez-vous et tâches repérés par l'assistant e-mails : validez-les en un geste.",[["Valider en un geste","go:assistant"]],null,"Devis, rendez-vous et tâches à valider"));
+  visitsToTell().forEach(({r,v})=>cards.push(todoItem("visit-"+r.id,"info","Visite",`Comment s'est passée la visite de ${esc(v.name)} ?`,"Racontez-la en deux phrases : je mets la fiche à jour.",[["Raconter la visite",`prefill:Visite de ${v.name} : `]],`Visite de ${esc(v.name)}`,"Racontez-la en deux phrases")));
   al.filter(a=>a.lvl!=="bad"&&a.k!=="sugs").forEach((a,i)=>cards.push(card(a,i)));
   if((S.pushState==="off"||S.pushState==="install")&&!pushCardOff())cards.push(S.pushState==="off"
-    ?dayCard("push","info","Recevoir le point de la semaine","Une notification chaque lundi, et quand l'assistant trouve un devis ou un rendez-vous dans vos mails.",[["Activer les notifications","pushon:"],["Ne plus proposer","pushhide:"]])
-    :dayCard("push","info","Recevoir le point de la semaine","Sur iPhone, les notifications ne marchent que depuis l'app installée : dans Safari, Partager puis « Sur l'écran d'accueil », puis ouvrez Lamaelle depuis son icône.",[["Ne plus proposer","pushhide:"]]));
+    ?todoItem("push","info","Notifications","Recevoir le point de la semaine","Une notification chaque lundi, et quand l'assistant trouve un devis ou un rendez-vous dans vos mails.",[["Activer les notifications","pushon:"],["Ne plus proposer","pushhide:"]],null,"Une notification chaque lundi")
+    :todoItem("push","info","Notifications","Recevoir le point de la semaine","Sur iPhone, les notifications ne marchent que depuis l'app installée : dans Safari, Partager puis « Sur l'écran d'accueil », puis ouvrez Lamaelle depuis son icône.",[["Voir dans Réglages","go:reglages"],["Ne plus proposer","pushhide:"]],null,"Depuis l'app installée sur l'écran d'accueil"));
   if(!cards.length){
     const t=nextOpenTask(),due=t&&taskDue(t);
-    cards.push(t?dayCard("next-"+t.id,"next","Prochaine étape : "+esc(t.title),due?`À faire avant le ${esc(fmtD(due,false))}.`:esc(PH[t.phase]?.label||""),[["Voir dans le planning",`task:${t.id}`],...(S.canWrite?[["C'est fait",`taskdone:${t.id}`]]:[]),["En parler au coach",`ask:Aide-nous à avancer sur « ${t.title} » : par quoi commencer ?`]])
-      :dayCard("next","next","Rien d'urgent pour l'instant","Le coach peut vous aider à préparer la suite.",[["Par quoi continuer ?","ask:Par quoi commencer cette semaine ?"]]));
+    cards.push(t?todoItem("next-"+t.id,"next","Prochaine étape",esc(t.title),due?`À faire avant le ${esc(fmtD(due,false))}.`:esc(PH[t.phase]?.label||""),[["Voir dans le planning",`task:${t.id}`],...(S.canWrite?[["C'est fait",`taskdone:${t.id}`]]:[]),["En parler au coach",`ask:Aide-nous à avancer sur « ${t.title} » : par quoi commencer ?`]])
+      :todoItem("next","next","Prochaine étape","Rien d'urgent pour l'instant","Le coach peut vous aider à préparer la suite.",[["Par quoi continuer ?","ask:Par quoi commencer cette semaine ?"]]));
   }
   return cards;
+}
+// Le point le plus prioritaire : carte mise en avant, un bouton principal et « Autres options » (mécanique de dayCard)
+function leadCard(c){
+  const open=!!S.ui.opts[c.id],[first,...more]=c.qr;
+  return `<div class="dc lead ${c.lvl||""}"><div class="dc-body"><span class="dc-tag ${c.lvl||""}">${esc(c.tag)}</span><b>${c.title}</b>${c.text?`<p>${c.text}</p>`:""}
+    ${first?`<div class="dc-acts"><button class="btn sm primary" data-act="qr" data-do="${esc(first[1])}">${esc(first[0])}</button>${more.length?`<button class="link" data-act="uiopts" data-id="${esc(c.id)}" aria-expanded="${open}">${open?"Moins":"Autres options"}</button>`:""}</div>
+    ${open&&more.length?`<div class="dc-more">${more.map(([l,d])=>`<button class="btn sm" data-act="qr" data-do="${esc(d)}">${esc(l)}</button>`).join("")}</div>`:""}`:""}</div></div>`;
+}
+// Les points suivants : une ligne compacte qui ouvre quelque chose (fiche, page, comparateur…), jamais une modification directe
+const ROW_NAV=/^(go|fiche|late|task|compare|prefill|chatbrief|chat):/,ROW_WRITE=/^(vstatus|budgetset|taskdone|pushhide):/;
+function todoRow(c){
+  const q=c.qr.find(x=>ROW_NAV.test(x[1]))||c.qr.find(x=>!ROW_WRITE.test(x[1]));
+  return `<button class="td-row" ${q?`data-act="qr" data-do="${esc(q[1])}"`:"disabled"}><span class="dc-dot lv-${c.lvl||"info"}" aria-hidden="true"></span><span class="td-t"><b>${c.ts||c.title}</b>${c.ss||c.text?`<span>${c.ss||c.text}</span>`:""}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
 }
 // Suggestions de la carte Coach, tirées de l'état de l'app (sans appel à l'IA)
 const KEY_FIND={Lieu:"un lieu",Traiteur:"un traiteur",Photographe:"un photographe",Musique:"la musique",Fleuriste:"un fleuriste",Tenues:"nos tenues"};
@@ -235,16 +253,18 @@ const MIC_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" wid
 const SEND_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
 function coachCard(al){
   const hb=S.hebdo||{},fresh=hb.at&&Date.now()-hb.at<8*864e5,open=!!S.ui.hebdo,dis=S.canWrite?"":"disabled";
-  const head=fresh?`<span class="cc-k">Point de la semaine</span><b class="cc-t">${esc(hb.titre||"")}</b>${hb.question?`<p class="cc-q">${esc(hb.question)}</p>`:""}
-      <button class="link" data-act="uihebdo" aria-expanded="${open}">${open?"Replier le point":"Lire le point"}</button>
+  const day=fresh?WEEKDAYS[new Date(hb.at).getDay()]:"";
+  const head=fresh?`<b class="cc-t">${esc(hb.titre||"")}</b><p class="cc-q">${hb.question?esc(hb.question)+" ":""}<button class="link cc-more" data-act="uihebdo" aria-expanded="${open}">${open?"Replier le point":"Lire le point"}</button></p>
       ${open?`<div class="hb-b">${Array.isArray(hb.points)?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}<div class="dc-acts">${hb.question?`<button class="btn sm primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:""}<button class="link" data-act="qr" data-do="hebdo">Refaire le point</button></div></div>`:""}`
-    :`<span class="cc-k">Votre coach</span><b class="cc-t">Je connais vos envies, vos prestataires et votre budget.</b><p class="cc-q">Dites-moi ce que vous voulez faire, ou demandez-moi où trouver quelque chose.</p><button class="link" data-act="qr" data-do="hebdo">Faire le point de la semaine</button>`;
-  return `<section class="coach-card" aria-label="Votre coach"><div class="cc-head"><span class="cc-ic" aria-hidden="true">${SPARK}</span><div class="cc-body">${head}</div></div>
-    <form class="cc-ask" id="home-ask"><label class="sr" for="home-q">Demander au coach</label><input id="home-q" name="search_home" type="text" autocomplete="off" enterkeyhint="send" placeholder="Demandez ou dites ce que vous voulez faire" ${dis}>
+    :`<b class="cc-t">Je connais vos envies, vos prestataires et votre budget.</b><p class="cc-q">Dites-moi ce que vous voulez faire. <button class="link cc-more" data-act="qr" data-do="hebdo">Faire le point de la semaine</button></p>`;
+  return `<section class="coach-card" aria-label="Votre coach">
+    <div class="cc-top"><span class="cc-k"><span class="cc-ic" aria-hidden="true">${SPARK}</span>${fresh?"Point de la semaine":"Votre coach"}</span>${day?`<span class="cc-day">${day}</span>`:""}</div>
+    ${head}
+    <form class="cc-ask" id="home-ask"><label class="sr" for="home-q">Écrire au coach</label><input id="home-q" name="search_home" type="text" autocomplete="off" enterkeyhint="send" placeholder="Écrire au coach…" ${dis}>
       ${SR?`<button type="button" class="ch-ic" data-act="homemic" aria-label="Dicter au coach" ${dis}>${MIC_SVG}</button>`:""}<button type="submit" class="cmp-send" aria-label="Envoyer au coach" ${dis}>${SEND_SVG}</button></form>
-    <div class="cc-sugg">${coachSuggestions(al).map(([l,d])=>`<button class="chip" data-act="qr" data-do="${esc(d)}">${esc(l)}</button>`).join("")}</div></section>`;
+    <div class="cc-sugg" role="list">${coachSuggestions(al).map(([l,d])=>`<button class="cc-s" role="listitem" data-act="qr" data-do="${esc(d)}"><span>${esc(l)}</span></button>`).join("")}</div></section>`;
 }
-const TILE_IC={prestataires:ICON_PRESTA(),planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',budget:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',jourj:'<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10 4h4l-2 3z"/>'};
+const TILE_IC={prestataires:ICON_PRESTA(),planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',budget:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',jourj:'<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10 4h4l-2 3z"/>',docs:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'};
 function ICON_PRESTA(){return '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>'}
 // « Votre mariage » : toujours les mêmes éléments, à la même place ; « Commencer » quand c'est vide
 function weddingGrid(){
@@ -263,24 +283,27 @@ function weddingGrid(){
   const ref=tot||prevu,pct=ref?Math.round(engage/ref*100):0,over=ref&&engage>ref;
   const g=S.guests,ans=g.filter(x=>x.rsvp==="oui"||x.rsvp==="non").length,steps=S.schedule.length;
   const pl=(n,s,p)=>`${n} ${n>1?p:s}`;
-  const tile=(k,label,empty,go,body,badge="")=>`<button class="wm-tile ${empty?"empty":""}" ${go}><span class="wm-ic"><svg viewBox="0 0 24 24" aria-hidden="true">${TILE_IC[k]}</svg></span><span class="wm-l">${label}${badge}</span>${empty?`<span class="wm-go">Commencer</span>`:`<span class="wm-v">${body}</span>`}</button>`;
+  // tuiles de même hauteur : icône, titre en bas, une ligne d'info ; jamais de « 0 » seul
+  const tile=(k,label,empty,go,body,badge="",extra="")=>`<button class="wm-tile ${empty?"empty":""}" ${go}><span class="wm-ic"><svg viewBox="0 0 24 24" aria-hidden="true">${TILE_IC[k]}</svg>${badge}</span><span class="wm-l">${label}</span><span class="wm-v">${empty?`<span class="wm-go">Commencer</span>`:body}</span>${extra}</button>`;
+  const {ready}=briefsState();
   return `<div class="wm">${envies}<div class="wm-tiles">
-    ${tile("prestataires","Prestataires",!act.length,!act.length&&S.canWrite?'data-new="vendors"':'data-go="prestataires"',`${pl(act.length,"suivi","suivis")} · ${pl(res,"réservé","réservés")}`)}
-    ${tile("planning","Planning",!S.tasks.length&&!S.rdv.length,'data-go="planning"',next?`Prochain : ${esc(next.t)}, ${esc(whenShort(next.d))}`:"Rien de daté à venir",late?`<span class="badge num" title="${late} en retard">${late}</span>`:"")}
-    ${tile("budget","Budget",!ref,'data-go="budget"',`<span class="${over?"over":""}">${pct} % engagé</span><span class="wm-bar ${over?"over":""}" aria-hidden="true"><i style="width:${Math.min(100,pct)}%"></i></span>`)}
-    ${tile("invites","Invités",!g.length,'data-go="invites"',`${pl(ans,"réponse","réponses")} sur ${g.length}`)}
+    ${tile("prestataires","Prestataires",!act.length,!act.length&&S.canWrite?'data-new="vendors"':'data-go="prestataires"',res?`${pl(act.length,"suivi","suivis")} · ${pl(res,"réservé","réservés")}`:`${act.length} en vue`)}
+    ${tile("planning","Planning",!S.tasks.length&&!S.rdv.length,'data-go="planning"',next?`${esc(next.t)} · ${esc(whenShort(next.d))}`:"Rien de daté à venir",late?`<span class="badge num" title="${late} tâche${late>1?"s":""} en retard">${late}</span>`:"")}
+    ${tile("budget","Budget",!ref,'data-go="budget"',engage?`<span class="${over?"over":""}">${pct} % engagé</span>`:prevu?`${eur(prevu)} prévus`:`${eur(tot)} de budget`,"",engage?`<span class="wm-bar ${over?"over":""}" aria-hidden="true"><i style="width:${Math.min(100,pct)}%"></i></span>`:"")}
+    ${tile("invites","Invités",!g.length,'data-go="invites"',ans?`${pl(ans,"réponse","réponses")} sur ${g.length}`:`${pl(g.length,"invité","invités")}`)}
     ${tile("jourj","Jour J",!steps,'data-go="jour-j"',`${pl(steps,"étape","étapes")} du déroulé`)}
+    ${tile("docs","Documents",false,'data-act="docsmenu"',ready?"Briefs à envoyer":"Briefs à préparer")}
   </div></div>`;
 }
 function vApercu(){
   if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported"}),0);
   const al=alerts(),cards=todoCards(al),ui=S.ui;
-  const shown=ui.more?cards:cards.slice(0,3),rest=cards.length-shown.length;
-  const d=wDate(),n=d?days(today(),d):null;
+  // 3 points au plus : le premier en carte mise en avant, les suivants en lignes compactes dans une seule carte
+  const [lead,...others]=cards,rows=ui.more?others:others.slice(0,2),rest=others.length-rows.length;
   return `<div class="home">
-    <div class="home-hi"><h2>Bonjour${prenom()?" "+esc(prenom()):""}</h2><p>${d?`<b class="num">J-${n}</b> · ${esc(fmtLong(d).replace(/^./,c=>c.toUpperCase()))}${S.settings.dateIndicative?" (indicative)":""}`:`<button class="link" data-go="reglages">Date pas encore fixée</button>`}</p></div>
-    <section class="home-sec" aria-labelledby="h-todo"><h3 class="home-h" id="h-todo">À faire maintenant</h3><div class="dcs todo">${shown.join("")}</div>
-      ${rest>0||ui.more&&cards.length>3?`<button class="link more-pts" data-act="uimore">${ui.more?"Afficher moins":`Voir les ${rest} autre${rest>1?"s":""}`}</button>`:""}</section>
+    <section class="home-sec" aria-labelledby="h-todo"><h3 class="home-h" id="h-todo">À faire maintenant</h3>${leadCard(lead)}
+      ${rows.length?`<div class="td-list">${rows.map(todoRow).join("")}</div>`:""}
+      ${rest>0||ui.more&&others.length>2?`<button class="link more-pts" data-act="uimore">${ui.more?"Afficher moins":`Voir les ${rest} autre${rest>1?"s":""}`}</button>`:""}</section>
     ${coachCard(al)}
     <section class="home-sec" aria-labelledby="h-wm"><h3 class="home-h" id="h-wm">Votre mariage</h3>${weddingGrid()}</section>
   </div>`;
@@ -387,6 +410,11 @@ function renderHero(){
   setHTML(document.getElementById("hero-sub"),sub.join(""));
   // prénoms du couple, depuis les réglages (rien avant la connexion)
   setHTML(document.getElementById("names"),S.mode==="live"||S.mode==="demo"?`${esc(P1())}<span class="amp">&amp;</span>${esc(P2())}`:"");
+  // accueil : une seule ligne « 923 jours · samedi 26 mai 2029 (indicative) » à la place du compteur
+  const nd=d?days(today(),d):null;
+  setHTML(document.getElementById("hero-line"),S.view!=="apercu"||!(S.mode==="live"||S.mode==="demo")?""
+    :d?`<b class="num">${nd>0?`${nd} jour${nd>1?"s":""}`:nd===0?"Jour J":"Mariés"}</b> · ${esc(fmtLong(d))}${st.dateIndicative?" (indicative)":""}`
+    :`<button class="link" data-go="reglages">Fixer la date</button>`);
   // photo du couple : ouvre Réglages (le changement de photo se fait dans Réglages > Général)
   const ph=S.photo&&S.photo.data,live=S.mode==="live"||S.mode==="demo";
   setHTML(document.getElementById("hero-photo"),live?`<button class="hero-photo" data-go="reglages" aria-label="Réglages">${ph?`<img src="data:image/jpeg;base64,${ph}" alt="">`:`<span>${esc(P1().charAt(0))}&amp;${esc(P2().charAt(0))}</span>`}</button>`:"");
@@ -875,6 +903,17 @@ function ficheBrief(qk){
   return `<div class="fsec fiche-brief"><h4>Brief à lui envoyer</h4>${one?`<button class="btn" data-act="briefpdf" data-c="${qk}">Brief ${esc(BRIEF_LABEL[qk])} (PDF)</button>`
     :running?`<p class="plan-when" style="margin:0">Le coach rédige vos briefs : environ deux minutes.</p>`
     :S.canWrite?`<p class="plan-when" style="margin:0 0 8px">Le brief résume vos envies pour ce prestataire, avec les questions à lui poser.</p><button class="btn" data-act="briefsgo">Préparer les briefs</button>`:""}</div>`;
+}
+// Tuile Documents de l'accueil : tous les PDF à partager (briefs, déroulé du jour J, rapport d'organisation)
+function openDocsMenu(){
+  const rows=scheduleRows().length;
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Documents à partager"><h3>Documents à partager</h3>
+    ${briefsPanel(null)}
+    <div class="docs-list">
+      <div class="doc-row"><div><b>Déroulé du jour J</b><span>${rows?`${rows} étape${rows>1?"s":""}, pour les témoins et les prestataires`:"Ajoutez d'abord les étapes dans Jour J"}</span></div>${rows?`<button class="btn sm" data-act="pdfjourj">PDF</button>`:`<button class="btn sm" data-go="jour-j">Ouvrir</button>`}</div>
+      <div class="doc-row"><div><b>Rapport d'organisation</b><span>Planning, budget, prestataires et invités en un document</span></div><button class="btn sm" data-act="pdfreport">PDF</button></div>
+    </div>
+    <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Fermer</button></div></div></div></div>`;
 }
 function openBriefsMenu(){
   document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Briefs à envoyer">${briefsPanel(null)}
@@ -1721,6 +1760,7 @@ document.addEventListener("click",async e=>{
     S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
   if(a==="briefsmenu"){openBriefsMenu();return}
+  if(a==="docsmenu"){openDocsMenu();return}
   if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;t.disabled=true;t.textContent="Rédaction en cours…";if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
   if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
     document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Budget total"><h3>Budget total</h3>
