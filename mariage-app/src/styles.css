@@ -1015,6 +1015,71 @@ body.compact .brand-mark{width:40px;height:40px}
 body.compact .brand-name{font-size:11px;letter-spacing:.28em}
 body.compact .names{font-size:24px}
 
+/* ---------- Accueil (docs/accueil-coach-v1.md) : À faire maintenant, carte Coach, Votre mariage ---------- */
+.home{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.home-hi h2{margin:0;font-size:26px;line-height:1.15}
+.home-hi p{margin:4px 0 0;color:var(--muted);font-size:15px}
+.home-hi p b{color:var(--ink)}
+.home-h{margin:0 0 10px;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.home-sec .more-pts{margin-top:8px}
+/* la première carte est mise en avant */
+.todo .dc:first-child{border:1.5px solid var(--accent);box-shadow:var(--shadow-s);padding:16px 16px 14px}
+.todo .dc:first-child .dc-body b{font-size:17px}
+.dc.sug .dc-dot{background:var(--gold)}.dc.next .dc-dot{background:var(--accent)}
+body.on-home .fab{display:none}
+.coach-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 16px 16px;box-shadow:var(--shadow-s)}
+.cc-head{display:flex;gap:12px;align-items:flex-start}
+.cc-ic{flex:none;width:40px;height:40px;border-radius:50%;background:var(--accent);display:grid;place-items:center}
+.cc-ic svg{width:20px;height:20px;fill:var(--fab-icon,var(--on-accent))}
+.cc-body{flex:1;min-width:0}
+.cc-k{display:block;font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link)}
+.cc-t{display:block;font-size:17px;line-height:1.3;margin-top:2px}
+.cc-q{margin:4px 0 0;font-size:14.5px;color:var(--muted);line-height:1.45}
+.cc-body>.link{font-size:14px;color:var(--link);font-weight:600;background:none;border:0;cursor:pointer;padding:6px 0 0}
+.cc-body .hb-b ul{margin:8px 0 0;padding-left:18px;font-size:14.5px}
+.cc-ask{display:flex;align-items:center;gap:8px;margin-top:14px;border:1px solid var(--line-strong);border-radius:999px;padding:4px 4px 4px 16px;background:var(--bg)}
+.cc-ask input{flex:1;min-width:0;border:0;background:transparent;font-size:16px;padding:8px 0;color:var(--ink)}
+.cc-ask input:focus{outline:none}
+.cc-ask:focus-within{outline:3px solid var(--accent);outline-offset:2px}
+.cc-ask .ch-ic{width:38px;height:38px;border:0;background:transparent}
+.cc-ask .cmp-send{margin-left:0}
+.cc-sugg{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.cc-sugg .chip{cursor:pointer;background:var(--accent-soft);color:var(--link);font-size:13.5px;padding:7px 12px;white-space:normal;text-align:left}
+.cc-sugg .chip:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.wm{display:flex;flex-direction:column;gap:10px}
+.wm-envies,.wm-tile{display:flex;flex-direction:column;align-items:flex-start;gap:4px;text-align:left;width:100%;border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);cursor:pointer;box-shadow:var(--shadow-s);font:inherit}
+.wm-envies{padding:16px}
+.wm-k{font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--link)}
+.wm-title{font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:22px;line-height:1.2}
+.wm-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.wm-s{font-size:14px;color:var(--muted)}
+.wm-go{margin-top:6px;font-size:14px;font-weight:600;color:var(--link)}
+.wm-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.wm-tile{padding:14px;min-height:118px}
+.wm-ic{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);display:grid;place-items:center;margin-bottom:4px}
+.wm-ic svg{width:20px;height:20px;stroke:var(--link);fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.wm-l{font-weight:600;font-size:16px;display:flex;align-items:center;gap:6px}
+.wm-v{font-size:14px;color:var(--muted);line-height:1.35;width:100%;overflow-wrap:anywhere}
+.wm-v .over{color:var(--bad);font-weight:600}
+.wm-bar{display:block;height:6px;border-radius:6px;background:var(--surface-2);margin-top:6px;overflow:hidden}
+.wm-bar i{display:block;height:100%;background:var(--coral-ui);border-radius:6px}
+.wm-bar.over i{background:var(--bad)}
+.wm-tile.empty,.wm-envies.empty{border-style:dashed;box-shadow:none;background:transparent}
+.wm-envies:hover,.wm-tile:hover{background:var(--surface-2)}
+.wm-envies:focus-visible,.wm-tile:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+@media (min-width:761px){.wm-tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+/* photo du couple dans l'en-tête : ouvre Réglages */
+.hero-photo{flex:none;width:44px;height:44px;border-radius:50%;border:2px solid var(--hero-edge);padding:0;cursor:pointer;background:var(--hero-glass-2);color:var(--hero-fg);display:grid;place-items:center;overflow:hidden;font-weight:600;font-size:14px}
+.hero-photo img{width:100%;height:100%;object-fit:cover}
+.hero-photo:focus-visible{outline:3px solid var(--hero-gold);outline-offset:2px}
+body.compact .hero-top{align-items:center}
+/* Planning : vue d'ensemble repliable (jalons, qui fait quoi) */
+.plan-ov{margin-top:24px}
+.plan-ov-b{display:grid;gap:14px;margin-top:14px}
+@media (min-width:861px){.plan-ov-b{grid-template-columns:1fr 1fr}}
+.pay-panel{margin:0 0 18px}
+.mail-link{margin-bottom:28px}
+
 /* Tâche en retard mise en évidence à l'ouverture depuis l'accueil (« Voir les retards ») */
 .row.flash{animation:rowflash 2.6s ease-out}
 @keyframes rowflash{0%,40%{background:var(--warn-soft);box-shadow:inset 4px 0 0 var(--warn)}100%{background:transparent;box-shadow:inset 4px 0 0 transparent}}
