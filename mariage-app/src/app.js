@@ -413,7 +413,7 @@ function renderHero(){
   // accueil : une seule ligne « 923 jours · samedi 26 mai 2029 (indicative) » à la place du compteur
   const nd=d?days(today(),d):null;
   setHTML(document.getElementById("hero-line"),S.view!=="apercu"||!(S.mode==="live"||S.mode==="demo")?""
-    :d?`<span class="hl-1"><b class="num">${nd>0?`${nd} jour${nd>1?"s":""}`:nd===0?"Jour J":"Mariés"}</b> · ${esc(d.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}))}</span>${st.dateIndicative?`<small class="hl-2">date indicative</small>`:""}`
+    :d?`<span class="hl-1"><b class="num">${nd>0?`${nd} jour${nd>1?"s":""}`:nd===0?"Jour J":"Mariés"}</b> · ${esc(d.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}))}${st.dateIndicative?`<abbr class="hl-ind" title="Date indicative" aria-label="date indicative">*</abbr>`:""}</span>`
     :`<button class="link" data-go="reglages">Fixer la date</button>`);
   // photo du couple : ouvre Réglages (le changement de photo se fait dans Réglages > Général)
   const ph=S.photo&&S.photo.data,live=S.mode==="live"||S.mode==="demo";

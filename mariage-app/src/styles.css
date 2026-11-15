@@ -1025,8 +1025,16 @@ main:has(.home){padding-top:18px}
 /* en-tête de l'accueil (v1.1) : une ligne « 923 jours · date » à la place du grand compteur */
 .hero-line{display:none}
 body.on-home .hero-line{display:block;margin-top:2px;font-size:14px;color:var(--hero-muted)}
+/* mobile : la ligne de date prend la place du petit « LAMAELLE » au-dessus des prénoms, pour que le bandeau
+   de l'accueil ait exactement la hauteur de celui des autres pages */
+@media (max-width:760px){
+  body.on-home .brand-row>div{display:flex;flex-direction:column}
+  body.on-home .brand-name{display:none}
+  body.on-home .hero-line{order:-1;margin:0;font-size:13px;line-height:20px}
+}
 .hero-line .hl-1{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.hero-line .hl-2{display:block;font-size:12px;opacity:.85}
+/* date indicative : un astérisque sur la même ligne, pour que le bandeau garde la hauteur des autres pages */
+.hero-line .hl-ind{text-decoration:none;color:var(--hero-gold);margin-left:1px;cursor:help}
 /* photo du couple plus grande sur l'accueil, liseré corail */
 body.on-home .hero-photo{width:76px;height:76px;font-size:18px}
 /* Mobile : sur l'accueil, la photo est à cheval sur le bandeau et la page (moitié sur le bleu, moitié sur l'ivoire),
