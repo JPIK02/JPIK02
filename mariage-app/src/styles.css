@@ -1017,7 +1017,8 @@ body.compact .brand-name{font-size:11px;letter-spacing:.28em}
 body.compact .names{font-size:24px}
 
 /* ---------- Accueil (docs/accueil-coach-v1.md) : À faire maintenant, carte Coach, Votre mariage ---------- */
-.home{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+/* marge basse : le bouton flottant du coach ne cache pas la dernière tuile */
+.home{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:22px;padding-bottom:84px}
 main:has(.home){padding-top:18px}
 .home-h{margin:0 0 10px;font-size:13px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .home-sec .more-pts{margin-top:6px}
@@ -1044,7 +1045,6 @@ body.on-home .count,body.on-home .hero-sub{display:none}
 .td-row svg{flex:none;width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .td-row:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
 @media (hover:hover){.td-row:hover{background:var(--surface-2)}}
-body.on-home .fab{display:none}
 /* carte Coach resserrée */
 .coach-card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:14px 16px;box-shadow:var(--shadow-s)}
 .cc-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
@@ -1056,14 +1056,7 @@ body.on-home .fab{display:none}
 .cc-q{margin:4px 0 0;font-size:14.5px;color:var(--muted);line-height:1.45}
 .cc-more{display:inline;font-size:14.5px;color:var(--link);font-weight:600;background:none;border:0;cursor:pointer;padding:0}
 .coach-card .hb-b ul{margin:8px 0 0;padding-left:18px;font-size:14.5px}
-.cc-ask{display:flex;align-items:center;gap:6px;margin-top:12px;border:0;border-radius:999px;padding:4px 4px 4px 16px;background:var(--surface-2)}
-.cc-ask input{flex:1;min-width:0;border:0;background:transparent;font-size:16px;padding:8px 0;color:var(--ink)}
-.cc-ask input::placeholder{color:var(--muted)}
-.cc-ask input:focus{outline:none}
-.cc-ask:focus-within{outline:3px solid var(--accent);outline-offset:2px}
-.cc-ask .ch-ic{width:38px;height:38px;border:0;background:transparent}
-.cc-ask .cmp-send{margin-left:0}
-.cc-sugg{display:flex;gap:6px;margin:6px -16px 0;padding:0 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.cc-sugg{display:flex;gap:6px;margin:8px -16px 0;padding:0 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .cc-sugg::-webkit-scrollbar{display:none}
 .cc-s{flex:none;min-height:44px;display:flex;align-items:center;background:none;border:0;padding:0;cursor:pointer;font:inherit}
 .cc-s span{border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;font-size:13.5px;font-weight:600;color:var(--link);white-space:nowrap;background:var(--surface)}

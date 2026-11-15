@@ -249,19 +249,16 @@ function coachSuggestions(al){
   for(const f of [["Par quoi commencer cette semaine ?","ask:Par quoi commencer cette semaine ?"],["Où en est notre budget ?","ask:Où en est notre budget ? Dis-nous ce qui mérite notre attention."],["Que reste-t-il à réserver ?","ask:Que nous reste-t-il à réserver, et dans quel ordre ?"]])if(out.length<3)out.push(f);
   return out.slice(0,3);
 }
-const MIC_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
-const SEND_SVG='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+// Carte « Point de la semaine » : le point du coach et ses suggestions (on écrit au coach par le bouton flottant)
 function coachCard(al){
-  const hb=S.hebdo||{},fresh=hb.at&&Date.now()-hb.at<8*864e5,open=!!S.ui.hebdo,dis=S.canWrite?"":"disabled";
+  const hb=S.hebdo||{},fresh=hb.at&&Date.now()-hb.at<8*864e5,open=!!S.ui.hebdo;
   const day=fresh?WEEKDAYS[new Date(hb.at).getDay()]:"";
   const head=fresh?`<b class="cc-t">${esc(hb.titre||"")}</b><p class="cc-q">${hb.question?esc(hb.question)+" ":""}<button class="link cc-more" data-act="uihebdo" aria-expanded="${open}">${open?"Replier le point":"Lire le point"}</button></p>
       ${open?`<div class="hb-b">${Array.isArray(hb.points)?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}<div class="dc-acts">${hb.question?`<button class="btn sm primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:""}<button class="link" data-act="qr" data-do="hebdo">Refaire le point</button></div></div>`:""}`
-    :`<b class="cc-t">Je connais vos envies, vos prestataires et votre budget.</b><p class="cc-q">Dites-moi ce que vous voulez faire. <button class="link cc-more" data-act="qr" data-do="hebdo">Faire le point de la semaine</button></p>`;
-  return `<section class="coach-card" aria-label="Votre coach">
-    <div class="cc-top"><span class="cc-k"><span class="cc-ic" aria-hidden="true">${SPARK}</span>${fresh?"Point de la semaine":"Votre coach"}</span>${day?`<span class="cc-day">${day}</span>`:""}</div>
+    :`<b class="cc-t">Pas encore de point cette semaine.</b><p class="cc-q">Le coach fait le tour de vos tâches, prestataires et budget. <button class="link cc-more" data-act="qr" data-do="hebdo">Faire le point de la semaine</button></p>`;
+  return `<section class="coach-card" aria-label="Point de la semaine">
+    <div class="cc-top"><span class="cc-k"><span class="cc-ic" aria-hidden="true">${SPARK}</span>Point de la semaine</span>${day?`<span class="cc-day">${day}</span>`:""}</div>
     ${head}
-    <form class="cc-ask" id="home-ask"><label class="sr" for="home-q">Écrire au coach</label><input id="home-q" name="search_home" type="text" autocomplete="off" enterkeyhint="send" placeholder="Écrire au coach…" ${dis}>
-      ${SR?`<button type="button" class="ch-ic" data-act="homemic" aria-label="Dicter au coach" ${dis}>${MIC_SVG}</button>`:""}<button type="submit" class="cmp-send" aria-label="Envoyer au coach" ${dis}>${SEND_SVG}</button></form>
     <div class="cc-sugg" role="list">${coachSuggestions(al).map(([l,d])=>`<button class="cc-s" role="listitem" data-act="qr" data-do="${esc(d)}"><span>${esc(l)}</span></button>`).join("")}</div></section>`;
 }
 const TILE_IC={prestataires:ICON_PRESTA(),planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',budget:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',jourj:'<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10 4h4l-2 3z"/>',docs:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'};
@@ -433,10 +430,10 @@ function renderHero(){
 }
 const ICON={envies:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',coach:'<path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/>',apercu:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',prestataires:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',plus:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'};
 // Barre du bas (mobile) : 3 onglets. Planning, Budget, Invités et Jour J passent par les tuiles de l'accueil, Réglages par la photo du couple.
-const BNAV=[["apercu","Coach"],["envies","Nos envies"],["prestataires","Prestataires"]];
+const BNAV=[["apercu","Accueil"],["envies","Nos envies"],["prestataires","Prestataires"]];
 function renderBnav(){
   const sug=pendingSugs().length,cur=PARENT_VIEW[S.view]||S.view;
-  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k==="apercu"?"coach":k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
+  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
   document.body.classList.add("compact");
   document.body.classList.toggle("on-home",S.view==="apercu");
 }
@@ -1792,7 +1789,6 @@ document.addEventListener("click",async e=>{
   if(a==="inspadd"){openChat("brief");setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
   if(a==="chatmic"){toggleMic(t);return}
   if(a==="chatopen"){const p=t.dataset.p;if(p==="fiche"){closeModal();openFiche(t.dataset.id)}else go(p);return}
-  if(a==="homemic"){openChat("chat");const b=document.getElementById("chat-mic");if(b)toggleMic(b);return}
   if(a==="mailcopy"){const m=mailOf((S.chat.messages[+t.dataset.i]||{}).text);if(!m)return;const txt=`Objet : ${m.subject}\n\n${m.body}`;try{await navigator.clipboard.writeText(txt);toast("Mail copié")}catch(e){toast("Copie impossible : sélectionnez le texte")}return}
   if(a==="pdfshare"){try{await navigator.share({files:[S.pdfFile],title:S.pdfFile.name})}catch(e){if(e&&e.name!=="AbortError")toast("Partage impossible : utilisez « Ouvrir le PDF »")}return}
   if(a==="pdfjourj"){pdfJourJ();return}
@@ -1849,8 +1845,6 @@ document.addEventListener("focusout",()=>{setTimeout(()=>{if(S.pending&&!(docume
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.fiche){e.preventDefault();openFiche(e.target.dataset.fiche)}});
 document.addEventListener("submit",async e=>{
   const f=e.target;
-  // champ du coach sur l'accueil : la conversation s'ouvre en plein écran et le message part
-  if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-q");const v=inp.value.trim();inp.value="";inp.blur();openChat("chat");if(v&&S.canWrite)await sendChat(v);return}
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}

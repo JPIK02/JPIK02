@@ -66,3 +66,10 @@ Inchangée : Coach à gauche (premier onglet, convention iOS pour l'accueil), No
 - La tuile Documents ouvre la liste des PDF, et chaque PDF s'ouvre ou se partage.
 - Mode sombre vérifié, contrastes conformes à `CLAUDE.md`.
 - Ajoute ce correctif au dépôt (`docs/accueil-coach-v1-1.md`) et mets `CLAUDE.md` à jour (accueil, tuile Documents).
+
+## 8. Ajustement après test (15 novembre 2026)
+
+- Le bouton flottant du coach revient sur toutes les pages, accueil compris : c'est le seul endroit pour écrire au coach.
+- Barre du bas : l'onglet « Coach » devient « Accueil », avec l'icône maison.
+- Sur l'accueil, la carte Coach perd son champ de saisie et devient « Point de la semaine » : le point du coach (ou « Faire le point de la semaine ») et ses suggestions.
+- Marge en bas de l'accueil pour que le bouton flottant ne cache pas la dernière tuile.
