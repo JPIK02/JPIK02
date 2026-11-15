@@ -321,12 +321,21 @@ form[data-plan]:has(input[name=mode][value=hourly]:checked) .field.not-hourly{di
 .cat-h{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
 .cat-h h3{font-family:var(--f-display);font-weight:600;font-size:25px;margin:0}
 .cat-h .meta{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-.vrow{display:flex;gap:14px;align-items:center;padding:16px 18px;border-top:1px solid var(--line);cursor:pointer;min-width:0}
+/* Ligne prestataire : nom et note sur une ligne, statut, puis le verdict sur toute la largeur */
+.vrow{display:grid;gap:6px;padding:14px 18px;border-top:1px solid var(--line);cursor:pointer;min-width:0}
 .vrow:first-child{border-top:0}
 .vrow:hover{background:var(--surface-2)}
-.vrow .rank{font-size:15px;font-weight:600;color:var(--muted);width:18px;flex:none;text-align:center}
-.vrow .t{font-size:17px}
-.vrow .verdict{font-size:15px;color:var(--ink);margin-top:2px}
+.vr-head{display:flex;align-items:baseline;gap:8px;min-width:0}
+.vrow .rank{font-size:15px;font-weight:600;color:var(--muted);flex:none}
+.vrow .t{font-size:17px;font-weight:600;flex:1;min-width:0}
+.fit-pill{flex:none;align-self:center;border-radius:999px;padding:2px 10px;font-weight:600;font-size:15px;border:1.5px solid currentColor}
+.fit-pill small{font-size:11px;font-weight:500;opacity:.75;margin-left:1px}
+.fit-pill.hi{color:var(--ok);background:var(--ok-soft)}.fit-pill.mid{color:var(--gold);background:var(--gold-soft)}.fit-pill.lo{color:var(--bad);background:var(--bad-soft)}
+.fit-pill.none{color:var(--muted);background:var(--surface-2);border-style:dashed;font-size:12.5px}
+.vr-tags{display:flex;gap:6px;flex-wrap:wrap}
+.vr-tags .chip{font-size:12.5px;padding:1px 9px}
+.vrow .verdict{font-size:15px;color:var(--ink);line-height:1.45}
+.vrow .m{font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 10px}
 .stars{color:var(--gold);font-weight:600;font-size:14px}
 .fiche-top{display:flex;gap:18px;align-items:center;margin-bottom:16px}
 .fiche-top h3{margin:0 0 6px}
