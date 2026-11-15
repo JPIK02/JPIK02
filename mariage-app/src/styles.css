@@ -1025,6 +1025,10 @@ main:has(.home){padding-top:18px}
 /* en-tête de l'accueil (v1.1) : une ligne « 923 jours · date » à la place du grand compteur */
 .hero-line{display:none}
 body.on-home .hero-line{display:block;margin-top:2px;font-size:14px;color:var(--hero-muted)}
+.hero-line .hl-1{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hero-line .hl-2{display:block;font-size:12px;opacity:.85}
+/* photo du couple plus grande sur l'accueil, liseré corail */
+body.on-home .hero-photo{width:76px;height:76px;border:2px solid var(--coral);font-size:18px}
 body.on-home .hero-line b{color:var(--hero-gold);font-weight:600}
 body.on-home .hero-line .link{color:var(--hero-gold);background:none;border:0;padding:0;font-weight:600;cursor:pointer;font-size:14px}
 body.on-home .count,body.on-home .hero-sub{display:none}
@@ -1056,7 +1060,8 @@ body.on-home .count,body.on-home .hero-sub{display:none}
 .cc-q{margin:4px 0 0;font-size:14.5px;color:var(--muted);line-height:1.45}
 .cc-more{display:inline;font-size:14.5px;color:var(--link);font-weight:600;background:none;border:0;cursor:pointer;padding:0}
 .coach-card .hb-b ul{margin:8px 0 0;padding-left:18px;font-size:14.5px}
-.cc-sugg{display:flex;gap:6px;margin:8px -16px 0;padding:0 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+/* la rangée déborde jusqu'au bord de l'écran (padding de la carte 16 px + liseré 1 px + marge de page 16 px) */
+.cc-sugg{display:flex;gap:6px;margin:8px -33px 0 -16px;padding:0 33px 0 16px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .cc-sugg::-webkit-scrollbar{display:none}
 .cc-s{flex:none;min-height:44px;display:flex;align-items:center;background:none;border:0;padding:0;cursor:pointer;font:inherit}
 .cc-s span{border:1px solid var(--line-strong);border-radius:999px;padding:5px 12px;font-size:13.5px;font-weight:600;color:var(--link);white-space:nowrap;background:var(--surface)}
@@ -1068,19 +1073,22 @@ body.on-home .count,body.on-home .hero-sub{display:none}
 .wm-k{font-size:12.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--coral)}
 .wm-title{font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:26px;line-height:1.2}
 .wm-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.wm-tags{align-items:center}
+.wm-tl{font-size:12.5px;color:var(--hero-muted);margin-right:2px}
 .wm-tags .chip{background:transparent;border:1px solid var(--hero-edge);color:var(--hero-fg)}
 .wm-s{font-size:14px;color:var(--hero-muted)}
 .wm-envies .wm-go{color:var(--coral)}
 .wm-go{font-size:14px;font-weight:600;color:var(--link)}
 .wm-envies.empty{border-style:solid;box-shadow:none}
 .wm-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-.wm-tile{position:relative;height:112px;padding:14px;justify-content:flex-end;gap:2px}
-.wm-ic{position:absolute;top:14px;left:14px;display:flex;align-items:center;gap:6px}
-.wm-ic svg{width:24px;height:24px;stroke:var(--coral-ui);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-.wm-l{font-weight:600;font-size:16px}
-.wm-v{font-size:13.5px;color:var(--muted);width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* tuiles (v1.3) : hauteur fixe réduite, icône puis titre sans grand vide, deux lignes d'info au plus */
+.wm-tile{position:relative;height:96px;padding:10px 12px;justify-content:flex-start;gap:0}
+.wm-ic{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.wm-ic svg{width:22px;height:22px;stroke:var(--coral-ui);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.wm-l{font-weight:600;font-size:15.5px;line-height:1.25}
+.wm-v{font-size:13px;line-height:1.3;color:var(--muted);width:100%;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;overflow-wrap:anywhere}
 .wm-v .over{color:var(--bad);font-weight:600}
-.wm-bar{position:absolute;left:14px;right:14px;bottom:8px;height:4px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.wm-bar{position:absolute;left:12px;right:12px;bottom:8px;height:4px;border-radius:4px;background:var(--surface-2);overflow:hidden}
 .wm-bar i{display:block;height:100%;background:var(--coral-ui);border-radius:4px}
 .wm-bar.over i{background:var(--bad)}
 .wm-tile.empty{border-style:dashed;box-shadow:none}

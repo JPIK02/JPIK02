@@ -119,8 +119,9 @@ function capacityFrom(n){
 function alerts(){
   const out=[],d=wDate(),tot=num(S.settings.budgetTotal);
   const prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
-  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:"Engagé au-dessus du budget total",s:`${eur(engage)} engagés pour ${eur(tot)} de budget.`,go:"budget"});
-  else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:"Budget prévu au-dessus du budget total",ss:`${eur(prevu-tot)} à trouver ou à couper`,s:`${eur(prevu)} prévus pour ${eur(tot)} : ${eur(prevu-tot)} à trouver ou à couper.`,go:"budget"});
+  // le titre dit l'écart, la phrase donne les chiffres
+  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:`${eur(engage-tot)} engagés au-delà du budget`,s:`${eur(engage)} engagés pour ${eur(tot)}.`,go:"budget"});
+  else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:`${eur(prevu-tot)} au-dessus du budget`,s:`${eur(prevu)} prévus pour ${eur(tot)}.`,go:"budget"});
   const guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
   S.vendors.filter(v=>v.status!=="ecarte").forEach(v=>{
     const note=String(v.note||""),n=fold(note);
@@ -130,10 +131,10 @@ function alerts(){
         out.push({k:"complet",v,lvl:"bad",t:`${v.name} semble complet en ${MOIS[d.getMonth()].replace("fevrier","février").replace("aout","août")}`,s:`Vos notes : « ${line.trim()} ». La date retenue est le ${fmtD(d)}.`,fiche:v.id});
     }
     const mx=v.cat==="Lieu"?capacityFrom(n):null;
-    if(mx){if(guests>mx)out.push({k:"cap",v,lvl:"warn",t:`${v.name} : capacité trop juste`,s:`${mx} personnes au maximum pour ${guests} invités au dîner.`,fiche:v.id})}
+    if(mx){if(guests>mx)out.push({k:"cap",v,lvl:"warn",t:`${v.name} : ${guests-mx} invité${guests-mx>1?"s":""} de trop`,s:`${mx} personnes au maximum pour ${guests} invités au dîner.`,fiche:v.id})}
     const px=num(v.prix),line=budgetLineFor(v.cat);
     if(px&&line&&num(line.prevu)&&px>num(line.prevu)&&["devis","reserve"].includes(v.status))
-      out.push({k:"devis",v,line,px,lvl:"warn",t:`Devis ${v.name} au-dessus de l'enveloppe`,ss:`+${eur(px-num(line.prevu))} sur le poste « ${line.label} »`,s:`${eur(px)} pour ${eur(num(line.prevu))} prévus au poste « ${line.label} » (+${eur(px-num(line.prevu))}).`,fiche:v.id});
+      out.push({k:"devis",v,line,px,lvl:"warn",t:`Devis ${v.name} : +${eur(px-num(line.prevu))} sur l'enveloppe`,s:`${eur(px)} pour ${eur(num(line.prevu))} prévus au poste « ${line.label} ».`,fiche:v.id});
   });
   const late=S.tasks.filter(isLate).length;
   if(late)out.push({k:"late",lvl:"warn",t:`${late} tâche${late>1?"s":""} en retard`,s:"À reprogrammer ou à faire en priorité.",go:"planning"});
@@ -234,7 +235,8 @@ function leadCard(c){
 const ROW_NAV=/^(go|fiche|late|task|compare|prefill|chatbrief|chat):/,ROW_WRITE=/^(vstatus|budgetset|taskdone|pushhide):/;
 function todoRow(c){
   const q=c.qr.find(x=>ROW_NAV.test(x[1]))||c.qr.find(x=>!ROW_WRITE.test(x[1]));
-  return `<button class="td-row" ${q?`data-act="qr" data-do="${esc(q[1])}"`:"disabled"}><span class="dc-dot lv-${c.lvl||"info"}" aria-hidden="true"></span><span class="td-t"><b>${c.ts||c.title}</b>${c.ss||c.text?`<span>${c.ss||c.text}</span>`:""}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
+  const sub=String(c.ss||c.text||"").replace(/\.\s*$/,""); // sous-titres harmonisés : jamais de point final
+  return `<button class="td-row" ${q?`data-act="qr" data-do="${esc(q[1])}"`:"disabled"}><span class="dc-dot lv-${c.lvl||"info"}" aria-hidden="true"></span><span class="td-t"><b>${c.ts||c.title}</b>${sub?`<span>${sub}</span>`:""}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
 }
 // Suggestions de la carte Coach, tirées de l'état de l'app (sans appel à l'IA)
 const KEY_FIND={Lieu:"un lieu",Traiteur:"un traiteur",Photographe:"un photographe",Musique:"la musique",Fleuriste:"un fleuriste",Tenues:"nos tenues"};
@@ -243,10 +245,11 @@ function coachSuggestions(al){
   const miss=KEY_VCATS.find(c=>!S.vendors.some(v=>v.cat===c&&v.status==="reserve"));
   if(miss)out.push([`Trouver ${KEY_FIND[miss]||miss}`,`ask:Aide-nous à trouver ${KEY_FIND[miss]||miss} : par où commencer, quels critères compter et combien prévoir, d'après nos envies ?`]);
   const dv=al.find(a=>a.k==="devis");
-  if(dv)out.push([`Négocier le devis ${dv.v.name}`,`ask:Rédige un mail cordial à ${dv.v.name} pour négocier leur devis de ${eur(dv.px)} : notre enveloppe « ${dv.line.label} » est de ${eur(num(dv.line.prevu))}.`]);
+  if(dv)out.push(["Négocier un devis",`ask:Rédige un mail cordial à ${dv.v.name} pour négocier leur devis de ${eur(dv.px)} : notre enveloppe « ${dv.line.label} » est de ${eur(num(dv.line.prevu))}.`]);
   const wait=S.guests.filter(g=>g.rsvp!=="oui"&&g.rsvp!=="non").length;
   if(wait>=5&&S.tasks.some(t=>t.id==="t22"&&t.status==="done"))out.push(["Relancer les invités",`ask:${wait} invités n'ont pas encore répondu. Rédige un message de relance court et chaleureux à leur envoyer.`]);
-  for(const f of [["Par quoi commencer cette semaine ?","ask:Par quoi commencer cette semaine ?"],["Où en est notre budget ?","ask:Où en est notre budget ? Dis-nous ce qui mérite notre attention."],["Que reste-t-il à réserver ?","ask:Que nous reste-t-il à réserver, et dans quel ordre ?"]])if(out.length<3)out.push(f);
+  // libellés courts (la question complète part au coach)
+  for(const f of [["Par où commencer ?","ask:Par quoi commencer cette semaine ?"],["Notre budget","ask:Où en est notre budget ? Dis-nous ce qui mérite notre attention."],["À réserver","ask:Que nous reste-t-il à réserver, et dans quel ordre ?"]])if(out.length<3)out.push(f);
   return out.slice(0,3);
 }
 // Carte « Point de la semaine » : le point du coach et ses suggestions (on écrit au coach par le bouton flottant)
@@ -269,7 +272,7 @@ function weddingGrid(){
   const titre=fr.titre||(String(pr.resume||"").match(/^[^.!?]+[.!?]?/)||[""])[0].trim();
   const prios=(Array.isArray(pr.priorites)?pr.priorites:[]).slice(0,3).map(p=>QC[p.cat]?QC[p.cat].label:String(p.cat||"")).filter(Boolean);
   const div=Array.isArray(pr.divergences)?pr.divergences.length:0;
-  const envies=titre||prios.length?`<button class="wm-envies" data-go="envies"><span class="wm-k">Nos envies</span><b class="wm-title">${esc(titre||"Vos priorités")}</b>${prios.length?`<span class="wm-tags">${prios.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</span>`:""}${div?`<span class="wm-s">${div} point${div>1?"s":""} dont vous reparlez</span>`:""}</button>`
+  const envies=titre||prios.length?`<button class="wm-envies" data-go="envies"><span class="wm-k">Nos envies</span><b class="wm-title">${esc(titre||"Vos priorités")}</b>${prios.length?`<span class="wm-tags"><span class="wm-tl">Vos priorités</span>${prios.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</span>`:""}${div?`<span class="wm-s">${div} point${div>1?"s":""} dont vous reparlez</span>`:""}</button>`
     :`<button class="wm-envies empty" data-act="qr" data-do="chatbrief"><span class="wm-k">Nos envies</span><b class="wm-title">Racontez vos envies</b><span class="wm-s">Le coach vous pose les questions une par une et en tire votre fil rouge.</span><span class="wm-go">Commencer</span></button>`;
   const act=S.vendors.filter(v=>v.status!=="ecarte"),res=act.filter(v=>v.status==="reserve").length;
   const late=S.tasks.filter(isLate).length,t0=today();
@@ -285,7 +288,7 @@ function weddingGrid(){
   const {ready}=briefsState();
   return `<div class="wm">${envies}<div class="wm-tiles">
     ${tile("prestataires","Prestataires",!act.length,!act.length&&S.canWrite?'data-new="vendors"':'data-go="prestataires"',res?`${pl(act.length,"suivi","suivis")} · ${pl(res,"réservé","réservés")}`:`${act.length} en vue`)}
-    ${tile("planning","Planning",!S.tasks.length&&!S.rdv.length,'data-go="planning"',next?`${esc(next.t)} · ${esc(whenShort(next.d))}`:"Rien de daté à venir",late?`<span class="badge num" title="${late} tâche${late>1?"s":""} en retard">${late}</span>`:"")}
+    ${tile("planning","Planning",!S.tasks.length&&!S.rdv.length,'data-go="planning"',`${late?`<span class="over">${late} en retard</span> · `:""}${next?`${esc(next.t)} · ${esc(whenShort(next.d))}`:"Rien de daté à venir"}`)}
     ${tile("budget","Budget",!ref,'data-go="budget"',engage?`<span class="${over?"over":""}">${pct} % engagé</span>`:prevu?`${eur(prevu)} prévus`:`${eur(tot)} de budget`,"",engage?`<span class="wm-bar ${over?"over":""}" aria-hidden="true"><i style="width:${Math.min(100,pct)}%"></i></span>`:"")}
     ${tile("invites","Invités",!g.length,'data-go="invites"',ans?`${pl(ans,"réponse","réponses")} sur ${g.length}`:`${pl(g.length,"invité","invités")}`)}
     ${tile("jourj","Jour J",!steps,'data-go="jour-j"',`${pl(steps,"étape","étapes")} du déroulé`)}
@@ -410,7 +413,7 @@ function renderHero(){
   // accueil : une seule ligne « 923 jours · samedi 26 mai 2029 (indicative) » à la place du compteur
   const nd=d?days(today(),d):null;
   setHTML(document.getElementById("hero-line"),S.view!=="apercu"||!(S.mode==="live"||S.mode==="demo")?""
-    :d?`<b class="num">${nd>0?`${nd} jour${nd>1?"s":""}`:nd===0?"Jour J":"Mariés"}</b> · ${esc(fmtLong(d))}${st.dateIndicative?" (indicative)":""}`
+    :d?`<span class="hl-1"><b class="num">${nd>0?`${nd} jour${nd>1?"s":""}`:nd===0?"Jour J":"Mariés"}</b> · ${esc(d.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}))}</span>${st.dateIndicative?`<small class="hl-2">date indicative</small>`:""}`
     :`<button class="link" data-go="reglages">Fixer la date</button>`);
   // photo du couple : ouvre Réglages (le changement de photo se fait dans Réglages > Général)
   const ph=S.photo&&S.photo.data,live=S.mode==="live"||S.mode==="demo";

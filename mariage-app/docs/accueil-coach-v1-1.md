@@ -67,9 +67,24 @@ Inchangée : Coach à gauche (premier onglet, convention iOS pour l'accueil), No
 - Mode sombre vérifié, contrastes conformes à `CLAUDE.md`.
 - Ajoute ce correctif au dépôt (`docs/accueil-coach-v1-1.md`) et mets `CLAUDE.md` à jour (accueil, tuile Documents).
 
-## 8. Ajustement après test (15 novembre 2026)
+## 8. Ajustement v1.2 (après test sur iPhone)
 
-- Le bouton flottant du coach revient sur toutes les pages, accueil compris : c'est le seul endroit pour écrire au coach.
-- Barre du bas : l'onglet « Coach » devient « Accueil », avec l'icône maison.
-- Sur l'accueil, la carte Coach perd son champ de saisie et devient « Point de la semaine » : le point du coach (ou « Faire le point de la semaine ») et ses suggestions.
-- Marge en bas de l'accueil pour que le bouton flottant ne cache pas la dernière tuile.
+Décision de Julien : le coach reste accessible par **le bouton flottant en bas à droite, sur tous les onglets, accueil compris**, pour garder une continuité.
+
+- Réafficher le bouton flottant du coach sur l'accueil (annule la règle v1 qui le masquait).
+- L'onglet d'accueil de la barre du bas s'appelle **« Accueil »**, avec l'icône maison (`ICON.apercu`) : deux entrées « Coach » avec la même étoile seraient confuses. Le bouton flottant garde l'étoile et le mot « Coach ».
+- La carte Coach de l'accueil devient la carte **« Point de la semaine »** : étiquette, titre, question, « Lire le point », puis les suggestions sur une ligne qui défile. **Plus de champ de saisie** : on écrit au coach par le bouton flottant.
+- Ajouter en bas de la page une marge suffisante pour que le bouton flottant ne cache jamais la dernière tuile.
+
+## 9. Finitions v1.3 (revue des captures du 15 novembre)
+
+1. **Haut de l'écran** : une bande grise dégradée apparaît sous la barre d'état, au-dessus du bandeau bleu. Le bleu du bandeau doit remonter jusqu'en haut de l'écran (zone de sécurité comprise), sans dégradé clair.
+2. **Photo du couple plus grande** : environ 76 px (au lieu de ~52), cercle avec un fin liseré corail, alignée sur le bloc prénoms et date.
+3. **Date sur une ligne** : `923 jours · 26 mai 2029` sans le jour de la semaine ; « date indicative » en petit dessous, ou un astérisque. Plus de « (indicative) » qui passe à la ligne.
+4. **Carte budget sans répétition** : le mot « budget » apparaît trois fois. Garder l'étiquette « Budget », titre « 2 600 € au-dessus du budget », phrase « 22 600 € prévus pour 20 000 €. ». Même principe pour les autres alertes : le titre dit l'écart, la phrase donne les chiffres.
+5. **Lignes « À faire »** : pas de point final dans les sous-titres (« À reprogrammer ou à faire en priorité » s'affiche avec un point, l'autre sans) ; harmoniser.
+6. **Bouton flottant du coach : ne pas le modifier** (taille, position, style : décision de Julien). Seule la marge basse de la page augmente, pour qu'en fin de défilement il ne recouvre plus la tuile Documents.
+7. **Suggestions du coach** : la deuxième pastille est coupée net par le bord de la carte. Libellés courts (« Trouver un lieu », « Notre budget », « Par où commencer ? ») et rangée qui déborde jusqu'au bord de l'écran, sans coupure dans la carte.
+8. **Tuile Planning** : le titre de tâche est tronqué au milieu d'un nom (« Prévoir visite Château … ») et la pastille « 1 » n'est pas expliquée. Autoriser **deux lignes** de texte dans toutes les tuiles (hauteur fixe conservée) ; remplacer la pastille par le texte « 1 en retard » en rouge sur la première ligne quand il y a du retard.
+9. **Tuiles** : l'espace vide entre l'icône et le titre est trop grand. Réduire la hauteur d'environ 15 %, avec deux lignes de texte possibles.
+10. **Carte Nos envies** : les pastilles Lieu · Photographe · Vidéaste ne disent pas ce qu'elles sont. Ajouter devant, en petit, « Vos priorités ».
