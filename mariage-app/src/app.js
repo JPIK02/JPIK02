@@ -731,7 +731,7 @@ function vPrestataires(){
       <div class="m">${v.prix?`<span class="num">${eur(v.prix)}</span>`:""}${av.note?`<span class="stars">★ ${esc(String(av.note).replace(".",","))}${av.nombre?` <span style="color:var(--muted);font-weight:500">(${esc(av.nombre)} avis)</span>`:""}</span>`:""}${num(v.acompte)?(v.status==="reserve"?`<span class="${v.acomptePaye?"":"over"}">Acompte ${eur(v.acompte)} ${v.acomptePaye?"versé":"à verser"}</span>`:`<span>Acompte demandé ${eur(v.acompte)}</span>`):""}${v.tel?`<span class="num">${esc(v.tel)}</span>`:""}</div></div>`}).join("")}</div></section>`;
   }).join("");
   return `<div class="vh"><div><h2>Annuaire des prestataires</h2><p>${S.vendors.length} prestataire${S.vendors.length>1?"s":""} · ${S.vendors.filter(v=>v.status==="reserve").length} réservé${S.vendors.filter(v=>v.status==="reserve").length>1?"s":""} pour ${eur(engaged)}${toPay?` · <span class="over">${toPay} acompte${toPay>1?"s":""} à verser</span>`:""}. Classés par note de fit dans chaque catégorie.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${cmpCats().length?`<button class="btn" data-act="compare" data-cat="${esc(f.vCat&&f.vCat!=="all"?f.vCat:"")}">Comparer</button>`:""}<button class="btn" data-new="vendors" ${S.canWrite?"":"disabled"}>Ajouter un prestataire</button></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="briefsmenu">Briefs à envoyer</button><button class="btn" data-new="vendors" ${S.canWrite?"":"disabled"}>Ajouter un prestataire</button></div></div>
   ${analyseBar("annuaire")}
   <div class="filters"><div class="seg" role="group" aria-label="Afficher">${[["actifs","En cours"],["reserve","Réservés"],["ecarte","Écartés"],["tous","Tous"]].map(([k,l])=>`<button data-f="vView" data-v="${k}" aria-pressed="${vv===k}">${l}</button>`).join("")}</div>
     ${allCats.length>1?`<div class="chip-row" role="group" aria-label="Catégorie">${[["all","Toutes"],...allCats.map(c=>[c,c])].map(([k,l])=>`<button class="chip ${(f.vCat||"all")===k?"on":""}" data-f="vCat" data-v="${esc(k)}" aria-pressed="${(f.vCat||"all")===k}">${esc(l)}</button>`).join("")}</div>`:""}</div>
@@ -833,6 +833,7 @@ function openFiche(id){
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
+    ${ficheBrief(qk)}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div>${S.vendors.filter(x=>x.cat===v.cat).length>=2?`<button type="button" class="btn" data-act="compare" data-cat="${esc(v.cat)}" data-id="${v.id}">Comparer</button>`:""}<button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
   </div></div>`;
 }
@@ -866,6 +867,18 @@ function briefsPanel(c){
     <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
       ${failed?`<p class="brief-err">La rédaction a échoué : ${esc(/credit balance/i.test(b.lastError||"")?"le crédit Claude est épuisé (à recharger sur console.anthropic.com).":b.lastError||"erreur inconnue.")} Vous pouvez réessayer.</p>`:""}
       ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
+}
+// Briefs là où l'on contacte les prestataires : dans la fiche (brief du métier) et en tête de la page Prestataires (tous)
+function ficheBrief(qk){
+  if(!qk||!BRIEF_LABEL[qk])return "";
+  const {b,running,ready}=briefsState(),one=ready&&b.categories[qk];
+  return `<div class="fsec fiche-brief"><h4>Brief à lui envoyer</h4>${one?`<button class="btn" data-act="briefpdf" data-c="${qk}">Brief ${esc(BRIEF_LABEL[qk])} (PDF)</button>`
+    :running?`<p class="plan-when" style="margin:0">Le coach rédige vos briefs : environ deux minutes.</p>`
+    :S.canWrite?`<p class="plan-when" style="margin:0 0 8px">Le brief résume vos envies pour ce prestataire, avec les questions à lui poser.</p><button class="btn" data-act="briefsgo">Préparer les briefs</button>`:""}</div>`;
+}
+function openBriefsMenu(){
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Briefs à envoyer">${briefsPanel(null)}
+    <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Fermer</button></div></div></div></div>`;
 }
 const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
 function briefBlocks(k){
@@ -1707,6 +1720,7 @@ document.addEventListener("click",async e=>{
     if(!c){openChat("brief");return}
     S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
+  if(a==="briefsmenu"){openBriefsMenu();return}
   if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;t.disabled=true;t.textContent="Rédaction en cours…";if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
   if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
     document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Budget total"><h3>Budget total</h3>
