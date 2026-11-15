@@ -150,7 +150,7 @@ function alerts(){
   const rank={bad:0,warn:1,info:2};
   return out.sort((a,b)=>rank[a.lvl]-rank[b.lvl]);
 }
-const alertRow=a=>`<button class="alert ${a.lvl}" ${a.fiche?`data-fiche="${a.fiche}"`:a.edit?`data-edit="rdv" data-id="${a.edit}"`:`data-go="${a.go}"`}><span class="adot" aria-hidden="true"></span><span class="atx"><b>${esc(a.t)}</b><span>${esc(a.s)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
+const alertRow=a=>`<button class="alert ${a.lvl}" ${a.fiche?`data-fiche="${a.fiche}"`:a.edit?`data-edit="rdv" data-id="${a.edit}"`:a.k==="late"?`data-act="qr" data-do="late:"`:`data-go="${a.go}"`}><span class="adot" aria-hidden="true"></span><span class="atx"><b>${esc(a.t)}</b><span>${esc(a.s)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
 /* ---------- Le coach à l'accueil : réponses rapides en un toucher ---------- */
 // Quel partenaire est connecté (compte → emplacement) ; le prénom vient des réglages
 const PARTNER={"julienpicquet@gmail.com":"julien","duquesne.claire@yahoo.fr":"claire","claiire.duquesne59@gmail.com":"claire"};
@@ -163,7 +163,7 @@ function qrFor(a){
     case "complet":return [["Écarter ce lieu",`vstatus:${v.id}:ecarte`],["Ouvrir la fiche",`fiche:${v.id}`],["En parler au coach",`ask:${v.name} semble complet à notre date. Que nous conseilles-tu : changer de date ou de lieu ?`]];
     case "cap":return [["Ouvrir la fiche",`fiche:${v.id}`],["En parler au coach",`ask:${v.name} paraît trop petit pour nos invités. Quelles options avons-nous ?`]];
     case "devis":return [[`Passer l'enveloppe à ${eur(a.px)}`,`budgetset:${a.line.id}:${a.px}`],["Préparer une négociation",`ask:Rédige un mail cordial à ${v.name} pour négocier leur devis de ${eur(a.px)} : notre enveloppe « ${a.line.label} » est de ${eur(num(a.line.prevu))}.`],["Comparer",`compare:${v.cat}:${v.id}`]];
-    case "late":return [["Voir les retards","go:planning"],["Replanifier avec le coach","ask:Aide-nous à replanifier nos tâches en retard de façon réaliste."]];
+    case "late":return [["Voir les retards","late:"],["Replanifier avec le coach","ask:Aide-nous à replanifier nos tâches en retard de façon réaliste."]];
     case "sugs":return [["Voir les propositions","go:assistant"]];
     case "brief":return [["Commencer l'entretien","chatbrief"]];
     case "refit":return [["Relancer l'analyse","go:prestataires"]];
@@ -208,9 +208,22 @@ function coachHome(al){
       :`<div class="dc ok"><span class="dc-dot" aria-hidden="true"></span><div class="dc-body"><b>Rien d'urgent : tout est cohérent.</b><p>Le coach (bouton en bas à droite) peut vous aider à avancer sur la suite.</p></div></div>`}
   </section>`;
 }
+/* « Voir les retards » : le planning s'ouvre sur la première tâche en retard, mise en évidence (filtre « Tout » pour ne pas la masquer). */
+function showLate(){
+  if(S.f.owner!=="all"){S.f.owner="all";saveF()}
+  go("planning");
+  requestAnimationFrame(()=>{
+    const rows=[...document.querySelectorAll("#main .row.late")];
+    if(!rows.length)return;
+    rows[0].scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+    rows.forEach(r=>r.classList.add("flash"));
+    setTimeout(()=>rows.forEach(r=>r.classList.remove("flash")),2600);
+  });
+}
 async function runQr(dd){
   const [k,...rest]=dd.split(":"),arg=rest.join(":");
   if(k==="go")return go(arg);
+  if(k==="late")return showLate();
   if(k==="fiche")return openFiche(arg);
   if(k==="ask"){openChat("chat");return sendChat(arg)}
   if(k==="prefill")return openChat("chat",arg);
@@ -420,7 +433,7 @@ function vApercu(){
 
 function taskRow(t){
   const due=taskDue(t),late=isLate(t);
-  return `<div class="row ${t.status==="done"?"done":""}">
+  return `<div class="row ${t.status==="done"?"done":""} ${late?"late":""}" data-task="${t.id}">
     <button class="check ${t.status}" data-act="cycle" data-id="${t.id}" aria-label="Marquer comme ${t.status==="done"?"à faire":"fait"}" title="${STATUS[t.status]||STATUS.todo}"></button>
     <div class="main click" data-edit="tasks" data-id="${t.id}" style="cursor:pointer;margin:-12px 0;padding:12px 0">
       <div class="t">${esc(t.title)}</div>

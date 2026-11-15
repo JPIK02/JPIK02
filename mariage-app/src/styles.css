@@ -1006,6 +1006,11 @@ body.compact .brand-mark{width:40px;height:40px}
 body.compact .brand-name{font-size:11px;letter-spacing:.28em}
 body.compact .names{font-size:24px}
 
+/* Tâche en retard mise en évidence à l'ouverture depuis l'accueil (« Voir les retards ») */
+.row.flash{animation:rowflash 2.6s ease-out}
+@keyframes rowflash{0%,40%{background:var(--warn-soft);box-shadow:inset 4px 0 0 var(--warn)}100%{background:transparent;box-shadow:inset 4px 0 0 transparent}}
+@media (prefers-reduced-motion: reduce){.row.flash{animation:none;background:var(--warn-soft)}}
+
 /* App installée sur iPhone (iOS 26) : iOS pose sous la barre d'état un voile flou, un peu plus bas que l'heure, et
    aucun réglage ne le retire ; il ne tient compte ni de la couleur de la page ni d'une bande fixe. Il suit en revanche
    l'apparence claire ou sombre de la page. Tant que l'en-tête bleu nuit est visible, la page se déclare donc sombre
