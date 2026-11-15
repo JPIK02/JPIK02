@@ -1028,7 +1028,17 @@ body.on-home .hero-line{display:block;margin-top:2px;font-size:14px;color:var(--
 .hero-line .hl-1{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hero-line .hl-2{display:block;font-size:12px;opacity:.85}
 /* photo du couple plus grande sur l'accueil, liseré corail */
-body.on-home .hero-photo{width:76px;height:76px;border:2px solid var(--coral);font-size:18px}
+body.on-home .hero-photo{width:76px;height:76px;font-size:18px}
+/* Mobile : sur l'accueil, la photo est à cheval sur le bandeau et la page (moitié sur le bleu, moitié sur l'ivoire),
+   alignée à droite ; le bandeau garde sa hauteur d'avant. Contour épais couleur du fond pour un découpage net. */
+@media (max-width:760px){
+  body.on-home .hero-in{position:relative}
+  body.on-home #hero-photo{position:absolute;z-index:3;right:max(16px,env(safe-area-inset-right,0px));bottom:-42px}
+  body.on-home .hero-photo{width:84px;height:84px;border:4px solid var(--bg);box-shadow:var(--shadow-float);background:var(--hero-b)}
+  /* la première carte « À faire » passe sous la photo ; le titre reste à gauche, sous le bandeau */
+  main:has(.home){padding-top:16px}
+  .home .home-sec:first-child .home-h{margin-bottom:34px;max-width:calc(100% - 100px)}
+}
 body.on-home .hero-line b{color:var(--hero-gold);font-weight:600}
 body.on-home .hero-line .link{color:var(--hero-gold);background:none;border:0;padding:0;font-weight:600;cursor:pointer;font-size:14px}
 body.on-home .count,body.on-home .hero-sub{display:none}
