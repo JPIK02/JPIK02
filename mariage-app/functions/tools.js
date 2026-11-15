@@ -31,6 +31,13 @@ const oneOf = (v, list) => (list.includes(v) ? v : undefined);
 const clean = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 const fold = s => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
+// Pages que le coach peut proposer d'ouvrir (vues et sous-vues de l'app, voir VIEWS dans src/app.js)
+export const PAGES = {
+  apercu: "l'accueil", planning: "le planning", agenda: "l'agenda", prestataires: "les prestataires", envies: "Nos envies",
+  invites: "les invités", tables: "le plan de table", budget: "le budget", "jour-j": "le déroulé du jour J",
+  assistant: "les e-mails analysés", reglages: "les réglages", "reglages-ia": "les réglages des agents IA", fiche: "la fiche du prestataire",
+};
+
 // ---------- Définitions (schémas montrés à Claude) ----------
 const S = (props, required = []) => ({ type: "object", properties: props, required, additionalProperties: false });
 const E = (list, description) => ({ type: "string", enum: list, ...(description ? { description } : {}) });
@@ -87,6 +94,8 @@ export const TOOL_DEFS = [
     description: T("ce que montre la photo et ce qui leur plaît : style, couleurs, matières, ambiance (2 phrases)") }, ["photo", "categorie", "description"]) },
   { name: "demander_recherche_web", description: "Tu n'as pas accès à internet sans accord. Quand une recherche aiderait vraiment (inspiration, tendances, idées de déco ou de menu, infos ou avis sur un lieu ou un prestataire), propose-la avec une requête précise. l'un des deux l'autorise ou non dans l'app : arrête-toi ensuite et dis en une phrase ce que tu veux chercher et pourquoi.", input_schema: S({
     requete: T("ce que tu veux chercher, précis (ex. « décoration mariage champêtre vert sauge terracotta »)"), pourquoi: T("en une phrase, ce que ça leur apportera") }, ["requete", "pourquoi"]) },
+  { name: "ouvrir_page", description: "Quand on te demande où trouver quelque chose (« montre-moi le budget », « où sont les invités ? ») ou qu'une page les aidera, propose de l'ouvrir : l'app affiche un bouton dans la conversation, rien ne s'ouvre tout seul. N'écrit rien. Pour la fiche d'un prestataire, donne son id (lister_prestataires).", input_schema: S({
+    page: E(Object.keys(PAGES), "page à ouvrir"), id: T("id du prestataire, seulement pour page = fiche") }, ["page"]) },
   { name: "demander_analyse", description: "Demande une nouvelle analyse des prestataires (recherche d'avis, notes de fit) qui démarre aussitôt (résultats en 2 à 3 minutes). Coûte environ 1 € : à proposer, pas à lancer sans accord.", input_schema: S({}) },
 ];
 
@@ -314,6 +323,15 @@ export function makeTools(db, { qcats, now = new Date(), thumbs = [], author = "
       const requete = String(i.requete || "").trim().slice(0, 200), pourquoi = String(i.pourquoi || "").trim().slice(0, 300);
       return { result: { ok: true, statut: "En attente de leur accord dans l'app. Ne cherche pas maintenant : dis en une phrase ce que tu veux chercher et pourquoi." },
         action: { label: `Recherche sur internet proposée : « ${requete} »`, web: { requete, pourquoi } } };
+    },
+    async ouvrir_page(i) {
+      const page = oneOf(i.page, Object.keys(PAGES));
+      if (!page) throw new Error(`page inconnue : choisis parmi ${Object.keys(PAGES).join(", ")}`);
+      if (page === "fiche") {
+        const v = await need("vendors", String(i.id || ""));
+        return { result: { ok: true, statut: "Bouton affiché dans la conversation" }, action: { label: `Ouvrir la fiche de ${v.name}`, open: { page, id: String(i.id) } } };
+      }
+      return { result: { ok: true, statut: "Bouton affiché dans la conversation" }, action: { label: `Ouvrir ${PAGES[page]}`, open: { page } } };
     },
     async demander_analyse() {
       const op = await write("meta/analyse", { requestedAt: Date.now(), status: "demandée" });

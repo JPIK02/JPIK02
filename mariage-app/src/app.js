@@ -105,24 +105,36 @@ const budgetLineFor=cat=>{const re=CAT_BUDGET[cat];return re?S.budget.find(b=>re
 const lastBriefAt=()=>S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0);
 async function mergeDoc(path,data){try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
 /* Points à regarder : incohérences entre date, budget, devis, capacité, et actions en attente. */
+/* Capacité d'accueil lue dans les notes (texte sans accents, en minuscules) : le plus grand nombre de personnes cité
+   sur la ligne « capacité » (« 3 salles de 40 à 240 personnes » → 240 ; « jusqu'à 70 » → 70 ; « 100-200 » → 200).
+   Les nombres de salles, d'espaces ou de chambres sont ignorés. Null si rien de sûr. */
+function capacityFrom(n){
+  const line=(String(n).split(/\n/).find(l=>/capacite/.test(l))||"").replace(/.*?capacite\s*:?/,"");
+  if(!line)return null;
+  const nums=[];const re=/(\d+)\s*(salles?|espaces?|chambres?|pieces?|lieux|couchages?)?/g;let m;
+  while((m=re.exec(line))){if(!m[2])nums.push(+m[1])}
+  const big=nums.filter(x=>x>=10);
+  return big.length?Math.max(...big):null;
+}
 function alerts(){
   const out=[],d=wDate(),tot=num(S.settings.budgetTotal);
   const prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
-  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:"Engagé au-dessus du budget total",s:`${eur(engage)} engagés pour ${eur(tot)} de budget.`,go:"budget"});
-  else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:"Budget prévu au-dessus du budget total",s:`${eur(prevu)} prévus pour ${eur(tot)} : ${eur(prevu-tot)} à trouver ou à couper.`,go:"budget"});
+  // le titre dit l'écart, la phrase donne les chiffres
+  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:`${eur(engage-tot)} engagés au-delà du budget`,s:`${eur(engage)} engagés pour ${eur(tot)}.`,go:"budget"});
+  else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:`${eur(prevu-tot)} au-dessus du budget`,s:`${eur(prevu)} prévus pour ${eur(tot)}.`,go:"budget"});
   const guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
   S.vendors.filter(v=>v.status!=="ecarte").forEach(v=>{
     const note=String(v.note||""),n=fold(note);
-    if(d&&/complet/.test(n)){
+    if(d&&!S.settings.dateIndicative&&/complet/.test(n)){
       const line=note.split(/\n/).find(l=>/complet/i.test(fold(l)))||"";
       if(new RegExp("complet[^\\n]*\\b"+MOIS[d.getMonth()]+"\\b").test(fold(line)))
         out.push({k:"complet",v,lvl:"bad",t:`${v.name} semble complet en ${MOIS[d.getMonth()].replace("fevrier","février").replace("aout","août")}`,s:`Vos notes : « ${line.trim()} ». La date retenue est le ${fmtD(d)}.`,fiche:v.id});
     }
-    const cap=n.match(/capacite\s*:?\s*(\d+)(?:\s*-\s*(\d+))?/);
-    if(cap&&v.cat==="Lieu"){const mx=+(cap[2]||cap[1]);if(guests>mx)out.push({k:"cap",v,lvl:"warn",t:`${v.name} : capacité trop juste`,s:`${mx} personnes au maximum pour ${guests} invités au dîner.`,fiche:v.id})}
+    const mx=v.cat==="Lieu"?capacityFrom(n):null;
+    if(mx){if(guests>mx)out.push({k:"cap",v,lvl:"warn",t:`${v.name} : ${guests-mx} invité${guests-mx>1?"s":""} de trop`,s:`${mx} personnes au maximum pour ${guests} invités au dîner.`,fiche:v.id})}
     const px=num(v.prix),line=budgetLineFor(v.cat);
     if(px&&line&&num(line.prevu)&&px>num(line.prevu)&&["devis","reserve"].includes(v.status))
-      out.push({k:"devis",v,line,px,lvl:"warn",t:`Devis ${v.name} au-dessus de l'enveloppe`,s:`${eur(px)} pour ${eur(num(line.prevu))} prévus au poste « ${line.label} » (+${eur(px-num(line.prevu))}).`,fiche:v.id});
+      out.push({k:"devis",v,line,px,lvl:"warn",t:`Devis ${v.name} : +${eur(px-num(line.prevu))} sur l'enveloppe`,s:`${eur(px)} pour ${eur(num(line.prevu))} prévus au poste « ${line.label} ».`,fiche:v.id});
   });
   const late=S.tasks.filter(isLate).length;
   if(late)out.push({k:"late",lvl:"warn",t:`${late} tâche${late>1?"s":""} en retard`,s:"À reprogrammer ou à faire en priorité.",go:"planning"});
@@ -134,12 +146,14 @@ function alerts(){
     out.push({k:"refit",lvl:"info",t:"Vos envies ont changé depuis l'analyse des prestataires",s:"Relancez l'analyse dans l'Annuaire pour mettre les notes de fit à jour.",go:"prestataires"});
   S.rdv.filter(r=>r.date&&pd(r.date)>=today()&&days(today(),pd(r.date))<=14).forEach(r=>{
     const v=findVendor(r.avec)||S.vendors.find(x=>fold(r.title).includes(fold(x.name)));
-    out.push({k:"rdv",r,v,lvl:"info",t:`${r.title} le ${fmtD(pd(r.date),false)} (${relDay(pd(r.date))})`,s:v&&v.fit&&v.fit.questions&&v.fit.questions.length?`${v.fit.questions.length} questions à poser préparées dans la fiche.`:"Pensez à préparer vos questions.",fiche:v?v.id:null,edit:v?null:r.id});
+    const nq=v&&v.fit&&v.fit.questions?v.fit.questions.length:0;
+    out.push({k:"rdv",r,v,lvl:"info",t:`${r.title} le ${fmtD(pd(r.date),false)} (${relDay(pd(r.date))})`,s:nq?`${nq} questions à poser préparées dans la fiche.`:"Pensez à préparer vos questions.",
+      ts:`${r.title} · ${pd(r.date).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})}`,ss:nq?`${nq} questions à poser, prêtes`:"Questions à préparer",fiche:v?v.id:null,edit:v?null:r.id});
   });
   const rank={bad:0,warn:1,info:2};
   return out.sort((a,b)=>rank[a.lvl]-rank[b.lvl]);
 }
-const alertRow=a=>`<button class="alert ${a.lvl}" ${a.fiche?`data-fiche="${a.fiche}"`:a.edit?`data-edit="rdv" data-id="${a.edit}"`:`data-go="${a.go}"`}><span class="adot" aria-hidden="true"></span><span class="atx"><b>${esc(a.t)}</b><span>${esc(a.s)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
+const alertRow=a=>`<button class="alert ${a.lvl}" ${a.fiche?`data-fiche="${a.fiche}"`:a.edit?`data-edit="rdv" data-id="${a.edit}"`:a.k==="late"?`data-act="qr" data-do="late:"`:`data-go="${a.go}"`}><span class="adot" aria-hidden="true"></span><span class="atx"><b>${esc(a.t)}</b><span>${esc(a.s)}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
 /* ---------- Le coach à l'accueil : réponses rapides en un toucher ---------- */
 // Quel partenaire est connecté (compte → emplacement) ; le prénom vient des réglages
 const PARTNER={"julienpicquet@gmail.com":"julien","duquesne.claire@yahoo.fr":"claire","claiire.duquesne59@gmail.com":"claire"};
@@ -152,7 +166,7 @@ function qrFor(a){
     case "complet":return [["Écarter ce lieu",`vstatus:${v.id}:ecarte`],["Ouvrir la fiche",`fiche:${v.id}`],["En parler au coach",`ask:${v.name} semble complet à notre date. Que nous conseilles-tu : changer de date ou de lieu ?`]];
     case "cap":return [["Ouvrir la fiche",`fiche:${v.id}`],["En parler au coach",`ask:${v.name} paraît trop petit pour nos invités. Quelles options avons-nous ?`]];
     case "devis":return [[`Passer l'enveloppe à ${eur(a.px)}`,`budgetset:${a.line.id}:${a.px}`],["Préparer une négociation",`ask:Rédige un mail cordial à ${v.name} pour négocier leur devis de ${eur(a.px)} : notre enveloppe « ${a.line.label} » est de ${eur(num(a.line.prevu))}.`],["Comparer",`compare:${v.cat}:${v.id}`]];
-    case "late":return [["Voir les retards","go:planning"],["Replanifier avec le coach","ask:Aide-nous à replanifier nos tâches en retard de façon réaliste."]];
+    case "late":return [["Voir les retards","late:"],["Replanifier avec le coach","ask:Aide-nous à replanifier nos tâches en retard de façon réaliste."]];
     case "sugs":return [["Voir les propositions","go:assistant"]];
     case "brief":return [["Commencer l'entretien","chatbrief"]];
     case "refit":return [["Relancer l'analyse","go:prestataires"]];
@@ -180,26 +194,146 @@ function dayCard(id,lvl,title,text,qr){
     ${first?`<div class="dc-acts"><button class="btn sm primary" data-act="qr" data-do="${esc(first[1])}">${esc(first[0])}</button>${more.length?`<button class="link" data-act="uiopts" data-id="${esc(id)}" aria-expanded="${open}">${open?"Moins":"Autres options"}</button>`:""}</div>
     ${open&&more.length?`<div class="dc-more">${more.map(([l,d])=>`<button class="btn sm" data-act="qr" data-do="${esc(d)}">${esc(l)}</button>`).join("")}</div>`:""}`:""}</div></div>`;
 }
-function coachHome(al){
-  const d=wDate(),n=d?days(today(),d):null,hb=S.hebdo||{},ui=S.ui;
-  const hbFresh=hb.at&&Date.now()-hb.at<8*864e5;
-  const cards=[];
-  visitsToTell().forEach(({r,v})=>cards.push(dayCard("visit-"+r.id,"info",`Comment s'est passée la visite de ${esc(v.name)} ?`,"Racontez-la en deux phrases : je mets la fiche à jour.",[["Raconter la visite",`prefill:Visite de ${v.name} : `]])));
-  al.forEach((a,i)=>cards.push(dayCard("al-"+(a.k||"")+"-"+(a.v?a.v.id:i),a.lvl,esc(a.t),esc(a.s),qrFor(a))));
-  const shown=ui.more?cards:cards.slice(0,3),rest=cards.length-shown.length;
-  const hebdoH=hbFresh?`<div class="hb ${ui.hebdo?"open":""}"><button class="hb-h" data-act="uihebdo" aria-expanded="${!!ui.hebdo}"><span class="ch-k">Point de la semaine</span><b>${esc(hb.titre||"")}</b><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-      ${ui.hebdo?`<div class="hb-b">${Array.isArray(hb.points)?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}${hb.question?`<p class="ch-q">${esc(hb.question)}</p>`:""}<div class="dc-acts">${hb.question?`<button class="btn sm primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:""}<button class="link" data-act="qr" data-do="hebdo">Refaire le point</button></div></div>`:""}</div>`:"";
-  return `<section class="coach-home c12" aria-label="Aujourd'hui">
-    <div class="ch-head">${coupleAvatar()}<div class="ch-hi"><h2>Bonjour${prenom()?" "+esc(prenom()):""}</h2><span>${d?`${esc(fmtLong(d).replace(/^./,c=>c.toUpperCase()))} · <b>J-${n}</b>`:`<button class="link" data-go="reglages">Fixer la date du mariage</button>`}</span></div></div>
-    ${hebdoH}
-    <div class="ch-sec"><h3>${cards.length?`Aujourd'hui · ${cards.length} point${cards.length>1?"s":""}`:"Aujourd'hui"}</h3>${!hbFresh?`<button class="link" data-act="qr" data-do="hebdo">Point de la semaine</button>`:""}</div>
-    ${cards.length?`<div class="dcs">${shown.join("")}</div>${rest>0||ui.more&&cards.length>3?`<button class="link more-pts" data-act="uimore">${ui.more?"Afficher moins":`Voir les ${rest} autre${rest>1?"s":""} point${rest>1?"s":""}`}</button>`:""}`
-      :`<div class="dc ok"><span class="dc-dot" aria-hidden="true"></span><div class="dc-body"><b>Rien d'urgent : tout est cohérent.</b><p>Le coach (bouton en bas à droite) peut vous aider à avancer sur la suite.</p></div></div>`}
-  </section>`;
+/* ---------- Accueil (vue apercu), voir docs/accueil-coach-v1.md ----------
+   1. « À faire maintenant » (3 cartes au plus, jamais vide), 2. carte Coach, 3. « Votre mariage » (partie fixe). */
+const PUSH_CARD_KEY="lamaelle-push-card-off";
+const pushCardOff=()=>{try{return localStorage.getItem(PUSH_CARD_KEY)==="1"}catch(e){return false}};
+const WEEKDAYS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
+function whenShort(d){const n=days(today(),d);return n>=-1&&n<=1?relDay(d):n>1&&n<7?WEEKDAYS[d.getDay()]:fmtD(d,false)}
+function nextOpenTask(){
+  return S.tasks.filter(t=>t.status!=="done").sort((a,b)=>{const da=taskDue(a),db=taskDue(b);if(da&&db&&+da!==+db)return da-db;if(da&&!db)return -1;if(db&&!da)return 1;return byOrder(a,b)})[0]||null;
+}
+// Ordre : alertes graves, propositions des mails, visites à raconter, alertes à surveiller puis d'information, notifications, sinon la prochaine tâche
+// Un point « À faire » : id, niveau, étiquette, titre et texte (HTML échappé), réponses rapides, version courte pour les lignes
+const todoItem=(id,lvl,tag,title,text,qr,ts,ss)=>({id,lvl,tag,title,text,qr,ts,ss});
+const TODO_TAG={budget:"Budget",complet:"Prestataires",cap:"Prestataires",devis:"Prestataires",refit:"Prestataires",late:"Planning",sugs:"E-mails",brief:"Nos envies",rdv:"Agenda"};
+function todoCards(al){
+  const cards=[],card=(a,i)=>todoItem("al-"+(a.k||"")+"-"+(a.v?a.v.id:a.r?a.r.id:i),a.lvl,TODO_TAG[a.k]||"À voir",esc(a.t),esc(a.s),qrFor(a),a.ts&&esc(a.ts),a.ss&&esc(a.ss));
+  al.filter(a=>a.lvl==="bad").forEach((a,i)=>cards.push(card(a,i)));
+  const ps=pendingSugs().length;
+  if(ps)cards.push(todoItem("sugs","sug","E-mails",`${ps} proposition${ps>1?"s":""} tirée${ps>1?"s":""} de vos mails`,"Devis, rendez-vous et tâches repérés par l'assistant e-mails : validez-les en un geste.",[["Valider en un geste","go:assistant"]],null,"Devis, rendez-vous et tâches à valider"));
+  visitsToTell().forEach(({r,v})=>cards.push(todoItem("visit-"+r.id,"info","Visite",`Comment s'est passée la visite de ${esc(v.name)} ?`,"Racontez-la en deux phrases : je mets la fiche à jour.",[["Raconter la visite",`prefill:Visite de ${v.name} : `]],`Visite de ${esc(v.name)}`,"Racontez-la en deux phrases")));
+  al.filter(a=>a.lvl!=="bad"&&a.k!=="sugs").forEach((a,i)=>cards.push(card(a,i)));
+  if((S.pushState==="off"||S.pushState==="install")&&!pushCardOff())cards.push(S.pushState==="off"
+    ?todoItem("push","info","Notifications","Recevoir le point de la semaine","Une notification chaque lundi, et quand l'assistant trouve un devis ou un rendez-vous dans vos mails.",[["Activer les notifications","pushon:"],["Ne plus proposer","pushhide:"]],null,"Une notification chaque lundi")
+    :todoItem("push","info","Notifications","Recevoir le point de la semaine","Sur iPhone, les notifications ne marchent que depuis l'app installée : dans Safari, Partager puis « Sur l'écran d'accueil », puis ouvrez Lamaelle depuis son icône.",[["Voir dans Réglages","go:reglages"],["Ne plus proposer","pushhide:"]],null,"Depuis l'app installée sur l'écran d'accueil"));
+  if(!cards.length){
+    const t=nextOpenTask(),due=t&&taskDue(t);
+    cards.push(t?todoItem("next-"+t.id,"next","Prochaine étape",esc(t.title),due?`À faire avant le ${esc(fmtD(due,false))}.`:esc(PH[t.phase]?.label||""),[["Voir dans le planning",`task:${t.id}`],...(S.canWrite?[["C'est fait",`taskdone:${t.id}`]]:[]),["En parler au coach",`ask:Aide-nous à avancer sur « ${t.title} » : par quoi commencer ?`]])
+      :todoItem("next","next","Prochaine étape","Rien d'urgent pour l'instant","Le coach peut vous aider à préparer la suite.",[["Par quoi continuer ?","ask:Par quoi commencer cette semaine ?"]]));
+  }
+  return cards;
+}
+// Le point le plus prioritaire : carte mise en avant, un bouton principal et « Autres options » (mécanique de dayCard)
+function leadCard(c){
+  const open=!!S.ui.opts[c.id],[first,...more]=c.qr;
+  return `<div class="dc lead ${c.lvl||""}"><div class="dc-body"><span class="dc-tag ${c.lvl||""}">${esc(c.tag)}</span><b>${c.title}</b>${c.text?`<p>${c.text}</p>`:""}
+    ${first?`<div class="dc-acts"><button class="btn sm primary" data-act="qr" data-do="${esc(first[1])}">${esc(first[0])}</button>${more.length?`<button class="link" data-act="uiopts" data-id="${esc(c.id)}" aria-expanded="${open}">${open?"Moins":"Autres options"}</button>`:""}</div>
+    ${open&&more.length?`<div class="dc-more">${more.map(([l,d])=>`<button class="btn sm" data-act="qr" data-do="${esc(d)}">${esc(l)}</button>`).join("")}</div>`:""}`:""}</div></div>`;
+}
+// Les points suivants : une ligne compacte qui ouvre quelque chose (fiche, page, comparateur…), jamais une modification directe
+const ROW_NAV=/^(go|fiche|late|task|compare|prefill|chatbrief|chat):/,ROW_WRITE=/^(vstatus|budgetset|taskdone|pushhide):/;
+function todoRow(c){
+  const q=c.qr.find(x=>ROW_NAV.test(x[1]))||c.qr.find(x=>!ROW_WRITE.test(x[1]));
+  const sub=String(c.ss||c.text||"").replace(/\.\s*$/,""); // sous-titres harmonisés : jamais de point final
+  return `<button class="td-row" ${q?`data-act="qr" data-do="${esc(q[1])}"`:"disabled"}><span class="dc-dot lv-${c.lvl||"info"}" aria-hidden="true"></span><span class="td-t"><b>${c.ts||c.title}</b>${sub?`<span>${sub}</span>`:""}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
+}
+// Suggestions de la carte Coach, tirées de l'état de l'app (sans appel à l'IA)
+const KEY_FIND={Lieu:"un lieu",Traiteur:"un traiteur",Photographe:"un photographe",Musique:"la musique",Fleuriste:"un fleuriste",Tenues:"nos tenues"};
+function coachSuggestions(al){
+  const out=[];
+  const miss=KEY_VCATS.find(c=>!S.vendors.some(v=>v.cat===c&&v.status==="reserve"));
+  if(miss)out.push([`Trouver ${KEY_FIND[miss]||miss}`,`ask:Aide-nous à trouver ${KEY_FIND[miss]||miss} : par où commencer, quels critères compter et combien prévoir, d'après nos envies ?`]);
+  const dv=al.find(a=>a.k==="devis");
+  if(dv)out.push(["Négocier un devis",`ask:Rédige un mail cordial à ${dv.v.name} pour négocier leur devis de ${eur(dv.px)} : notre enveloppe « ${dv.line.label} » est de ${eur(num(dv.line.prevu))}.`]);
+  const wait=S.guests.filter(g=>g.rsvp!=="oui"&&g.rsvp!=="non").length;
+  if(wait>=5&&S.tasks.some(t=>t.id==="t22"&&t.status==="done"))out.push(["Relancer les invités",`ask:${wait} invités n'ont pas encore répondu. Rédige un message de relance court et chaleureux à leur envoyer.`]);
+  // libellés courts (la question complète part au coach)
+  for(const f of [["Par où commencer ?","ask:Par quoi commencer cette semaine ?"],["Notre budget","ask:Où en est notre budget ? Dis-nous ce qui mérite notre attention."],["À réserver","ask:Que nous reste-t-il à réserver, et dans quel ordre ?"]])if(out.length<3)out.push(f);
+  return out.slice(0,3);
+}
+// Carte « Point de la semaine » : le point du coach et ses suggestions (on écrit au coach par le bouton flottant)
+function coachCard(al){
+  const hb=S.hebdo||{},fresh=hb.at&&Date.now()-hb.at<8*864e5,open=!!S.ui.hebdo;
+  const day=fresh?WEEKDAYS[new Date(hb.at).getDay()]:"";
+  const head=fresh?`<b class="cc-t">${esc(hb.titre||"")}</b><p class="cc-q">${hb.question?esc(hb.question)+" ":""}<button class="link cc-more" data-act="uihebdo" aria-expanded="${open}">${open?"Replier le point":"Lire le point"}</button></p>
+      ${open?`<div class="hb-b">${Array.isArray(hb.points)?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}<div class="dc-acts">${hb.question?`<button class="btn sm primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:""}<button class="link" data-act="qr" data-do="hebdo">Refaire le point</button></div></div>`:""}`
+    :`<b class="cc-t">Pas encore de point cette semaine.</b><p class="cc-q">Le coach fait le tour de vos tâches, prestataires et budget. <button class="link cc-more" data-act="qr" data-do="hebdo">Faire le point de la semaine</button></p>`;
+  return `<section class="coach-card" aria-label="Point de la semaine">
+    <div class="cc-top"><span class="cc-k"><span class="cc-ic" aria-hidden="true">${SPARK}</span>Point de la semaine</span>${day?`<span class="cc-day">${day}</span>`:""}</div>
+    ${head}
+    <div class="cc-sugg" role="list">${coachSuggestions(al).map(([l,d])=>`<button class="cc-s" role="listitem" data-act="qr" data-do="${esc(d)}"><span>${esc(l)}</span></button>`).join("")}</div></section>`;
+}
+const TILE_IC={prestataires:ICON_PRESTA(),planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',budget:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',jourj:'<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10 4h4l-2 3z"/>',docs:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'};
+function ICON_PRESTA(){return '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>'}
+// « Votre mariage » : toujours les mêmes éléments, à la même place ; « Commencer » quand c'est vide
+function weddingGrid(){
+  const pr=S.profil||{},fr=(S.briefs&&S.briefs.filRouge)||{};
+  const titre=fr.titre||(String(pr.resume||"").match(/^[^.!?]+[.!?]?/)||[""])[0].trim();
+  const prios=(Array.isArray(pr.priorites)?pr.priorites:[]).slice(0,3).map(p=>QC[p.cat]?QC[p.cat].label:String(p.cat||"")).filter(Boolean);
+  const div=Array.isArray(pr.divergences)?pr.divergences.length:0;
+  const envies=titre||prios.length?`<button class="wm-envies" data-go="envies"><span class="wm-k">Nos envies</span><b class="wm-title">${esc(titre||"Vos priorités")}</b>${prios.length?`<span class="wm-tags"><span class="wm-tl">Vos priorités</span>${prios.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</span>`:""}${div?`<span class="wm-s">${div} point${div>1?"s":""} dont vous reparlez</span>`:""}</button>`
+    :`<button class="wm-envies empty" data-act="qr" data-do="chatbrief"><span class="wm-k">Nos envies</span><b class="wm-title">Racontez vos envies</b><span class="wm-s">Le coach vous pose les questions une par une et en tire votre fil rouge.</span><span class="wm-go">Commencer</span></button>`;
+  const act=S.vendors.filter(v=>v.status!=="ecarte"),res=act.filter(v=>v.status==="reserve").length;
+  const late=S.tasks.filter(isLate).length,t0=today();
+  const nt=S.tasks.filter(t=>t.status!=="done"&&taskDue(t)&&taskDue(t)>=t0).sort((a,b)=>taskDue(a)-taskDue(b))[0];
+  const nr=S.rdv.filter(r=>r.date&&pd(r.date)>=t0).sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")))[0];
+  const next=[nt&&{t:nt.title,d:taskDue(nt)},nr&&{t:nr.title,d:pd(nr.date)}].filter(Boolean).sort((a,b)=>a.d-b.d)[0];
+  const tot=num(S.settings.budgetTotal),prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
+  const ref=tot||prevu,pct=ref?Math.round(engage/ref*100):0,over=ref&&engage>ref;
+  const g=S.guests,ans=g.filter(x=>x.rsvp==="oui"||x.rsvp==="non").length,steps=S.schedule.length;
+  const pl=(n,s,p)=>`${n} ${n>1?p:s}`;
+  // tuiles de même hauteur : icône, titre en bas, une ligne d'info ; jamais de « 0 » seul
+  const tile=(k,label,empty,go,body,badge="",extra="")=>`<button class="wm-tile ${empty?"empty":""}" ${go}><span class="wm-ic"><svg viewBox="0 0 24 24" aria-hidden="true">${TILE_IC[k]}</svg>${badge}</span><span class="wm-l">${label}</span><span class="wm-v">${empty?`<span class="wm-go">Commencer</span>`:body}</span>${extra}</button>`;
+  const {ready}=briefsState();
+  return `<div class="wm">${envies}<div class="wm-tiles">
+    ${tile("prestataires","Prestataires",!act.length,!act.length&&S.canWrite?'data-new="vendors"':'data-go="prestataires"',res?`${pl(act.length,"suivi","suivis")} · ${pl(res,"réservé","réservés")}`:`${act.length} en vue`)}
+    ${tile("planning","Planning",!S.tasks.length&&!S.rdv.length,'data-go="planning"',`${late?`<span class="over">${late} en retard</span> · `:""}${next?`${esc(next.t)} · ${esc(whenShort(next.d))}`:"Rien de daté à venir"}`)}
+    ${tile("budget","Budget",!ref,'data-go="budget"',engage?`<span class="${over?"over":""}">${pct} % engagé</span>`:prevu?`${eur(prevu)} prévus`:`${eur(tot)} de budget`,"",engage?`<span class="wm-bar ${over?"over":""}" aria-hidden="true"><i style="width:${Math.min(100,pct)}%"></i></span>`:"")}
+    ${tile("invites","Invités",!g.length,'data-go="invites"',ans?`${pl(ans,"réponse","réponses")} sur ${g.length}`:`${pl(g.length,"invité","invités")}`)}
+    ${tile("jourj","Jour J",!steps,'data-go="jour-j"',`${pl(steps,"étape","étapes")} du déroulé`)}
+    ${tile("docs","Documents",false,'data-act="docsmenu"',ready?"Briefs à envoyer":"Briefs à préparer")}
+  </div></div>`;
+}
+function vApercu(){
+  if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported"}),0);
+  const al=alerts(),cards=todoCards(al),ui=S.ui;
+  // 3 points au plus : le premier en carte mise en avant, les suivants en lignes compactes dans une seule carte
+  const [lead,...others]=cards,rows=ui.more?others:others.slice(0,2),rest=others.length-rows.length;
+  return `<div class="home">
+    <section class="home-sec" aria-labelledby="h-todo"><h3 class="home-h" id="h-todo">À faire maintenant</h3>${leadCard(lead)}
+      ${rows.length?`<div class="td-list">${rows.map(todoRow).join("")}</div>`:""}
+      ${rest>0||ui.more&&others.length>2?`<button class="link more-pts" data-act="uimore">${ui.more?"Afficher moins":`Voir les ${rest} autre${rest>1?"s":""}`}</button>`:""}</section>
+    ${coachCard(al)}
+    <section class="home-sec" aria-labelledby="h-wm"><h3 class="home-h" id="h-wm">Votre mariage</h3>${weddingGrid()}</section>
+  </div>`;
+}
+// Tâche ouverte depuis l'accueil : le planning défile jusqu'à elle et la met en évidence
+function showTask(id){
+  if(S.f.owner!=="all"){S.f.owner="all";saveF()}
+  go("planning");
+  requestAnimationFrame(()=>{const r=document.querySelector(`#main .row[data-task="${CSS.escape(id)}"]`);if(!r)return;
+    r.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});r.classList.add("flash");setTimeout(()=>r.classList.remove("flash"),2600)});
+}
+/* « Voir les retards » : le planning s'ouvre sur la première tâche en retard, mise en évidence (filtre « Tout » pour ne pas la masquer). */
+function showLate(){
+  if(S.f.owner!=="all"){S.f.owner="all";saveF()}
+  go("planning");
+  requestAnimationFrame(()=>{
+    const rows=[...document.querySelectorAll("#main .row.late")];
+    if(!rows.length)return;
+    rows[0].scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
+    rows.forEach(r=>r.classList.add("flash"));
+    setTimeout(()=>rows.forEach(r=>r.classList.remove("flash")),2600);
+  });
 }
 async function runQr(dd){
   const [k,...rest]=dd.split(":"),arg=rest.join(":");
   if(k==="go")return go(arg);
+  if(k==="late")return showLate();
+  if(k==="task")return showTask(arg);
+  if(k==="pushon"){try{await enablePush()}catch(err){toast("Activation impossible : "+(err.message||err))}return render()}
+  if(k==="pushhide"){try{localStorage.setItem(PUSH_CARD_KEY,"1")}catch(e){}toast("Vous pourrez les activer dans Réglages");return render()}
   if(k==="fiche")return openFiche(arg);
   if(k==="ask"){openChat("chat");return sendChat(arg)}
   if(k==="prefill")return openChat("chat",arg);
@@ -209,6 +343,7 @@ async function runQr(dd){
   if(k==="hebdo"){if(await mergeDoc("meta/hebdo",{requestedAt:Date.now()})){kick("hebdo");toast("Le coach prépare votre point : il arrive dans une minute environ")}return}
   if(!S.canWrite)return;
   if(k==="vstatus"){const [id,st]=rest,v=S.vendors.find(x=>x.id===id);if(!v)return;const prev=v.status;if(await patch("vendors",id,{status:st}))toastUndo(`${v.name} : ${VSTAT[st]}`,()=>patch("vendors",id,{status:prev}));return}
+  if(k==="taskdone"){const t=S.tasks.find(x=>x.id===arg);if(!t)return;const prev=t.status||"todo";if(await patch("tasks",arg,{status:"done"}))toastUndo(`Fait : ${t.title}`,()=>patch("tasks",arg,{status:prev}));return}
   if(k==="budgetset"){const [id,amt]=rest,b=S.budget.find(x=>x.id===id);if(!b)return;const prev=b.prevu??null;if(await patch("budget",id,{prevu:num(amt)}))toastUndo(`${b.label} : enveloppe à ${eur(num(amt))}`,()=>patch("budget",id,{prevu:prev}));return}
 }
 
@@ -268,13 +403,21 @@ function writeErr(e){
 function renderHero(){
   const d=wDate(),st=S.settings;
   const sub=[];
-  if(d){const L=fmtLong(d);sub.push(`<b>${esc(L.charAt(0).toUpperCase()+L.slice(1))}</b>`)}
+  if(d){const L=fmtLong(d);sub.push(`<b>${esc(L.charAt(0).toUpperCase()+L.slice(1))}</b>${st.dateIndicative?" <span>(date indicative)</span>":""}`)}
   if(st.lieu||st.ville)sub.push(`<span>${esc([st.lieu,st.ville].filter(Boolean).join(", "))}</span>`);
   if(st.mairie)sub.push(`<span>Mairie de ${esc(st.mairie)}</span>`);
   if(!sub.length)sub.push(`<span>${S.mode==="live"?"Date et lieu à renseigner dans Réglages":"Notre mariage"}</span>`);
   setHTML(document.getElementById("hero-sub"),sub.join(""));
   // prénoms du couple, depuis les réglages (rien avant la connexion)
   setHTML(document.getElementById("names"),S.mode==="live"||S.mode==="demo"?`${esc(P1())}<span class="amp">&amp;</span>${esc(P2())}`:"");
+  // accueil : une seule ligne « 923 jours · samedi 26 mai 2029 (indicative) » à la place du compteur
+  const nd=d?days(today(),d):null;
+  setHTML(document.getElementById("hero-line"),S.view!=="apercu"||!(S.mode==="live"||S.mode==="demo")?""
+    :d?`<span class="hl-1"><b class="num">${nd>0?`${nd} jour${nd>1?"s":""}`:nd===0?"Jour J":"Mariés"}</b> · ${esc(d.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}))}</span>${st.dateIndicative?`<small class="hl-2">date indicative</small>`:""}`
+    :`<button class="link" data-go="reglages">Fixer la date</button>`);
+  // photo du couple : ouvre Réglages (le changement de photo se fait dans Réglages > Général)
+  const ph=S.photo&&S.photo.data,live=S.mode==="live"||S.mode==="demo";
+  setHTML(document.getElementById("hero-photo"),live?`<button class="hero-photo" data-go="reglages" aria-label="Réglages">${ph?`<img src="data:image/jpeg;base64,${ph}" alt="">`:`<span>${esc(P1().charAt(0))}&amp;${esc(P2().charAt(0))}</span>`}</button>`:"");
   const c=document.getElementById("count");
   if(d){
     const n=days(today(),d);
@@ -289,22 +432,13 @@ function renderHero(){
   setHTML(fr,`<div class="fr-track" role="list" aria-label="Étapes de la préparation"><div class="fr-fill" style="width:${Math.min(100,fill).toFixed(1)}%"></div>${PHASES.map((p,i)=>`<div class="fr-step ${i<ci?"past":i===ci?"now":""}" role="listitem"><span class="fr-dot"></span><span class="fr-lab">${p.short}${i===ci?" · en cours":""}</span></div>`).join("")}</div>`);
 }
 const ICON={envies:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',coach:'<path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/>',apercu:'<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',prestataires:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',plus:'<circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>'};
-const BNAV=[["apercu","Coach"],["planning","Planning"],["prestataires","Prestataires"],["envies","Nos envies"]];
+// Barre du bas (mobile) : 3 onglets. Planning, Budget, Invités et Jour J passent par les tuiles de l'accueil, Réglages par la photo du couple.
+const BNAV=[["apercu","Accueil"],["envies","Nos envies"],["prestataires","Prestataires"]];
 function renderBnav(){
-  const late=S.tasks.filter(isLate).length,sug=pendingSugs().length;
-  const cur=PARENT_VIEW[S.view]||S.view,inMain=BNAV.some(b=>b[0]===cur);
-  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k==="apercu"?"coach":k]}</svg>${l}${k==="planning"&&late?`<span class="badge num">${late}</span>`:""}</button>`).join("")
-   +`<button data-act="more" ${inMain?"":'aria-current="page"'}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON.plus}</svg>${inMain?"Plus":esc(VIEW_NAMES[S.view]||"Plus")}${sug?`<span class="badge gold num">${sug}</span>`:""}</button>`);
-  // Bandeau compact partout : sur l'accueil, la carte du coach donne déjà le compte à rebours et la période.
+  const sug=pendingSugs().length,cur=PARENT_VIEW[S.view]||S.view;
+  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
   document.body.classList.add("compact");
   document.body.classList.toggle("on-home",S.view==="apercu");
-}
-function openMore(){
-  const sug=pendingSugs().length;
-  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Toutes les sections"><h3>Toutes les sections</h3>
-    <div class="sheet-grid">${[...VIEWS.filter(v=>!BNAV.some(b=>b[0]===v[0])),["agenda","Agenda"],["tables","Plan de table"]].map(([k,l])=>`<button data-go="${k}" ${S.view===k?'aria-current="page"':""}><span>${l}</span>${k==="assistant"&&sug?`<span class="badge gold num">${sug}</span>`:""}</button>`).join("")}
-      <button data-act="pdfreport"><span>Rapport PDF</span></button></div>
-    <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Fermer</button></div></div></div></div>`;
 }
 function renderTabs(){
   renderBnav();
@@ -330,86 +464,36 @@ function payments(){
   S.vendors.forEach(v=>{
     if(v.status==="ecarte")return;
     const ac=num(v.acompte),px=num(v.prix);
-    if(ac&&!v.acomptePaye)out.push({v,kind:"Acompte",amount:ac,date:pd(v.dateAcompte)});
+    if(ac&&!v.acomptePaye&&v.status==="reserve")out.push({v,kind:"Acompte",amount:ac,date:pd(v.dateAcompte)});
     if(px&&!v.soldePaye&&v.status==="reserve")out.push({v,kind:"Solde",amount:Math.max(0,px-(v.acomptePaye?ac:0)-(v.acomptePaye?0:ac)),date:pd(v.dateSolde)});
   });
   return out.sort((a,b)=>(a.date?+a.date:9e15)-(b.date?+b.date:9e15));
 }
-function vApercu(){
-  const g=S.guests,yes=g.filter(x=>x.rsvp==="oui").length,no=g.filter(x=>x.rsvp==="non").length,wait=g.length-yes-no;
-  const tot=num(S.settings.budgetTotal);
-  const engage=S.budget.reduce((s,b)=>s+num(b.engage),0),paye=S.budget.reduce((s,b)=>s+num(b.paye),0),prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0);
-  const ref=tot||prevu;
-  const done=S.tasks.filter(t=>t.status==="done").length,late=S.tasks.filter(isLate);
-  const keyRes=KEY_VCATS.filter(c=>S.vendors.some(v=>v.cat===c&&v.status==="reserve")).length;
-  const d=wDate(),cur=currentPhase();
-
-  const kpis=`
-    <div class="kpi t1 c3">${ring(S.tasks.length?done/S.tasks.length:0,"var(--coral-ui)")}<div><div class="k">Préparation</div><div class="v num">${done}<small>/ ${S.tasks.length} tâches</small></div><div class="s">${late.length?`<span class="over">${late.length} en retard</span>`:"Rien en retard"}</div></div></div>
-    <div class="kpi t2 c3">${ring(g.length?yes/g.length:0,"var(--julien)")}<div><div class="k">Invités</div><div class="v num">${yes}<small>/ ${g.length} présents</small></div><div class="s">${wait} réponse${wait>1?"s":""} attendue${wait>1?"s":""}</div></div></div>
-    <div class="kpi t3 c3">${ring(ref?engage/ref:0,"var(--gold)")}<div><div class="k">Budget engagé</div><div class="v num">${eur(engage)}</div><div class="s">${ref?"sur "+eur(ref)+(tot?"":" prévus"):"Budget à fixer"}</div></div></div>
-    <div class="kpi t4 c3">${ring(keyRes/KEY_VCATS.length,"var(--ok)")}<div><div class="k">Prestataires clés</div><div class="v num">${keyRes}<small>/ ${KEY_VCATS.length} réservés</small></div><div class="s">${KEY_VCATS.filter(c=>!S.vendors.some(v=>v.cat===c&&v.status==="reserve")).slice(0,2).join(", ")||"Tout est réservé"}</div></div></div>`;
-
-  // Focus: late + next 21 days, else next open
-  const horizon=addDays(today(),21);
-  let focus=S.tasks.filter(t=>t.status!=="done"&&(isLate(t)||(taskDue(t)&&taskDue(t)<=horizon)));
-  const urgent=focus.length>0;
-  if(!urgent)focus=S.tasks.filter(t=>t.status!=="done"&&(!cur||t.phase===cur.k));
-  focus=focus.sort((a,b)=>{const da=taskDue(a),db=taskDue(b);if(da&&db&&+da!==+db)return da-db;return byOrder(a,b)});
-  const more=Math.max(0,focus.length-3);
-  const focusH=`<div class="panel c7"><div class="panel-h"><h3>Vos 3 prochaines actions</h3><button class="link" data-go="planning">Tout le planning</button></div>
-    <div class="list">${focus.length?focus.slice(0,3).map(taskRow).join(""):`<div class="empty"><b>Rien d'urgent</b>Profitez-en pour avancer sur la période suivante.</div>`}</div>
-    ${more?`<p class="more-note">${more} autre${more>1?"s":""} ${urgent?"à faire dans les 3 semaines":"pour cette période"} · <button class="link" data-go="planning">voir le planning</button></p>`:""}</div>`;
-  const al=alerts();
-  const alH=al.length?`<div class="panel c12 alerts-panel"><div class="panel-h"><h3>À regarder</h3><span class="chip ${al.some(a=>a.lvl==="bad")?"bad":al.some(a=>a.lvl==="warn")?"warn":""} num">${al.length}</span></div><div class="alerts">${al.slice(0,6).map(alertRow).join("")}</div>${al.length>6?`<p class="more-note">et ${al.length-6} autre${al.length-6>1?"s":""} point${al.length-6>1?"s":""}.</p>`:""}</div>`
-    :`<div class="panel c12 alerts-panel ok"><div class="panel-h" style="margin:0"><h3>Tout est cohérent</h3><span class="chip ok">Rien à signaler</span></div></div>`;
-
+/* Blocs de l'ancien tableau de bord, déplacés : Jalons et Qui fait quoi dans Planning, Paiements à venir dans Budget */
+function milestonesPanel(){
   const ms=milestones(),msDone=ms.filter(m=>m[1]).length,nextIdx=ms.findIndex(m=>!m[1]);
-  const milesH=`<div class="panel c5"><div class="panel-h"><h3>Jalons</h3><span class="chip ok num">${msDone} / ${ms.length}</span></div>
+  return `<div class="panel"><div class="panel-h"><h3>Jalons</h3><span class="chip ok num">${msDone} / ${ms.length}</span></div>
     <ul class="miles">${ms.map((m,i)=>`<li class="${m[1]?"ok":i===nextIdx?"next":""}"><span class="dot"></span><span>${m[0]}</span>${i===nextIdx?'<span class="chip gold" style="margin-left:auto">Prochain</span>':""}</li>`).join("")}</ul></div>`;
-
-  const pays=payments().slice(0,5),in30=payments().filter(p=>p.date&&days(today(),p.date)<=30).reduce((s,p)=>s+p.amount,0);
-  const payH=`<div class="panel c4"><div class="panel-h"><h3>Paiements à venir</h3><button class="link" data-go="prestataires">Prestataires</button></div>
+}
+function paymentsPanel(){
+  const all=payments(),pays=all.slice(0,5),in30=all.filter(p=>p.date&&days(today(),p.date)<=30).reduce((s,p)=>s+p.amount,0);
+  return `<div class="panel pay-panel"><div class="panel-h"><h3>Paiements à venir</h3><button class="link" data-go="prestataires">Prestataires</button></div>
     ${pays.length?`<div class="list">${pays.map(p=>`<div class="row click" data-edit="vendors" data-id="${p.v.id}">${p.date?dateBox(p.date,p.date<today()?"bad":"gold"):`<div class="datebox"><b>?</b><span>date</span></div>`}<div class="main"><div class="t">${esc(p.v.name)}</div><div class="m"><span>${p.kind}</span>${p.date?`<span>${relDay(p.date)}</span>`:"<span>date à préciser</span>"}</div></div><div class="end"><b class="num">${eur(p.amount)}</b></div></div>`).join("")}</div>
-    <div class="s" style="font-size:13px;color:var(--muted);margin-top:22px">${in30?`<b class="num" style="color:var(--ink)">${eur(in30)}</b> à verser dans les 30 jours`:"Rien à verser dans les 30 jours"}</div>`
-    :`<div class="empty" style="padding:14px 0">Les acomptes et soldes des prestataires apparaîtront ici avec leur date.</div>`}</div>`;
-
-  const up=S.rdv.filter(r=>r.date&&pd(r.date)>=today()).sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||""))).slice(0,4);
-  const rdvH=`<div class="panel c5"><div class="panel-h"><h3>Prochains rendez-vous</h3><button class="link" data-go="agenda">Agenda</button></div>
-    ${up.length?`<div class="list">${up.map(r=>`<div class="row click" data-edit="rdv" data-id="${r.id}">${dateBox(pd(r.date))}<div class="main"><div class="t">${esc(r.title)}</div><div class="m">${r.time?`<span class="num">${esc(r.time)}</span>`:""}${r.avec?`<span>${esc(r.avec)}</span>`:""}<span>${relDay(pd(r.date))}</span></div></div></div>`).join("")}</div>`
-    :`<div class="empty" style="padding:14px 0">Visites, dégustations, essayages : ajoutez-les dans l'Agenda.<div style="margin-top:10px"><button class="btn sm" data-new="rdv" ${S.canWrite?"":"disabled"}>Ajouter un rendez-vous</button></div></div>`}</div>`;
-
-  const open=S.tasks.filter(t=>t.status!=="done");
+    <div class="s" style="font-size:13px;color:var(--muted);margin-top:16px">${in30?`<b class="num" style="color:var(--ink)">${eur(in30)}</b> à verser dans les 30 jours`:"Rien à verser dans les 30 jours"}</div>`
+    :`<div class="empty" style="padding:14px 0">Les acomptes et soldes des prestataires réservés apparaîtront ici avec leur date.</div>`}</div>`;
+}
+function whoPanel(){
+  const g=S.guests,late=S.tasks.filter(isLate),open=S.tasks.filter(t=>t.status!=="done");
   const cnt=k=>open.filter(t=>(t.owner||"deux")===k).length,lateOf=k=>late.filter(t=>(t.owner||"deux")===k).length;
   const mx=Math.max(1,cnt("claire"),cnt("julien"),cnt("deux"));
-  const whoH=`<div class="panel c4"><div class="panel-h"><h3>Qui fait quoi</h3><span class="chip num">${open.length} ouvertes</span></div>
+  return `<div class="panel"><div class="panel-h"><h3>Qui fait quoi</h3><span class="chip num">${open.length} ouvertes</span></div>
     <div class="who">${[["claire",P1(),"var(--claire)"],["julien",P2(),"var(--julien)"],["deux","Ensemble","var(--muted)"]].map(([k,l,c])=>`<button class="who-row" data-who="${k}" style="background:none;border:0;padding:0;cursor:pointer;text-align:left"><span style="font-weight:600">${l}</span><span class="hb-track"><i style="width:${cnt(k)/mx*100}%;background:${c}"></i></span><span class="num" style="font-size:13px;color:var(--muted)">${cnt(k)}${lateOf(k)?` · <span class="over">${lateOf(k)} en retard</span>`:""}</span></button>`).join("")}</div>
     <div class="mini"><div><b class="num">${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length}</b><span>couverts</span></div><div><b class="num">${g.filter(x=>x.rsvp!=="non"&&x.regime).length}</b><span>régimes</span></div><div><b class="num">${g.filter(x=>x.enfant&&x.rsvp!=="non").length}</b><span>enfants</span></div></div></div>`;
-
-  const lines=S.budget.filter(b=>num(b.prevu)||num(b.engage)).sort((a,b)=>Math.max(num(b.prevu),num(b.engage))-Math.max(num(a.prevu),num(a.engage))).slice(0,6);
-  const bmx=Math.max(1,...lines.map(b=>Math.max(num(b.prevu),num(b.engage))));
-  const guestsBase=yes||num(S.settings.invitesCible)||g.length;
-  const perGuest=guestsBase?(engage||prevu)/guestsBase:0;
-  const budH=`<div class="panel c7"><div class="panel-h"><h3>Budget par poste</h3><button class="link" data-go="budget">Détail</button></div>
-    ${lines.length?`<div class="hbars">${lines.map(b=>{const p=num(b.prevu),e=num(b.engage),ov=p&&e>p;return `<div class="hb-row"><span class="lab">${esc(b.label)}</span><span class="amt num">${e?eur(e):"—"} / ${p?eur(p):"—"}</span><div class="hb-track"><i class="plan" style="width:${p/bmx*100}%"></i><i class="eng ${ov?"over":""}" style="width:${e/bmx*100}%"></i></div></div>`}).join("")}</div>
-      <div class="legend"><span><i style="background:var(--coral-ui)"></i>Engagé</span><span><i style="border:1.5px solid var(--accent)"></i>Prévu</span><span><i style="background:var(--bad)"></i>Dépassement</span></div>`
-    :`<div class="empty" style="padding:14px 0">Renseignez les montants prévus dans Budget pour voir la répartition.</div>`}
-    <div class="mini"><div><b class="num">${eur(paye)}</b><span>déjà payé</span></div><div><b class="num">${eur(Math.max(0,engage-paye))}</b><span>reste à payer</span></div><div><b class="num">${perGuest?eur(perGuest):"—"}</b><span>par invité</span></div></div></div>`;
-
-  const ps=pendingSugs(),ag=S.agent;
-  const agH=`<div class="panel c5"><div class="panel-h"><h3>Assistant e-mails</h3><span class="chip ${ag.status==="actif"?"ok":""}">${ag.status==="actif"?"Actif":"Non connecté"}</span></div>
-    ${ps.length?`<div class="list">${ps.slice(0,3).map(s=>`<div class="row click" data-go="assistant"><div class="main"><div class="t">${esc(s.summary||s.subject)}</div><div class="m"><span>${esc((SUGTYPE[s.type]||["Info"])[0])}</span><span>${esc(s.from||"")}</span></div></div></div>`).join("")}</div>
-      <div style="margin-top:22px"><button class="btn primary sm" data-go="assistant">Valider ${ps.length} proposition${ps.length>1?"s":""}</button></div>`
-    :`<p style="margin:0;color:var(--muted);font-size:14px">${ag.status==="actif"?"Aucune nouvelle proposition. Dernier passage "+(ag.lastRun?relDay(pd(ag.lastRun)):"inconnu")+".":"Branchez la boîte mail dédiée : les devis, échéances et réponses d'invités arriveront ici, prêts à être validés."}</p>
-      <div style="margin-top:14px"><button class="btn sm" data-go="assistant">Voir l'assistant</button></div>`}</div>`;
-
-  return `<div class="dash">${coachHome(al)}${focusH}${rdvH}${onboardH()}${S.f.overview?`<div class="c12 ov-h"><h3 class="sec dash-sec">Vue d'ensemble</h3><button class="link" data-act="overview">Masquer</button></div>${kpis}${milesH}${payH}${whoH}${budH}${agH}`
-    :`<button class="ov-open c12" data-act="overview"><span><b>Vue d'ensemble</b><span>Avancement, jalons, paiements, budget par poste, qui fait quoi</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>`}</div>`;
 }
 
 function taskRow(t){
   const due=taskDue(t),late=isLate(t);
-  return `<div class="row ${t.status==="done"?"done":""}">
+  return `<div class="row ${t.status==="done"?"done":""} ${late?"late":""}" data-task="${t.id}">
     <button class="check ${t.status}" data-act="cycle" data-id="${t.id}" aria-label="Marquer comme ${t.status==="done"?"à faire":"fait"}" title="${STATUS[t.status]||STATUS.todo}"></button>
     <div class="main click" data-edit="tasks" data-id="${t.id}" style="cursor:pointer;margin:-12px 0;padding:12px 0">
       <div class="t">${esc(t.title)}</div>
@@ -438,12 +522,14 @@ function vPlanning(){
   const dupH=dups.length?`<div class="dups">${dups.slice(0,3).map(x=>`<div class="banner dup"><b>Doublon possible</b><span>« ${esc(x.a.title)} » et « ${esc(x.b.title)} »</span>
     <div class="dup-acts"><button class="btn sm primary" data-act="dupmerge" data-a="${x.a.id}" data-b="${x.b.id}">Fusionner</button><button class="btn sm" data-act="dupkeep" data-k="${x.key}">Ce sont deux tâches</button></div></div>`).join("")}</div>`:"";
   return `${subnav([["planning","Tâches"],["agenda","Agenda"]])}<div class="vh"><div><h2>Rétroplanning</h2><p>${d?"Les échéances se calculent à partir de la date du mariage. Une échéance précise sur une tâche prend le dessus.":"Fixez la date dans Réglages pour voir les échéances."}</p></div>
-    <button class="btn primary" data-new="tasks" ${S.canWrite?"":"disabled"}>Ajouter une tâche</button></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="pdfreport">Rapport PDF</button><button class="btn primary" data-new="tasks" ${S.canWrite?"":"disabled"}>Ajouter une tâche</button></div></div>
   <div class="filters">
     <div class="seg" role="group" aria-label="Filtrer par personne">${[["all","Tout"],["claire",P1()],["julien",P2()],["deux","Ensemble"]].map(([k,l])=>`<button data-f="owner" data-v="${k}" aria-pressed="${f.owner===k}">${l}</button>`).join("")}</div>
     <label class="toggle"><input type="checkbox" id="hide-done" ${f.hideDone?"checked":""}> Masquer les tâches faites</label>
   </div>
-  ${dupH}${groups||emptyBlock("Aucune tâche pour l'instant","Ajoutez la première avec le bouton ci-dessus.")}`;
+  ${dupH}${groups||emptyBlock("Aucune tâche pour l'instant","Ajoutez la première avec le bouton ci-dessus.")}
+  <div class="plan-ov ${S.f.overview?"open":""}"><button class="ov-open" data-act="overview" aria-expanded="${!!S.f.overview}"><span><b>Vue d'ensemble</b><span>Jalons et qui fait quoi</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
+    ${S.f.overview?`<div class="plan-ov-b">${milestonesPanel()}${whoPanel()}</div>`:""}</div>`;
 }
 
 /* ---------- Agenda ---------- */
@@ -474,6 +560,8 @@ function vBudget(){
   </div>`;
   const gap=resv-engage;
   const ref=tot||prevu;
+  const yes=S.guests.filter(x=>x.rsvp==="oui").length,guestsBase=yes||num(S.settings.invitesCible)||S.guests.length;
+  const perGuest=guestsBase?(engage||prevu)/guestsBase:0;
   // Liste (lisible sur téléphone) : poste, part du budget calculée en direct, prévu à droite, engagé/payé en dessous
   const body=rows.map(b=>{
     const p=num(b.prevu),e=num(b.engage),pa=num(b.paye),over=e>p&&p>0;
@@ -485,8 +573,9 @@ function vBudget(){
   return `<div class="vh"><div><h2>Budget</h2><p>Prévu = enveloppe du poste · Engagé = devis signés · Payé = acomptes et soldes versés.</p></div>
     <button class="btn primary" data-new="budget" ${S.canWrite?"":"disabled"}>Ajouter un poste</button></div>
   ${strip}
+  ${payments().length?paymentsPanel():""}
   ${gap>0?`<div class="banner warn">Les prestataires réservés totalisent ${eur(resv)}, soit ${eur(gap)} de plus que l'engagé du budget. Pensez à reporter les devis signés.</div>`:""}
-  ${rows.length?`<div class="list blist2">${body}<div class="brow total"><div class="brow-main"><div class="brow-t">Total</div>${tot?`<div class="brow-s">${eur(prevu)} prévus pour ${eur(tot)} de budget</div>`:""}</div><div class="brow-end"><b class="num ${tot&&prevu>tot?"over":""}">${eur(prevu)}</b>${engage||paye?`<span class="num">engagé ${eur(engage)} · payé ${eur(paye)}</span>`:""}</div></div></div>`
+  ${rows.length?`<div class="list blist2">${body}<div class="brow total"><div class="brow-main"><div class="brow-t">Total</div>${tot||perGuest?`<div class="brow-s">${[tot?`${eur(prevu)} prévus pour ${eur(tot)} de budget`:"",perGuest?`${eur(perGuest)} par invité`:""].filter(Boolean).join(" · ")}</div>`:""}</div><div class="brow-end"><b class="num ${tot&&prevu>tot?"over":""}">${eur(prevu)}</b>${engage||paye?`<span class="num">engagé ${eur(engage)} · payé ${eur(paye)}</span>`:""}</div></div></div>`
   :emptyBlock("Aucun poste de budget","Ajoutez vos postes : lieu, traiteur, photographe…")}`;
 }
 
@@ -655,21 +744,22 @@ function vPrestataires(){
   if(f.vCat&&f.vCat!=="all"&&allCats.includes(f.vCat))vs=vs.filter(v=>v.cat===f.vCat);
   const cats=VCATS.filter(c=>vs.some(v=>v.cat===c));
   const engaged=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
-  const toPay=S.vendors.filter(v=>v.status!=="ecarte"&&num(v.acompte)&&!v.acomptePaye).length;
+  // seulement les prestataires réservés : l'acompte d'un simple devis n'est pas encore dû
+  const toPay=S.vendors.filter(v=>v.status==="reserve"&&num(v.acompte)&&!v.acomptePaye).length;
   const sc=v=>v.status==="ecarte"?-2:(v.fit&&v.fit.score!=null?v.fit.score:-1);
   const groups=cats.map(c=>{
     const list=vs.filter(v=>v.cat===c).sort((a,b)=>sc(b)-sc(a)||VSTAT_RANK[b.status]-VSTAT_RANK[a.status]);
     const qk=VCAT2Q[c],p=qk?catProg(qk):null,m=qk?bMeta(qk):{};
     const cmp=S.vendors.filter(v=>v.cat===c&&v.status!=="ecarte").length>=2;
     return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${cmp?`<button class="chip acc" data-act="compare" data-cat="${esc(c)}">Comparer</button>`:""}${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${p?`<button class="chip ${p.p>=.7?"ok":p.p>0?"warn":""}" data-bgo="${qk}">Brief ${Math.round(p.p*100)} %</button>`:""}</div></div>
-    <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">${list.length>1?`<span class="rank">${i+1}</span>`:""}${fitBadge(v)}
-      <div class="main" style="flex:1;min-width:0"><div class="t" style="font-weight:500">${esc(v.name)}</div>
-        ${fi.verdict?`<div class="verdict">${esc(fi.verdict)}</div>`:""}
-        <div class="m" style="font-size:13px;color:var(--muted);display:flex;flex-wrap:wrap;gap:2px 10px">${v.prix?`<span class="num">${eur(v.prix)}</span>`:""}${av.note?`<span class="stars">★ ${esc(String(av.note).replace(".",","))}${av.nombre?` <span style="color:var(--muted);font-weight:500">(${esc(av.nombre)} avis)</span>`:""}</span>`:""}${num(v.acompte)?`<span class="${v.acomptePaye?"":"over"}">Acompte ${eur(v.acompte)} ${v.acomptePaye?"versé":"à verser"}</span>`:""}${v.tel?`<span class="num">${esc(v.tel)}</span>`:""}</div></div>
-      <div class="end" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${v.source==="mail"?'<span class="chip gold">via e-mail</span>':""}<span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span></div></div>`}).join("")}</div></section>`;
+    <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};const sc=fi.score!=null?Math.round(fi.score):null;return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">
+      <div class="vr-head">${list.length>1?`<span class="rank num">${i+1}.</span>`:""}<span class="t">${esc(v.name)}</span>${sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none" title="Pas encore analysé">à analyser</span>`}</div>
+      <div class="vr-tags"><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${v.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div>
+      ${fi.verdict?`<div class="verdict">${esc(fi.verdict)}</div>`:""}
+      <div class="m">${v.prix?`<span class="num">${eur(v.prix)}</span>`:""}${av.note?`<span class="stars">★ ${esc(String(av.note).replace(".",","))}${av.nombre?` <span style="color:var(--muted);font-weight:500">(${esc(av.nombre)} avis)</span>`:""}</span>`:""}${num(v.acompte)?(v.status==="reserve"?`<span class="${v.acomptePaye?"":"over"}">Acompte ${eur(v.acompte)} ${v.acomptePaye?"versé":"à verser"}</span>`:`<span>Acompte demandé ${eur(v.acompte)}</span>`):""}${v.tel?`<span class="num">${esc(v.tel)}</span>`:""}</div></div>`}).join("")}</div></section>`;
   }).join("");
   return `<div class="vh"><div><h2>Annuaire des prestataires</h2><p>${S.vendors.length} prestataire${S.vendors.length>1?"s":""} · ${S.vendors.filter(v=>v.status==="reserve").length} réservé${S.vendors.filter(v=>v.status==="reserve").length>1?"s":""} pour ${eur(engaged)}${toPay?` · <span class="over">${toPay} acompte${toPay>1?"s":""} à verser</span>`:""}. Classés par note de fit dans chaque catégorie.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${cmpCats().length?`<button class="btn" data-act="compare" data-cat="${esc(f.vCat&&f.vCat!=="all"?f.vCat:"")}">Comparer</button>`:""}<button class="btn" data-new="vendors" ${S.canWrite?"":"disabled"}>Ajouter un prestataire</button></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="briefsmenu">Briefs à envoyer</button><button class="btn" data-new="vendors" ${S.canWrite?"":"disabled"}>Ajouter un prestataire</button></div></div>
   ${analyseBar("annuaire")}
   <div class="filters"><div class="seg" role="group" aria-label="Afficher">${[["actifs","En cours"],["reserve","Réservés"],["ecarte","Écartés"],["tous","Tous"]].map(([k,l])=>`<button data-f="vView" data-v="${k}" aria-pressed="${vv===k}">${l}</button>`).join("")}</div>
     ${allCats.length>1?`<div class="chip-row" role="group" aria-label="Catégorie">${[["all","Toutes"],...allCats.map(c=>[c,c])].map(([k,l])=>`<button class="chip ${(f.vCat||"all")===k?"on":""}" data-f="vCat" data-v="${esc(k)}" aria-pressed="${(f.vCat||"all")===k}">${esc(l)}</button>`).join("")}</div>`:""}</div>
@@ -771,6 +861,7 @@ function openFiche(id){
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
+    ${ficheBrief(qk)}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div>${S.vendors.filter(x=>x.cat===v.cat).length>=2?`<button type="button" class="btn" data-act="compare" data-cat="${esc(v.cat)}" data-id="${v.id}">Comparer</button>`:""}<button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
   </div></div>`;
 }
@@ -805,6 +896,29 @@ function briefsPanel(c){
       ${failed?`<p class="brief-err">La rédaction a échoué : ${esc(/credit balance/i.test(b.lastError||"")?"le crédit Claude est épuisé (à recharger sur console.anthropic.com).":b.lastError||"erreur inconnue.")} Vous pouvez réessayer.</p>`:""}
       ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
 }
+// Briefs là où l'on contacte les prestataires : dans la fiche (brief du métier) et en tête de la page Prestataires (tous)
+function ficheBrief(qk){
+  if(!qk||!BRIEF_LABEL[qk])return "";
+  const {b,running,ready}=briefsState(),one=ready&&b.categories[qk];
+  return `<div class="fsec fiche-brief"><h4>Brief à lui envoyer</h4>${one?`<button class="btn" data-act="briefpdf" data-c="${qk}">Brief ${esc(BRIEF_LABEL[qk])} (PDF)</button>`
+    :running?`<p class="plan-when" style="margin:0">Le coach rédige vos briefs : environ deux minutes.</p>`
+    :S.canWrite?`<p class="plan-when" style="margin:0 0 8px">Le brief résume vos envies pour ce prestataire, avec les questions à lui poser.</p><button class="btn" data-act="briefsgo">Préparer les briefs</button>`:""}</div>`;
+}
+// Tuile Documents de l'accueil : tous les PDF à partager (briefs, déroulé du jour J, rapport d'organisation)
+function openDocsMenu(){
+  const rows=scheduleRows().length;
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Documents à partager"><h3>Documents à partager</h3>
+    ${briefsPanel(null)}
+    <div class="docs-list">
+      <div class="doc-row"><div><b>Déroulé du jour J</b><span>${rows?`${rows} étape${rows>1?"s":""}, pour les témoins et les prestataires`:"Ajoutez d'abord les étapes dans Jour J"}</span></div>${rows?`<button class="btn sm" data-act="pdfjourj">PDF</button>`:`<button class="btn sm" data-go="jour-j">Ouvrir</button>`}</div>
+      <div class="doc-row"><div><b>Rapport d'organisation</b><span>Planning, budget, prestataires et invités en un document</span></div><button class="btn sm" data-act="pdfreport">PDF</button></div>
+    </div>
+    <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Fermer</button></div></div></div></div>`;
+}
+function openBriefsMenu(){
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Briefs à envoyer">${briefsPanel(null)}
+    <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Fermer</button></div></div></div></div>`;
+}
 const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
 function briefBlocks(k){
   const b=S.briefs,x=b.categories[k];if(!x)return [];
@@ -814,7 +928,7 @@ function briefBlocks(k){
   const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
   const imgs=S.inspirations.filter(i=>i.cat===k&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
   return [{h2:"Brief · "+BRIEF_LABEL[k]},
-    {kpis:[["Date",d?fmtD(d):"à fixer",""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
+    {kpis:[["Date",d?fmtD(d):"à fixer",d&&st.dateIndicative?"indicative, à confirmer":""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
     {p:x.intention},...list("Nos essentiels",x.essentiels),...list("L'ambiance, dans le détail",x.details),...list("Ce que nous ne voulons pas",x.aEviter),
     ...list("En accord avec nos autres prestataires",x.liens),...list("Nos questions pour vous",x.questions),
     ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
@@ -1080,6 +1194,9 @@ function pinterestPanel(){
 }
 function vReglagesIA(){
   return `${subnav([["reglages","Général"],["reglages-ia","Agents IA"]])}<div class="vh"><div><h2>Agents IA</h2><p>Ce que font le coach et les agents, quand ils tournent, ce qu'ils coûtent et ce qu'ils peuvent consulter.</p></div></div>
+  <div class="formpanel mail-link"><div class="panel-h" style="margin-bottom:6px"><h3>Assistant e-mails</h3><span class="chip ${S.agent.status==="actif"?"ok":""}">${S.agent.status==="actif"?"Actif":"Non connecté"}</span></div>
+    <p class="plan-when" style="margin:0 0 12px">${S.agent.status==="actif"?`Il lit la boîte dédiée et propose devis, rendez-vous et tâches à valider. Dernier passage ${S.agent.lastRun?relDay(pd(S.agent.lastRun)):"inconnu"}.`:"Branchez la boîte mail dédiée : les devis, échéances et réponses d'invités arriveront prêts à être validés."}</p>
+    <button class="btn" data-go="assistant">Voir les e-mails analysés${pendingSugs().length?` (${pendingSugs().length} à valider)`:""}</button></div>
   ${pinterestPanel()}
   <div style="margin-top:28px"><h3 class="sec" style="font-size:22px;font-family:var(--f-display)">Planning des agents</h3>
     <p class="plan-when" style="margin:0 0 12px">Les agents vérifient toutes les 10 minutes s'ils ont du travail et tournent selon le planning ci-dessous. Un passage demandé depuis l'app démarre tout de suite.</p>
@@ -1094,7 +1211,8 @@ function vReglages(){
     <div class="cols2">
       <div class="field"><label for="search-s-p1">Prénom (partenaire 1)</label><input type="text" autocomplete="off" id="search-s-p1" name="prenom1" value="${esc(s.prenom1||"")}" ${dis}></div>
       <div class="field"><label for="search-s-p2">Prénom (partenaire 2)</label><input type="text" autocomplete="off" id="search-s-p2" name="prenom2" value="${esc(s.prenom2||"")}" ${dis}></div>
-      <div class="field"><label for="search-s-date">Date du mariage</label><input type="date" id="search-s-date" name="date" value="${esc(s.date||"")}" ${dis}></div>
+      <div class="field"><label for="search-s-date">Date du mariage</label><input type="date" id="search-s-date" name="date" value="${esc(s.date||"")}" ${dis}>
+        <label class="toggle" style="margin-top:8px"><input type="checkbox" id="search-s-dateind" name="dateIndicative" ${s.dateIndicative?"checked":""} ${dis}> Pas encore fixée : date indicative</label></div>
       <div class="field"><label for="search-s-lieu">Lieu de réception</label><input type="text" autocomplete="off" id="search-s-lieu" name="lieu" value="${esc(s.lieu||"")}" placeholder="Nom du domaine, de la salle…" ${dis}></div>
       <div class="field"><label for="search-s-ville">Ville</label><input type="text" autocomplete="off" id="search-s-ville" name="ville" value="${esc(s.ville||"")}" ${dis}></div>
       <div class="field"><label for="search-s-mairie">Mairie</label><input type="text" autocomplete="off" id="search-s-mairie" name="mairie" value="${esc(s.mairie||"")}" placeholder="Commune où le mariage est célébré" ${dis}></div>
@@ -1105,7 +1223,7 @@ function vReglages(){
   </form>
 
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Photo du couple</h3></div>
-    <div class="photo-row">${coupleAvatar()}<div><p class="plan-when" style="margin:0 0 10px">Affichée sur l'accueil, à côté du « Bonjour ». La même pour vous deux.</p>
+    <div class="photo-row">${coupleAvatar()}<div><p class="plan-when" style="margin:0 0 10px">Affichée en haut de l'app, à côté du compte à rebours ; la toucher ouvre ces réglages. La même pour vous deux.</p>
     ${S.canWrite?`<button class="btn sm" data-act="couplephoto">${S.photo&&S.photo.data?"Changer":"Ajouter une photo"}</button>${S.photo&&S.photo.data?` <button class="btn sm" data-act="couplephotox">Retirer</button>`:""}`:""}</div></div></div>
   ${pushPanel()}
   <div class="formpanel" style="margin-top:28px"><div class="panel-h" style="margin-bottom:6px"><h3>Apparence</h3></div>
@@ -1131,7 +1249,7 @@ async function makePdf(name,spec){
   try{
     const {buildPdf}=await import("./pdf.js");
     const st=S.settings,d=wDate();
-    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase()):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
+    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase())+(st.dateIndicative?" (date indicative, à confirmer)":""):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
       footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
     showPdf(new File([blob],name,{type:"application/pdf"}));
   }catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
@@ -1206,10 +1324,16 @@ function webAsk(m,i){
     <p>« ${esc(w.web.requete)} »</p>${w.web.pourquoi?`<span>${esc(w.web.pourquoi)}</span>`:""}
     <div class="webask-a"><button class="btn sm primary" data-act="webok" data-i="${i}">Autoriser cette recherche</button><button class="link" data-act="webno" data-i="${i}">Non merci</button></div></div>`;
 }
+// Outil ouvrir_page du coach : un bouton « Ouvrir le budget » dans la conversation (jamais de navigation automatique)
+const OPEN_VIEWS=new Set([...VIEWS.map(v=>v[0]),...Object.keys(PARENT_VIEW)]);
+function openBtns(m){
+  const list=(m.actions||[]).filter(a=>a.open&&(a.open.page==="fiche"?a.open.id:OPEN_VIEWS.has(a.open.page)));
+  return list.length?`<div class="open-acts">${list.map(a=>`<button class="btn sm" data-act="chatopen" data-p="${esc(a.open.page)}" data-id="${esc(a.open.id||"")}">${esc(a.label)}</button>`).join("")}</div>`:"";
+}
 function chatItems(){
   const c=S.chat;
   const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u">${(m.thumbs||[]).length?`<div class="cm-thumbs">${m.thumbs.map(u=>`<img src="${u}" alt="Photo envoyée">`).join("")}</div>`:""}<div class="bub">${esc(m.text)}</div></div>`
-    :`<div class="cm a"><div class="bub">${mdLite(m.text)}${(m.sources||[]).length?`<div class="srcs"><span>Sources</span>${m.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.url)}</a>`).join("")}</div>`:""}</div>${webAsk(m,i)}${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).filter(a=>!a.web).length?`<div class="acts-done">${m.actions.filter(a=>!a.web).map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
+    :`<div class="cm a"><div class="bub">${mdLite(m.text)}${(m.sources||[]).length?`<div class="srcs"><span>Sources</span>${m.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.url)}</a>`).join("")}</div>`:""}</div>${webAsk(m,i)}${openBtns(m)}${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).filter(a=>!a.web&&!a.open).length?`<div class="acts-done">${m.actions.filter(a=>!a.web&&!a.open).map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
       ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`);
   const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`
     :!c.busy&&c.mode==="brief"&&S.canWrite?`<div class="chat-sugg"><button class="chip" data-act="chatfile">Montrer une photo au coach</button></div>`:"";
@@ -1359,29 +1483,7 @@ async function setCouplePhoto(file){
 }
 function pickCouplePhoto(){let i=document.getElementById("couple-file");if(!i){i=document.createElement("input");i.type="file";i.accept="image/*";i.id="couple-file";i.hidden=true;document.body.appendChild(i);i.addEventListener("change",()=>{setCouplePhoto(i.files&&i.files[0]);i.value=""})}i.click()}
 
-/* ---------- Démarrage guidé ---------- */
-function onboarding(){
-  const s=S.settings,g=S.guests;
-  const other=Object.keys(S.presence||{}).filter(k=>k!==presKey());
-  return [
-    ["Date du mariage",!!s.date,"reglages"],["Budget total",!!num(s.budgetTotal),"budget"],
-    ["Ville et nombre d'invités visé",!!(s.ville&&num(s.invitesCible)),"reglages"],
-    ["Invités rangés par groupe",g.length>0&&g.filter(x=>!x.group).length<=g.length*.2,"invites"],
-    ["Nos envies remplies (70 %)",allProg()>=.7,"brief"],
-    ["Notifications activées sur ce téléphone",S.pushState==="on","reglages"],
-    ["Les deux connectés à l'app",other.length>0,null],
-  ];
-}
 const presKey=()=>String(S.user&&S.user.email||"").toLowerCase().replace(/[^a-z0-9]/g,"_");
-function onboardH(){
-  let hidden=false;try{hidden=localStorage.getItem("mariage-onboard-off")==="1"}catch(e){}
-  const items=onboarding(),done=items.filter(x=>x[1]).length;
-  if(hidden||done===items.length)return "";
-  const open=S.ui.onb;
-  return `<div class="panel c12 onboard ${open?"open":""}"><button class="ob-h" data-act="uionb" aria-expanded="${!!open}"><b>Bien démarrer</b><span class="ob-bar"><i style="width:${done/items.length*100}%"></i></span><span class="num ob-n">${done}/${items.length}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-    ${open?`<ul class="ob-list">${items.map(([l,ok,go])=>`<li class="${ok?"ok":""}"><span class="dot" aria-hidden="true"></span><span>${l}</span>${ok?'<span class="sr">fait</span>':go==="brief"?`<button class="btn sm primary" data-act="chat" data-m="brief">Remplir avec le coach</button>`:go?`<button class="btn sm" data-go="${go}">Compléter</button>`:`<span class="ob-hint">${esc(COUPLE())} se connectent chacun une fois</span>`}</li>`).join("")}</ul>
-    <button class="link ob-off" data-act="onboardoff">Ne plus afficher</button>`:""}</div>`;
-}
 
 /* ---------- Notifications push ---------- */
 const isStandalone=()=>window.matchMedia("(display-mode: standalone)").matches||navigator.standalone===true;
@@ -1393,7 +1495,7 @@ async function refreshPushState(){
   if(!("serviceWorker" in navigator)||!("PushManager" in window)||!("Notification" in window))st=isIOS()&&!isStandalone()?"install":"unsupported";
   else if(Notification.permission==="denied")st="denied";
   else{const reg=await navigator.serviceWorker.getRegistration("/");const sub=reg&&await reg.pushManager.getSubscription();st=sub?"on":"off"}
-  if(st!==S.pushState){S.pushState=st;if(S.view==="reglages")render()}
+  if(st!==S.pushState){S.pushState=st;if(S.view==="reglages"||S.view==="apercu")render()}
 }
 async function enablePush(){
   if(!S.push.publicKey){toast("Les notifications seront prêtes après le prochain passage des agents (10 min)");return}
@@ -1432,7 +1534,7 @@ function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t
 /* ---------- Render ---------- */
 const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
 function render(){
-  renderHero();renderTabs();
+  renderHero();renderTabs();queueTop();
   const main=document.getElementById("main");
   const ae=document.activeElement,aid=ae&&main.contains(ae)?ae.id:null,sel=aid&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null;
   if(aid&&aid!=="gq"&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&/^(text|number|email|date|time|search)$/.test(ae.type)))){S.pending=true;return}
@@ -1448,7 +1550,21 @@ function render(){
   setHTML(main,pre+(VIEWFN[S.view]||vApercu)());
   if(aid){const el=document.getElementById(aid);if(el){el.focus();if(sel)try{el.setSelectionRange(sel[0],sel[1])}catch(e){}}}
 }
-function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0)}
+// Haut de page : apparence sombre sous la barre d'état tant que l'en-tête est visible (voir styles.css, html.at-top).
+let topRaf=0;
+function syncTop(){
+  topRaf=0;
+  const h=document.querySelector(".hero"),b=h&&h.offsetParent!==null?h.getBoundingClientRect().bottom:0;
+  const on=b>Math.max(20,parseFloat(getComputedStyle(h||document.body).paddingTop)||0),root=document.documentElement;
+  if(root.classList.contains("at-top")===on)return;
+  root.classList.toggle("at-top",on);
+  const m=document.querySelector('meta[name="theme-color"]');
+  if(m)m.content=on?getComputedStyle(root).getPropertyValue("--hero-a").trim()||"#1E2A3A":getComputedStyle(document.body).backgroundColor;
+}
+const queueTop=()=>{if(!topRaf)topRaf=requestAnimationFrame(syncTop)};
+addEventListener("scroll",queueTop,{passive:true,capture:true});
+addEventListener("resize",queueTop);
+function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);syncTop()}
 
 /* ---------- Modal editor ---------- */
 const SCHEMAS={
@@ -1643,6 +1759,8 @@ document.addEventListener("click",async e=>{
     if(!c){openChat("brief");return}
     S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
+  if(a==="briefsmenu"){openBriefsMenu();return}
+  if(a==="docsmenu"){openDocsMenu();return}
   if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;t.disabled=true;t.textContent="Rédaction en cours…";if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
   if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
     document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Budget total"><h3>Budget total</h3>
@@ -1664,7 +1782,6 @@ document.addEventListener("click",async e=>{
   if(a==="uiopts"){const k=t.dataset.id;S.ui.opts[k]=!S.ui.opts[k];render();return}
   if(a==="uimore"){S.ui.more=!S.ui.more;render();return}
   if(a==="uihebdo"){S.ui.hebdo=!S.ui.hebdo;render();return}
-  if(a==="uionb"){S.ui.onb=!S.ui.onb;render();return}
   if(a==="couplephoto"){if(S.canWrite)pickCouplePhoto();return}
   if(a==="couplephotox"){if(S.canWrite&&await setDoc("meta/photo",{},{data:"",updatedAt:Date.now()}))toast("Photo retirée");return}
   if(a==="cmpnone"){S.cmp.ids=[];openCompare(S.cmp.cat);return}
@@ -1674,6 +1791,7 @@ document.addEventListener("click",async e=>{
   if(a==="inspdel"){if(!S.canWrite)return;if(!t.classList.contains("armed")){t.classList.add("armed");t.textContent="Confirmer";return}if(await remove("inspirations",id)){if(document.querySelector(".modal.lb"))closeModal();toast("Inspiration retirée")};return}
   if(a==="inspadd"){openChat("brief");setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
   if(a==="chatmic"){toggleMic(t);return}
+  if(a==="chatopen"){const p=t.dataset.p;if(p==="fiche"){closeModal();openFiche(t.dataset.id)}else go(p);return}
   if(a==="mailcopy"){const m=mailOf((S.chat.messages[+t.dataset.i]||{}).text);if(!m)return;const txt=`Objet : ${m.subject}\n\n${m.body}`;try{await navigator.clipboard.writeText(txt);toast("Mail copié")}catch(e){toast("Copie impossible : sélectionnez le texte")}return}
   if(a==="pdfshare"){try{await navigator.share({files:[S.pdfFile],title:S.pdfFile.name})}catch(e){if(e&&e.name!=="AbortError")toast("Partage impossible : utilisez « Ouvrir le PDF »")}return}
   if(a==="pdfjourj"){pdfJourJ();return}
@@ -1687,7 +1805,6 @@ document.addEventListener("click",async e=>{
   if(a==="chatbottom"){chatJump();return}
   if(a==="chatmode"){S.chat.mode=t.dataset.m;renderChat();if(t.dataset.m==="brief")sendChat("Commençons le questionnaire Nos envies.");return}
   if(a==="chatreset"){if(S.chat.busy)return;S.chat.messages=[];renderChat();try{await callAssistant({reset:true})}catch(e){}return}
-  if(a==="onboardoff"){try{localStorage.setItem("mariage-onboard-off","1")}catch(e){}render();return}
   if(a==="pushon"){t.disabled=true;try{await enablePush()}catch(err){toast("Activation impossible : "+(err.message||err));t.disabled=false}return}
   if(a==="pushoff"){t.disabled=true;try{await disablePush()}catch(err){toast("Échec : "+(err.message||err));t.disabled=false}return}
   if(a==="compare"){openCompare(t.dataset.cat,t.dataset.id);return}
@@ -1701,7 +1818,6 @@ document.addEventListener("click",async e=>{
   if(a==="accept"){if(S.canWrite){t.disabled=true;await acceptSug(id)}return}
   if(a==="dismiss"){if(S.canWrite&&await patch("inbox",id,{status:"dismissed",decidedAt:Date.now()}))toast("Ignoré");return}
   if(a==="restore"){if(S.canWrite)await patch("inbox",id,{status:"new"});return}
-  if(a==="more"){openMore();return}
   if(a==="fire"){t.disabled=true;await fireAnalysis();render();return}
   if(a==="runnow"){t.disabled=true;await runNow(t.dataset.job);render();return}
   if(a==="editv"){openEditor("vendors",id);return}
@@ -1732,7 +1848,6 @@ document.addEventListener("focusout",()=>{setTimeout(()=>{if(S.pending&&!(docume
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.fiche){e.preventDefault();openFiche(e.target.dataset.fiche)}});
 document.addEventListener("submit",async e=>{
   const f=e.target;
-  if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-text");const v=inp.value.trim();if(!v)return;inp.value="";openChat("chat");await sendChat(v);return}
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
@@ -1746,6 +1861,7 @@ document.addEventListener("submit",async e=>{
     e.preventDefault();
     const d={updatedAt:Date.now()};["prenom1","prenom2","date","lieu","ville","mairie","notes"].forEach(k=>d[k]=f.elements[k].value.trim());
     ["invitesCible"].forEach(k=>{const v=f.elements[k].value;d[k]=v===""?null:num(v)});
+    d.dateIndicative=!!f.elements.dateIndicative.checked;
     if(await setDoc("meta/settings",S.settings,d)){mergeDoc("meta/analyse",{profilRequestedAt:Date.now()});document.activeElement&&document.activeElement.blur();toast("Réglages enregistrés");render()}
     return;
   }

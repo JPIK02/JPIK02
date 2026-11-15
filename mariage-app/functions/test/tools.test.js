@@ -28,6 +28,17 @@ test("chaque outil déclaré a une implémentation", async () => {
   assert.ok(!TOOL_DEFS.some(t => /supprim|delete/i.test(t.name)), "aucun outil de suppression");
 });
 
+test("ouvrir_page : un bouton vers la page, rien n'est écrit", async () => {
+  const db = base(); const before = JSON.stringify(db.data); const exec = makeTools(db, { qcats: QCATS, now });
+  const r = await exec("ouvrir_page", { page: "budget" });
+  assert.deepEqual(r.action.open, { page: "budget" }); assert.equal(r.action.label, "Ouvrir le budget"); assert.ok(!r.action.ops);
+  const f = await exec("ouvrir_page", { page: "fiche", id: "v1" });
+  assert.deepEqual(f.action.open, { page: "fiche", id: "v1" }); assert.match(f.action.label, /Château de Couturelle/);
+  assert.ok((await exec("ouvrir_page", { page: "fiche", id: "inconnu" })).isError);
+  assert.ok((await exec("ouvrir_page", { page: "cuisine" })).isError);
+  assert.equal(JSON.stringify(db.data), before);
+});
+
 test("aperçu : retards, budget, invités", async () => {
   const exec = makeTools(base(), { qcats: QCATS, now });
   const a = JSON.parse((await exec("apercu")).content);

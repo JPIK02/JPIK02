@@ -1,0 +1,7 @@
+{
+ "name": "date-indicative-2026-11",
+ "source": "La date du 20 mai 2028 n'est pas encore fixée : elle reste indicative (case modifiable dans Réglages > Général)",
+ "ops": [
+  { "op": "merge", "path": "meta/settings", "data": { "dateIndicative": true } }
+ ]
+}

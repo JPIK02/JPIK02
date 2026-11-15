@@ -2,6 +2,12 @@ name: Diagnostic briefs
 # Lecture seule : affiche le début de chaque brief prestataire enregistré.
 on:
   workflow_dispatch:
+    inputs:
+      cible:
+        description: "Diagnostic"
+        type: choice
+        options: ["briefs", "ecawee"]
+        default: "briefs"
 jobs:
   diag:
     runs-on: ubuntu-latest
@@ -15,6 +21,6 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: node diag-briefs.js
+      - run: if [ "${{ inputs.cible }}" = "ecawee" ]; then node diag-vendor.js ecaw; else node diag-briefs.js; fi
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
