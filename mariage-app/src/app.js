@@ -1629,12 +1629,6 @@ function openEditor(col,id){
   });
 }
 function closeModal(){document.getElementById("layer").innerHTML=""}
-// Champ du coach sur l'accueil : la conversation s'ouvre en plein écran et le message part
-document.addEventListener("submit",e=>{
-  if(e.target.id!=="home-ask")return;
-  e.preventDefault();const inp=document.getElementById("home-q"),q=inp.value.trim();inp.value="";inp.blur();
-  openChat("chat");if(q&&S.canWrite)sendChat(q);
-});
 function openRsvp(id){
   const g=S.guests.find(x=>x.id===id);if(!g)return;const r=g.rsvp||"attente";
   document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Réponse de ${esc(g.name)}"><h3>Réponse de ${esc(g.name)}</h3>
@@ -1815,7 +1809,8 @@ document.addEventListener("focusout",()=>{setTimeout(()=>{if(S.pending&&!(docume
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.fiche){e.preventDefault();openFiche(e.target.dataset.fiche)}});
 document.addEventListener("submit",async e=>{
   const f=e.target;
-  if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-text");const v=inp.value.trim();if(!v)return;inp.value="";openChat("chat");await sendChat(v);return}
+  // champ du coach sur l'accueil : la conversation s'ouvre en plein écran et le message part
+  if(f.id==="home-ask"){e.preventDefault();const inp=document.getElementById("home-q");const v=inp.value.trim();inp.value="";inp.blur();openChat("chat");if(v&&S.canWrite)await sendChat(v);return}
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
