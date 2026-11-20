@@ -32,4 +32,8 @@ const insp = await listAll("inspirations");
 const parCat = {};
 for (const i of insp) parCat[i.cat || "?"] = (parCat[i.cat || "?"] || 0) + 1;
 console.log(`Inspirations par catégorie : ${Object.entries(parCat).map(([k, n]) => `${k} ${n}`).join(", ") || "aucune"}.`);
+// Nouveau questionnaire : réglages des tuiles (drapeaux seulement) et réponses de la tuile Wedding planner (choix, sans texte)
+const envies = await listAll("envies");
+for (const d of envies.filter(x => x.id.startsWith("_tuile."))) console.log(`${d.id} : actif=${d.actif} pasPourNous=${d.pasPourNous} maj=${d.updatedAt ? new Date(d.updatedAt).toISOString() : "-"} par=${d.by ? "oui" : "-"}`);
+for (const d of envies.filter(x => x.id.startsWith("planner."))) console.log(`${d.id} : v=${JSON.stringify(d.v)} texte=${d.libre ? "oui" : "non"} par=${d.by ? "oui" : "-"}`);
 process.exit(0);
