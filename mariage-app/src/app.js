@@ -1010,7 +1010,9 @@ function archivedAnswers(){return ARCHIVED.map(id=>{const d=S.brief.find(x=>x.id
 // Enregistre une réponse de « Nos envies » (fields : champs remplacés en entier, le reste du document est gardé)
 async function saveEnvie(id,data,fields){
   if(!S.db||!S.canWrite)return false;
-  try{await S.db.collection("envies").doc(id).set(Object.assign({},data,{by:String(S.user&&S.user.email||""),updatedAt:Date.now()}),{mergeFields:fields});return true}catch(e){return writeErr(e)}
+  try{await S.db.collection("envies").doc(id).set(Object.assign({},data,{by:String(S.user&&S.user.email||""),updatedAt:Date.now()}),{mergeFields:fields});
+    // la synthèse du coach se refait après quelques minutes de calme (profilDue), pas à chaque réponse
+    clearTimeout(saveEnvie.t);saveEnvie.t=setTimeout(()=>mergeDoc("meta/analyse",{profilRequestedAt:Date.now()}),4000);return true}catch(e){return writeErr(e)}
 }
 // Photo ajoutée depuis une tuile ou une question : rangée dans les inspirations de la tuile
 function pickEnviePhoto(k,label){

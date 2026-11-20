@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { getDb, getMeta, listAll } from "./lib/firestore.js";
 import { runForOutput } from "./lib/claude.js";
 import { notify } from "./lib/push.js";
+import { enviesForAI } from "./lib/envies/context.js";
+import { coupleNames } from "./lib/couple.js";
 
 const SYSTEM = readFileSync(new URL("./prompts/briefs.md", import.meta.url), "utf8");
 
@@ -60,11 +62,11 @@ export const OUT = {
 const clean = a => (Array.isArray(a) ? a.map(x => String(x || "").trim()).filter(Boolean).slice(0, 12) : []);
 
 export async function runBriefs({ log = console.log } = {}) {
-  const [settings, brief, profil, inspirations, vendors] = await Promise.all([
-    getMeta("settings"), listAll("brief"), getMeta("profil"), listAll("inspirations"), listAll("vendors")]);
+  const [settings, brief, profil, inspirations, vendors, envies] = await Promise.all([
+    getMeta("settings"), listAll("brief"), getMeta("profil"), listAll("inspirations"), listAll("vendors"), listAll("envies")]);
   const data = {
     reglages: { date: settings.date, lieu: settings.lieu, ville: settings.ville, invitesCible: settings.invitesCible, dateIndicative: !!settings.dateIndicative },
-    entretien: brief.map(({ id, updatedAt, by, ...b }) => ({ id, ...b })),
+    envies: enviesForAI(envies, brief, coupleNames(settings)),
     synthese: { resume: profil.resume, priorites: profil.priorites, divergences: profil.divergences },
     inspirations: inspirations.map(i => ({ categorie: i.cat, description: i.description })),
     prestataires: Object.fromEntries(Object.entries(VCAT).map(([k, c]) => [k, vendors.filter(v => v.cat === c && v.status !== "ecarte").map(v => ({ nom: v.name, statut: v.status }))]).filter(([, l]) => l.length)),

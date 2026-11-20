@@ -5,6 +5,8 @@ import { getDb, getMeta, listAll, mergeMeta } from "./lib/firestore.js";
 import { runForOutput } from "./lib/claude.js";
 import { vendorsToAnalyse } from "./lib/scheduler.js";
 import { notify } from "./lib/push.js";
+import { enviesForAI } from "./lib/envies/context.js";
+import { coupleNames } from "./lib/couple.js";
 
 const SYSTEM = readFileSync(new URL("./prompts/analyse.md", import.meta.url), "utf8");
 
@@ -15,7 +17,7 @@ const PROFIL_OUT = {
     type: "object",
     properties: {
       resume: { type: "string", description: "4 à 6 phrases : ambiance, format, ce qui compte vraiment" },
-      priorites: { type: "array", items: { type: "object", properties: { cat: { type: "string" }, phrase: { type: "string" } }, required: ["cat", "phrase"] } },
+      priorites: { type: "array", items: { type: "object", properties: { cat: { type: "string", description: "clé de la tuile concernée (ex. lieu, repas, photo, mariage)" }, phrase: { type: "string" } }, required: ["cat", "phrase"] } },
       divergences: { type: "array", items: { type: "object", properties: {
         cat: { type: "string" }, sujet: { type: "string" }, claire: { type: "string" }, julien: { type: "string" }, conseil: { type: "string" } }, required: ["sujet"] } },
       questionsOuvertes: { type: "array", items: { type: "string" }, maxItems: 8 },
@@ -54,10 +56,10 @@ const strip = ({ fit, ...v }) => v; // on n'envoie pas l'ancienne fiche à Claud
 
 
 async function loadContext() {
-  const [settings, brief, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("inbox")]);
+  const [settings, brief, envies, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("envies"), listAll("inbox")]);
   return JSON.stringify({
     settings,
-    brief: brief.map(({ id, updatedAt, ...b }) => ({ id, ...b })),
+    envies: enviesForAI(envies, brief, coupleNames(settings)),
     offresRecues: inbox.filter(m => m.type !== "ignored").map(m => ({ from: m.from, summary: m.summary, payload: m.payload })),
   });
 }
@@ -65,7 +67,7 @@ async function loadContext() {
 async function writeProfil(context) {
   const profil = await runForOutput({
     system: SYSTEM,
-    user: `Écris la synthèse du brief (divergences : desaccord=true ou réponses claire/julien différentes).\n\n<donnees>${context}</donnees>`,
+    user: `Écris la synthèse des envies (questionnaire « Nos envies », par tuile ; divergences : avis différents des deux partenaires dans les réponses).\n\n<donnees>${context}</donnees>`,
     output: PROFIL_OUT,
     feature: "synthese",
   });

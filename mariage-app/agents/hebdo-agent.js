@@ -34,7 +34,7 @@ function due(t, wd) {
 
 export async function buildContext(now = new Date()) {
   const [settings, tasks, vendors, budget, rdv, inbox, brief, profil] = await Promise.all([
-    getMeta("settings"), listAll("tasks"), listAll("vendors"), listAll("budget"), listAll("rdv"), listAll("inbox"), listAll("brief"), getMeta("profil")]);
+    getMeta("settings"), listAll("tasks"), listAll("vendors"), listAll("budget"), listAll("rdv"), listAll("inbox"), listAll("envies"), getMeta("profil")]);
   const today = parisClock(now).isoDate, in21 = new Date(now.getTime() + 21 * 864e5).toISOString().slice(0, 10);
   const open = tasks.filter(t => t.status !== "done").map(t => ({ titre: t.title, qui: t.owner || "deux", echeance: due(t, settings.date), statut: t.status }));
   const sum = k => budget.reduce((s, b) => s + (+b[k] || 0), 0);
@@ -47,7 +47,7 @@ export async function buildContext(now = new Date()) {
     budget: { total: +settings.budgetTotal || null, prevu: sum("prevu"), engage: sum("engage"), paye: sum("paye") },
     prestataires: vendors.filter(v => v.status !== "ecarte").map(v => ({ nom: v.name, categorie: v.cat, statut: v.status, prix: v.prix ?? null, note_fit: v.fit?.score ?? null, verdict: v.fit?.verdict, notes: v.note ? String(v.note).slice(0, 300) : undefined })),
     propositions_mail_en_attente: inbox.filter(m => (m.status || "new") === "new" && m.type !== "ignored").length,
-    envies_reponses: brief.filter(b => b.qid !== "_meta").length,
+    envies_reponses: brief.filter(b => !String(b.id).startsWith("_tuile.") && (b.v != null || b.libre || b.p)).length,
     synthese_envies: profil.resume || null,
   };
 }

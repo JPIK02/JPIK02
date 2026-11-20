@@ -4,9 +4,13 @@
 import { createHash } from "node:crypto";
 import { getDb, getMeta } from "./lib/firestore.js";
 import { runForOutput } from "./lib/claude.js";
-import { BRIEF_CATS } from "./briefs-agent.js";
+import { TUILES } from "./lib/envies/catalogue.js";
+import { FR } from "./lib/envies/fr.js";
+import { OLD2TILE } from "./lib/envies/logic.js";
 
-const CATS = { vision: "Votre mariage (ambiance générale)", ...BRIEF_CATS };
+// Tuiles de « Nos envies » (clé → nom) ; un tableau rangé dans une ancienne catégorie est traduit en tuile
+const CATS = Object.fromEntries(TUILES.map(t => [t.k, t.k === "mariage" ? "Votre mariage (ambiance générale)" : FR.tuiles[t.k].nom]));
+const tileOf = c => (CATS[c] ? c : OLD2TILE[c] || "auto");
 const MAX_PER_SYNC = 12;      // épingles importées par passage (coût maîtrisé)
 const UA = "Mozilla/5.0 (compatible; Lamaelle/1.0)";
 
@@ -93,7 +97,7 @@ export async function runPinterest({ log = console.log } = {}) {
     try {
       const xml = await get(rssUrl(b.url));
       if (!/<item>/.test(xml)) throw new Error("tableau vide ou secret : seuls les tableaux publics sont lisibles");
-      for (const p of parseRss(xml)) if (!seen.has(p.id) && !fresh.some(f => f.id === p.id)) fresh.push({ ...p, cat: b.cat || "auto", board: b.url });
+      for (const p of parseRss(xml)) if (!seen.has(p.id) && !fresh.some(f => f.id === p.id)) fresh.push({ ...p, cat: b.cat && b.cat !== "auto" ? tileOf(b.cat) : "auto", board: b.url });
     } catch (e) { errors.push(`${b.url} : ${e.message}`); log(`[pinterest] ${b.url} illisible : ${e.message}`); }
   }
   const batch = fresh.slice(0, MAX_PER_SYNC);
@@ -114,7 +118,7 @@ export async function runPinterest({ log = console.log } = {}) {
     const w = db.batch();
     ok.forEach((p, i) => {
       const e = byN[i + 1] || {};
-      const cat = p.cat !== "auto" && CATS[p.cat] ? p.cat : CATS[e.categorie] ? e.categorie : "vision";
+      const cat = p.cat !== "auto" && CATS[p.cat] ? p.cat : CATS[e.categorie] ? e.categorie : "mariage";
       w.set(db.doc(`inspirations/pin-${p.id}`), {
         cat, description: String(e.description || p.title || "Épingle Pinterest").slice(0, 400), thumb: p.data,
         by: "Pinterest", source: "pinterest", pinUrl: p.link, createdAt: Date.now(),
