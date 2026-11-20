@@ -1,12 +1,13 @@
 name: Diagnostic briefs
-# Lecture seule : affiche le début de chaque brief prestataire enregistré.
+# Diagnostics en lecture seule (briefs, ecawee, envies), et migration de « Nos envies » :
+# « migration-simulation » n'écrit rien ; « migration-ecrire » sauvegarde tout puis migre (voir agents/migrate-envies.js).
 on:
   workflow_dispatch:
     inputs:
       cible:
         description: "Diagnostic"
         type: choice
-        options: ["briefs", "ecawee", "envies"]
+        options: ["briefs", "ecawee", "envies", "migration-simulation", "migration-ecrire"]
         default: "briefs"
 jobs:
   diag:
@@ -21,6 +22,6 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: if [ "${{ inputs.cible }}" = "ecawee" ]; then node diag-vendor.js ecaw; elif [ "${{ inputs.cible }}" = "envies" ]; then node diag-envies.js; else node diag-briefs.js; fi
+      - run: if [ "${{ inputs.cible }}" = "ecawee" ]; then node diag-vendor.js ecaw; elif [ "${{ inputs.cible }}" = "envies" ]; then node diag-envies.js; elif [ "${{ inputs.cible }}" = "migration-simulation" ]; then node migrate-envies.js; elif [ "${{ inputs.cible }}" = "migration-ecrire" ]; then node migrate-envies.js ecrire; else node diag-briefs.js; fi
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
