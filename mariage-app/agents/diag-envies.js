@@ -35,5 +35,10 @@ console.log(`Inspirations par catégorie : ${Object.entries(parCat).map(([k, n])
 // Nouveau questionnaire : réglages des tuiles (drapeaux seulement) et réponses de la tuile Wedding planner (choix, sans texte)
 const envies = await listAll("envies");
 for (const d of envies.filter(x => x.id.startsWith("_tuile."))) console.log(`${d.id} : actif=${d.actif} pasPourNous=${d.pasPourNous} maj=${d.updatedAt ? new Date(d.updatedAt).toISOString() : "-"} par=${d.by ? "oui" : "-"}`);
+const orig = { app: 0, coach: 0, migration: 0, autre: 0 }, last = {};
+for (const d of envies) { const o = d.by === "migration" ? "migration" : String(d.by || "").includes("@") ? "app" : d.by ? "coach" : "autre"; orig[o]++; last[o] = Math.max(last[o] || 0, +d.updatedAt || 0); }
+console.log(`Origine des ${envies.length} documents envies : ${Object.entries(orig).map(([k, n]) => `${k} ${n}${last[k] ? ` (dernier ${new Date(last[k]).toISOString()})` : ""}`).join(", ")}`);
+const rec = await listAll("recompenses");
+console.log(`Récompenses : ${rec.map(r => `${r.id} ${r.status}`).join(", ") || "aucune"}`);
 for (const d of envies.filter(x => x.id.startsWith("planner."))) console.log(`${d.id} : v=${JSON.stringify(d.v)} texte=${d.libre ? "oui" : "non"} par=${d.by ? "oui" : "-"}`);
 process.exit(0);
