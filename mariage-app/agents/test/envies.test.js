@@ -92,7 +92,7 @@ test("migration : chaque ancienne question a sa règle, rien n'est perdu", () =>
 });
 
 test("récompenses : ligne d'une note recalculée, reprise des demandes restées sans réponse", async () => {
-  const { ligneNote, recompensesDues } = await import("../recompense-agent.js");
+  const { ligneNote, recompensesDues } = await import("../lib/envies/recompense.js");
   assert.deepEqual(ligneNote(55, 72, { forces: ["Orangerie lumineuse."], vigilance: ["Loin"] }), { type: "pour", texte: "Orangerie lumineuse" });
   assert.deepEqual(ligneNote(80, 68, { forces: ["Beau parc"], vigilance: ["Traiteur imposé"] }), { type: "verifier", texte: "Traiteur imposé" });
   assert.equal(ligneNote(null, 60, {}), null);

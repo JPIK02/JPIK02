@@ -50,7 +50,7 @@ export function tileGris(k, A) {
   if (q1 && q1.format === "JPA") {
     const v = (A[q1.id] && A[q1.id].v) || {};
     const keys = q1.choix && q1.choix.length ? q1.choix.map(c => c.id) : ["_"];
-    if (keys.every(c => v[c] === "j")) return { gris: true, raison: "jamais" };
+    if (keys.every(c => v[c] === "j") || v._ === "j") return { gris: true, raison: "jamais" };
   }
   return { gris: false };
 }

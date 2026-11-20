@@ -12,19 +12,14 @@ import { TBY } from "./lib/envies/logic.js";
 import { coupleNames } from "./lib/couple.js";
 import { fitVendors } from "./analyse-agent.js";
 import { runBriefs } from "./briefs-agent.js";
+import { ligneNote, recompensesDues } from "./lib/envies/recompense.js";
+export { ligneNote, recompensesDues };
 
 export const NIVEAUX_RECOMPENSE = ["essentiel", "details", "pro", "maj"];
 const PHRASE_OUT = { name: "enregistrer_phrase", description: "Ce que l'app a compris de leurs réponses sur cette tuile.", input_schema: { type: "object",
   properties: { phrase: { type: "string", description: "Une seule phrase (30 mots au plus), à la 2e personne du pluriel, avec leurs propres mots entre guillemets français quand c'est possible." } }, required: ["phrase"] } };
 const QUESTIONS_OUT = { name: "enregistrer_questions", description: "Questions à poser à chaque prestataire.", input_schema: { type: "object",
   properties: { prestataires: { type: "array", items: { type: "object", properties: { id: { type: "string" }, questions: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 6 } }, required: ["id", "questions"] } } }, required: ["prestataires"] } };
-
-/** Ligne affichée sous une note recalculée : « Pour vous : … » si elle monte, « À vérifier : … » sinon. */
-export function ligneNote(avant, apres, fit = {}) {
-  const up = avant == null || apres >= avant;
-  const t = String((up ? fit.forces : fit.vigilance)?.[0] || (up ? fit.vigilance : fit.forces)?.[0] || fit.verdict || "").trim();
-  return t ? { type: up ? "pour" : "verifier", texte: t.replace(/\.$/, "") } : null;
-}
 
 export async function runRecompense({ tuile, niveau, log = console.log }) {
   const t = TBY[tuile];
@@ -78,4 +73,3 @@ export async function runRecompense({ tuile, niveau, log = console.log }) {
   }
 }
 /** Récompenses demandées depuis l'app mais pas encore faites (si l'appel direct a échoué) : reprises au passage suivant. */
-export const recompensesDues = (docs = [], now = Date.now()) => docs.filter(d => d.status === "demandee" && now - (+d.requestedAt || 0) > 3 * 60 * 1000);

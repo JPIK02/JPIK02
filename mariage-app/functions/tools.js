@@ -89,6 +89,8 @@ export const TOOL_DEFS = [
   { name: "enregistrer_envie", description: "Enregistre la réponse à une question de « Nos envies » (lis d'abord la tuile avec lire_envies). Reformule fidèlement ce qui a été dit, n'invente rien. Selon le format : choix (CP, CC, CM : ids des choix), cran (CU : 1 à 5), jpa (JPA : {id du choix, ou « _ » pour une question sans choix : jamais | pourquoi_pas | absolument}), ordre (CL : ids dans l'ordre), valeur (CH), texte (TL, ou précision en plus).", input_schema: S({
     question: T("id complet de la question, ex. lieu.type"), choix: { type: "array", items: { type: "string" }, description: "ids des choix" }, cran: { type: "integer", minimum: 1, maximum: 5 },
     jpa: { type: "object", additionalProperties: { type: "string", enum: ["jamais", "pourquoi_pas", "absolument"] } }, ordre: { type: "array", items: { type: "string" } }, valeur: T("chiffre ou fourchette"), texte: T("texte libre fidèle") }, ["question"]) },
+  { name: "mettre_de_cote_tuile", description: "Quand ils disent ne pas vouloir une prestation (« pas de wedding planner », « pas de vidéo »), mets la tuile de côté : elle apparaît « Pas pour nous » et sort de la jauge. pas_pour_nous=false la réactive. Ne dis l'avoir fait qu'après le succès de cet outil.", input_schema: S({
+    tuile: E(TUILES.map(t => t.k)), pas_pour_nous: { type: "boolean" } }, ["tuile", "pas_pour_nous"]) },
   { name: "enregistrer_priorites", description: "Importance (1 à 5), budget cible, critère de réussite et rédhibitoire d'une tuile de « Nos envies ».", input_schema: S({
     tuile: E(TUILES.map(t => t.k)), importance: { type: "integer", minimum: 1, maximum: 5 }, budget: N("€"), reussite: T(""), redhibitoire: T("") }, ["tuile"]) },
   { name: "noter_inspiration", description: "Garde une photo jointe à ce message, ou au dernier message qui contenait des photos (par ex. après leur « oui »), comme inspiration dans « Nos envies » (tuile), avec ce qu'elle montre et ce qu'ils en aiment. À utiliser après avoir décrit la photo et vérifié que c'est bien ce qui leur plaît.", input_schema: S({
@@ -299,7 +301,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       else if (q.format === "CL" && Array.isArray(i.ordre)) v = [...new Set(i.ordre.map(toId).filter(Boolean))];
       else if (q.format === "CU" && Number.isInteger(i.cran) && i.cran >= 1 && i.cran <= 5) v = i.cran;
       else if (q.format === "JPA" && i.jpa && typeof i.jpa === "object") { const X = { jamais: "j", pourquoi_pas: "p", absolument: "a" }; v = {};
-        for (const [c, x] of Object.entries(i.jpa)) { const id = c === "_" ? "_" : toId(c); if (id && X[x]) v[id] = X[x]; } }
+        for (const [c, x] of Object.entries(i.jpa)) { if (!X[x]) continue; if (c === "_" && ids.length) ids.forEach(id => { v[id] = X[x]; }); else { const id = c === "_" ? "_" : toId(c); if (id) v[id] = X[x]; } } }
       else if (q.format === "CH" && str(i.valeur, 100)) v = str(i.valeur, 100);
       const texte = str(i.texte, 2000);
       if (v === undefined && !texte) throw new Error("rien à enregistrer : donne des choix (ids), un cran, un jpa, un ordre, une valeur ou un texte");
@@ -309,6 +311,13 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       const op = await write(`envies/${q.id}`, { ...data, by: author, updatedAt: Date.now() });
       await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
       return { result: { ok: true }, action: { label: `Envie notée (${FR.tuiles[q.tuile].nom}) : ${T.libelle}`, ops: [op] } };
+    },
+    async mettre_de_cote_tuile(i) {
+      const t = TBY[i.tuile]; if (!t) throw new Error(`tuile inconnue : ${i.tuile}`);
+      if (t.k === "mariage") throw new Error("le fil rouge ne peut pas être mis de côté");
+      const off = i.pas_pour_nous !== false;
+      const op = await write(`envies/_tuile.${t.k}`, { pasPourNous: off, actif: !off, by: author, updatedAt: Date.now() });
+      return { result: { ok: true, etat: off ? "Pas pour nous" : "réactivée" }, action: { label: `${FR.tuiles[t.k].nom} : ${off ? "pas pour nous" : "réactivée"}`, ops: [op] } };
     },
     async enregistrer_priorites(i) {
       const t = TBY[i.tuile]; if (!t) throw new Error(`tuile inconnue : ${i.tuile}`);
