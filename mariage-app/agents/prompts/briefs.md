@@ -5,15 +5,15 @@ Ce que tu reçois, entre balises `<donnees>` :
 - les réponses du questionnaire « Nos envies », par tuile (`envies.tuiles` : priorités et réponses ; la tuile « mariage » est le fil rouge), parfois avec l'avis de {{P1}} et de {{P2}} séparés. Correspondance entre les catégories de brief demandées et les tuiles : lieu→lieu ; traiteur→repas, cocktail, bar, gateau, lendemain ; photo→photo ; video→video ; musique→musique ; fleurs→fleurs ; tenues et alliances→tenues ; beaute→beaute ; papeterie→papeterie ; ceremonie→ceremonie, officiant ; transport, hebergement et enfants→invites ;
 - la synthèse du coach (priorités, divergences) ;
 - les inspirations décrites (photos qu'ils ont montrées) ;
-- les prestataires déjà retenus ou en discussion, par catégorie.
+- les prestataires déjà retenus ou en discussion, par tuile.
 
 Comment écrire :
 1. Commence par le **fil rouge**, commun à tous les briefs : l'ambiance en un court paragraphe vivant (ce que les invités doivent ressentir), 4 à 8 mots-clés, la palette de couleurs, les matières et textures, l'expérience des invités au fil de la journée, et ce qu'ils ne veulent surtout pas.
-2. Puis un brief par catégorie demandée. Pour chacune : l'intention (2 à 3 phrases, à la première personne du pluriel, « nous »), les essentiels non négociables, les détails d'ambiance propres à ce métier, ce qu'ils ne veulent pas, les liens avec les autres prestataires (par exemple : le fleuriste et le lieu partagent la palette ; le photographe connaît les moments clés de la cérémonie), et 4 à 6 questions précises à poser au prestataire.
+2. Puis un brief par tuile demandée (le champ `cat` reçoit la clé de la tuile). Pour chacune : l'intention (2 à 3 phrases, à la première personne du pluriel, « nous »), les essentiels non négociables, les détails d'ambiance propres à ce métier, ce qu'ils ne veulent pas, les liens avec les autres prestataires (par exemple : le fleuriste et le lieu partagent la palette ; le photographe connaît les moments clés de la cérémonie), et 4 à 6 questions précises à poser au prestataire.
 3. Écris au nom de {{COUPLE}}, dans un français simple, chaleureux et concret, sans jargon. Phrases courtes.
 
 Règles strictes :
-- N'invente rien : chaque idée vient des données. Une catégorie sans réponses reçoit seulement ce que le fil rouge permet d'en déduire, et l'intention le dit (« nous n'avons pas encore précisé… ») ; les questions servent alors à construire le brief avec le prestataire.
+- N'invente rien : chaque idée vient des données. Une tuile sans réponses reçoit seulement ce que le fil rouge permet d'en déduire, et l'intention le dit (« nous n'avons pas encore précisé… ») ; les questions servent alors à construire le brief avec le prestataire.
 - Aucun prix, aucun montant, aucune date ni aucun chiffre qui ne figure pas dans les données.
 - Si `dateIndicative` est vrai dans les réglages, présente la date comme indicative et à confirmer, jamais comme fixée.
 - Si {{COUPLE}} divergent sur un point, ne tranche pas : écris les deux envies et pose la question au prestataire (« comment concilier… »).

@@ -121,6 +121,16 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
   const job = req.data?.job;
+  // Récompense de fin de niveau de « Nos envies » (phrase, notes du métier, brief, questions à poser)
+  if (job === "recompense") {
+    const { runRecompense, NIVEAUX_RECOMPENSE } = await import("./agents/recompense-agent.js");
+    const { TBY } = await import("./agents/lib/envies/logic.js");
+    const tuile = String(req.data?.tuile || ""), niveau = String(req.data?.niveau || "");
+    if (!TBY[tuile] || !NIVEAUX_RECOMPENSE.includes(niveau)) throw new HttpsError("invalid-argument", "Récompense inconnue.");
+    const { withLock } = await import("./agents/lib/lock.js");
+    await withLock(`recompense-${tuile}-${niveau}`, 10 * 60 * 1000, () => runRecompense({ tuile, niveau }));
+    return { ok: true };
+  }
   if (!["mail", "analyse", "hebdo", "briefs", "pinterest"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
   const { runAll } = await import("./agents/main.js");
   const failed = await runAll({ forced: job });

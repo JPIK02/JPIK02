@@ -81,6 +81,26 @@ export async function runProfil({ log = console.log } = {}) {
   log(`Synthèse des envies mise à jour (brief complet à ${Math.round(profil.completude ?? 0)} %).`);
 }
 
+/** Recalcule la note de fit de quelques prestataires (fin de l'essentiel d'une tuile de « Nos envies »).
+ *  @returns [{id, nom, avant, apres, fit}] */
+export async function fitVendors(vendors, { log = console.log } = {}) {
+  if (!vendors.length) return [];
+  const context = await loadContext();
+  const system = [{ type: "text", text: `${SYSTEM}\n\n<donnees>${context}</donnees>`, cache_control: { type: "ephemeral" } }];
+  const out = [];
+  const one = async v => {
+    const fit = await runForOutput({ system, user: `Analyse ce prestataire (données du couple dans <donnees>), recherche ses avis en ligne, puis appelle enregistrer_fit.\n\n<prestataire>${JSON.stringify(strip(v))}</prestataire>`, output: FIT_OUT, webSearch: true, feature: "analyse" });
+    if (fit.avis?.sources) fit.avis.sources = fit.avis.sources.filter(s => /^https?:\/\//.test(s.url || ""));
+    await getDb().doc(`vendors/${v.id}`).update({ fit: { ...fit, updatedAt: Date.now() } });
+    out.push({ id: v.id, nom: v.name, avant: v.fit?.score != null ? Math.round(v.fit.score) : null, apres: Math.round(fit.score), fit });
+  };
+  const list = vendors.slice();
+  if (list.length > 1) await one(list.shift()); // la première écrit le cache, les suivantes le relisent
+  await mapPool(list, 4, one);
+  log(`[fit] ${out.map(x => `${x.nom} : ${x.avant ?? "—"} → ${x.apres}`).join(" · ")}`);
+  return out;
+}
+
 export async function runAnalyseAgent({ log = console.log, force = false } = {}) {
   const analyse = await getMeta("analyse");
   const vendors = await listAll("vendors");

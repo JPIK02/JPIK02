@@ -9,6 +9,7 @@ import { ensureVapid } from "./lib/push.js";
 import { runHebdo, runVisitFollowups } from "./hebdo-agent.js";
 import { withLock } from "./lib/lock.js";
 import { runBriefs, briefsDue } from "./briefs-agent.js";
+import { runRecompense, recompensesDues } from "./recompense-agent.js";
 import { runPinterest, pinterestDue } from "./pinterest-agent.js";
 import { overBudget, monthKey } from "./lib/usage.js";
 import { getDb } from "./lib/firestore.js";
@@ -65,6 +66,11 @@ export async function runAll({ forced } = {}) {
   if (!forced || forced === "briefs") {
     try { if (forced === "briefs" || briefsDue(await getMeta("briefs"))) { console.log("[briefs] → rédaction"); await withLock("briefs", 15 * 60 * 1000, () => runBriefs()); } }
     catch (e) { failed = true; console.error("[briefs] échec :", e); await getDb().doc("meta/briefs").set({ status: "erreur", lastError: String(e?.error?.error?.message || e.message || e).slice(0, 300), failedAt: Date.now() }, { merge: true }).catch(() => {}); }
+  }
+  // Récompenses de « Nos envies » demandées mais restées sans réponse (l'appel direct depuis l'app a échoué)
+  if (!forced) {
+    try { for (const d of recompensesDues(await listAll("recompenses"))) { console.log(`[récompense] → ${d.id}`); await withLock(`recompense-${d.tuile}-${d.niveau}`, 10 * 60 * 1000, () => runRecompense({ tuile: d.tuile, niveau: d.niveau })); } }
+    catch (e) { failed = true; console.error("[récompense] échec :", e); }
   }
   return failed;
 }

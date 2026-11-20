@@ -90,3 +90,12 @@ test("migration : chaque ancienne question a sa règle, rien n'est perdu", () =>
   const texts = Object.values(r.answers).reduce((n, a) => n + (a.libre ? a.libre.split("\n").length : 0), 0);
   assert.ok(texts >= total, `${texts} textes pour ${total} questions`);
 });
+
+test("récompenses : ligne d'une note recalculée, reprise des demandes restées sans réponse", async () => {
+  const { ligneNote, recompensesDues } = await import("../recompense-agent.js");
+  assert.deepEqual(ligneNote(55, 72, { forces: ["Orangerie lumineuse."], vigilance: ["Loin"] }), { type: "pour", texte: "Orangerie lumineuse" });
+  assert.deepEqual(ligneNote(80, 68, { forces: ["Beau parc"], vigilance: ["Traiteur imposé"] }), { type: "verifier", texte: "Traiteur imposé" });
+  assert.equal(ligneNote(null, 60, {}), null);
+  const now = 1e12;
+  assert.deepEqual(recompensesDues([{ id: "a", status: "demandee", requestedAt: now - 5 * 60e3 }, { id: "b", status: "demandee", requestedAt: now - 60e3 }, { id: "c", status: "prete" }], now).map(d => d.id), ["a"]);
+});

@@ -4,6 +4,7 @@ import "@fontsource/cormorant-garamond/400-italic.css";import "@fontsource/cormo
 import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
 import {QCATS} from "./questions.js"; // ancien questionnaire : archive lisible (synthèse, réponses archivées)
 import {TUILES} from "../agents/lib/envies/catalogue.js";
+import {FR as FR_ENVIES} from "../agents/lib/envies/fr.js";
 import {OLD2TILE,METIER2TILE} from "../agents/lib/envies/logic.js";
 import {makeEnvies} from "./envies-ui.js";
 import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
@@ -63,10 +64,10 @@ const PHASES=[
 const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 
 /* ---------- State ---------- */
-const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","inspirations"];
+const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -904,9 +905,10 @@ function openFiche(id){
     <div class="fsec"><h4>Notes de visite</h4>${v.visitNotes?`<p class="vnotes">${esc(v.visitNotes)}</p>`:`<p class="plan-when" style="margin:0 0 8px">Après une visite ou un échange, notez vos impressions : l'IA recalcule la note avec ces informations de première main.</p>`}
       ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (1 à 2 minutes).</p>`:""}
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
+    ${v.questionsAPoser&&(v.questionsAPoser.questions||[]).length?`<div class="fsec"><h4>Vos questions à poser</h4><p class="plan-when" style="margin:0 0 6px">Préparées à partir de vos réponses de Nos envies (${esc(tileName(v.questionsAPoser.tuile))}).</p>${L(v.questionsAPoser.questions)}</div>`:""}
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
-    ${ficheBrief(TILE2BRIEF[tk])}
+    ${ficheBrief(tk&&briefFor(tk)||TILE2BRIEF[tk])}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div>${S.vendors.filter(x=>x.cat===v.cat).length>=2?`<button type="button" class="btn" data-act="compare" data-cat="${esc(v.cat)}" data-id="${v.id}">Comparer</button>`:""}<button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
   </div></div>`;
 }
@@ -920,7 +922,8 @@ function inspGallery(c){
       :`<p class="plan-when" style="margin:0">Une photo vaut mieux qu'un long discours : montrez au coach un lieu, une déco ou une tenue qui vous plaît, il en tirera vos goûts et la gardera ici.</p>`}</div>`;
 }
 /* Briefs prestataires : fil rouge commun + un brief par métier, rédigés par l'agent (meta/briefs), exportés en PDF */
-const BRIEF_LABEL={lieu:"Lieu",traiteur:"Traiteur",photo:"Photographe",video:"Vidéaste",musique:"Musique",fleurs:"Fleurs et déco",tenues:"Tenues",alliances:"Alliances",beaute:"Coiffure et maquillage",papeterie:"Papeterie",transport:"Transport",ceremonie:"Cérémonie",hebergement:"Hébergement",enfants:"Enfants"};
+// Briefs par tuile (clés de tuile, en premier) ; anciennes clés gardées pour les briefs rédigés avant le nouveau questionnaire
+const BRIEF_LABEL=Object.assign(Object.fromEntries(TUILES.filter(t=>t.metiers.length||t.k==="ceremonie").map(t=>[t.k,FR_ENVIES.tuiles[t.k].nom])),{traiteur:"Traiteur",alliances:"Alliances",transport:"Transport",hebergement:"Hébergement",enfants:"Enfants"});
 function briefsState(){
   const b=S.briefs||{},now=Date.now();
   const failed=b.status==="erreur"&&(b.failedAt||0)>=(b.requestedAt||0);
@@ -971,7 +974,7 @@ function briefBlocks(k){
   const m=Object.assign({},bMeta(k),env().metaOf(OLD2TILE[k]||k)),bud=num(m.budget);
   const d=wDate(),st=S.settings;
   const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
-  const imgs=S.inspirations.filter(i=>i.cat===k&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  const imgs=S.inspirations.filter(i=>(i.cat===k||inspTile(i)===(OLD2TILE[k]||k))&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
   return [{h2:"Brief · "+BRIEF_LABEL[k]},
     {kpis:[["Date",d?fmtD(d):"à fixer",d&&st.dateIndicative?"indicative, à confirmer":""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
     {p:x.intention},...list("Nos essentiels",x.essentiels),...list("L'ambiance, dans le détail",x.details),...list("Ce que nous ne voulons pas",x.aEviter),
@@ -997,11 +1000,17 @@ function pdfBriefs(k){
 let ENV=null;
 const env=()=>ENV||(ENV=makeEnvies({S,esc,meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
   briefsReadyCount:()=>{const {b,ready}=briefsState();return ready?Object.keys(b.categories).length:0},briefFor,fitPill,synthHtml,archivedAnswers,moodboard,
-  pickPhoto:pickEnviePhoto,dictate,saveEnvie,render,go,saveF,SR,CHEV,BACK_SVG}));
+  pickPhoto:pickEnviePhoto,dictate,saveEnvie,render,go,saveF,SR,CHEV,BACK_SVG,runReward,saveDoc:(path,data)=>mergeDoc(path,data)}));
+// Récompense de fin de niveau (agent « recompense » côté serveur) ; si l'appel échoue, le passage suivant des agents la reprend
+async function runReward(tuile,niveau){
+  if(!S.canWrite)return;
+  await mergeDoc(`recompenses/${tuile}.${niveau}`,{tuile,niveau,status:"demandee",requestedAt:Date.now(),erreur:null});
+  runAgentNow("recompense",{tuile,niveau}).catch(()=>{});
+}
 function vEnvies(){return env().vEnvies()}
 // Brief déjà rédigé (catégories de l'agent briefs) correspondant à une tuile
 const TILE2BRIEF={lieu:"lieu",repas:"traiteur",cocktail:"traiteur",photo:"photo",video:"video",musique:"musique",fleurs:"fleurs",papeterie:"papeterie",tenues:"tenues",beaute:"beaute",ceremonie:"ceremonie",officiant:"ceremonie",invites:"hebergement"};
-function briefFor(k){const {b,ready}=briefsState(),c=TILE2BRIEF[k];return ready&&c&&b.categories[c]?c:null}
+function briefFor(k){const {b,ready}=briefsState();if(!ready)return null;if(b.categories[k])return k;const c=TILE2BRIEF[k];return c&&b.categories[c]?c:null}
 function fitPill(v){const fi=v.fit||{},sc=fi.score!=null?Math.round(fi.score):null;return sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none">à analyser</span>`}
 // Réponses des questions archivées lors du passage au nouveau questionnaire (docs/nos-envies-correspondance.md)
 const ARCHIVED=["vision--invites","vision--periode","vision--craintes","traiteur--budgetpp","tenues--budget","alliances--artisan"];
@@ -1567,6 +1576,8 @@ function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t
 const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
 function render(){
   renderHero();renderTabs();queueTop();
+  // écran de fin de niveau ouvert : il se met à jour quand la récompense arrive (sauf pendant la correction de la phrase)
+  if(env().finOpen()&&!(document.activeElement&&document.activeElement.id==="search-qs-phrase"))env().renderQ();
   const main=document.getElementById("main");
   const ae=document.activeElement,aid=ae&&main.contains(ae)?ae.id:null,sel=aid&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null;
   if(aid&&aid!=="gq"&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&/^(text|number|email|date|time|search)$/.test(ae.type)))){S.pending=true;return}
@@ -1596,7 +1607,7 @@ function syncTop(){
 const queueTop=()=>{if(!topRaf)topRaf=requestAnimationFrame(syncTop)};
 addEventListener("scroll",queueTop,{passive:true,capture:true});
 addEventListener("resize",queueTop);
-function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);syncTop()}
+function go(v){if(S.view==="envies"&&v!=="envies")env().leaveTile();closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);syncTop()}
 
 /* ---------- Modal editor ---------- */
 const SCHEMAS={

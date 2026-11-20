@@ -26,7 +26,12 @@ const UI = {
   passer: "Passer", suivant: "Suivant", terminer: "Terminer", fermer: "Fermer et revenir à la tuile", ajouterOption: "+ Ajouter", nouvelleOption: "Votre option",
   glisser: "Faites glisser pour choisir", chiffre: "Un chiffre ou une fourchette", classer: "Touchez dans l'ordre de vos priorités", effacer: "Recommencer",
   pourTa: p => `Votre réponse, ${p}`, finTitre: (t, n) => `${t} · ${n}, c'est fait`, finJauge: "Lamaelle vous connaît mieux", continuer: n => `Continuer avec ${n.charAt(0).toLowerCase() + n.slice(1)}`, plusTard: "Plus tard",
-  retour: "Nos envies", archive: "Vos réponses précédentes", archiveP: "Ces réponses ne correspondent à aucune question du nouveau questionnaire. Le coach les connaît toujours.",
+  retour: "Nos envies",
+  compris: "Voilà ce que nous avons compris :", cestCa: "C'est ça", corriger: "Corriger", enregistrer: "Enregistrer", merci: "Noté, merci",
+  relit: "Lamaelle relit vos réponses…", relitNotes: m => `et recalcule la note de vos ${m}`, erreur: "La récompense n'a pas pu être préparée. Réessayez plus tard : vos réponses sont bien enregistrées.", reessayer: "Réessayer",
+  recalcules: m => `Vos ${m}, recalculés`, pourVous: "Pour vous : ", aVerifier: "À vérifier : ", chercher: m => `Voulez-vous que le coach cherche des ${m} pour vous ?`, chercherBtn: "Demander au coach",
+  points: n => `+${n} point${n > 1 ? "s" : ""}`, briefPretT: m => `Votre brief ${m} est prêt`, questionsPretes: "Vos questions à poser sont prêtes", voirFiche: "Voir la fiche",
+  continuerBrief: (n, m) => `Continuer avec ${n.charAt(0).toLowerCase() + n.slice(1)} · votre brief ${m} à la clé`, comprisTile: "Ce que nous avons compris", archive: "Vos réponses précédentes", archiveP: "Ces réponses ne correspondent à aucune question du nouveau questionnaire. Le coach les connaît toujours.",
 };
 const WHO = { essentiel: 20, details: 25, pro: 25 }; // secondes par question, pour la durée affichée
 // Métier → pluriel, pour « Vos photographes », « Elles nourrissent la note des photographes »
@@ -99,6 +104,7 @@ export function makeEnvies(ctx) {
       <div class="ev-cover">${placeholder(k, "cover")}<button class="ev-back" data-act="envview" data-v="main" aria-label="${UI.retour}">${ctx.BACK_SVG}</button>
         <div class="ev-cover-b"><h2>${esc(tName(k))}</h2><span>${UI.remonte(t.remonte)}${t.metiers.length ? ` · ${UI.suivis(vend.length, m)}` : ""}</span></div></div>
       ${G.gris ? `<div class="ev-gris"><b>${UI.pasPourNous}</b><span>${esc(UI.raisons[G.raison] || "")}</span>${S.canWrite ? `<button class="btn sm" data-act="envactif" data-k="${k}">${UI.reactiver}</button>` : ""}</div>` : ""}
+      ${(() => { const r = recOf(k, "essentiel"); return r && r.phrase ? `<section class="ev-sec ev-compris"><span class="qs-k">${UI.comprisTile}</span><p>${esc(r.phrase)}</p></section>` : ""; })()}
       <div class="ev-lvls">${lvl}</div>
       ${t.metiers.length || ins.length ? `<section class="ev-sec"><div class="ev-sec-h"><h3>${esc(UI.vosInspis(k === "mariage" ? "" : m))}</h3>${S.canWrite ? `<button class="link" data-act="envphoto" data-k="${k}">${UI.ajouter}</button>` : ""}</div>
         ${ins.length ? `<div class="ev-ins">${ins.map(x => `<button data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description || "")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"></button>`).join("")}</div>` : ""}
@@ -142,7 +148,7 @@ export function makeEnvies(ctx) {
   function start(k, niveau, i) {
     const st = nextStep(k, A(), me(), pays());
     const idx = i != null ? +i : st && st.niveau === niveau ? st.index : 0;
-    S.qs = { k, niveau, i: Math.min(idx, questionsOf(k, niveau, pays()).length - 1), autre: false };
+    S.qs = { k, niveau, i: Math.min(idx, questionsOf(k, niveau, pays()).length - 1), autre: false, j0: jauge(A(), me(), pays()) || 0, wasDone: levelDone(k, niveau, A(), me(), pays()), changed: false };
     S.qs.draft = draftFrom(curQ());
     renderQ();
   }
@@ -150,6 +156,7 @@ export function makeEnvies(ctx) {
   // Enregistre à chaque geste ; sur une question par partenaire, dans p.<moi>
   async function persist(extra = {}) {
     const q = curQ(), d = S.qs.draft; if (!q || !S.canWrite) return;
+    if (!extra.vu) { S.qs.changed = true; S.envDirty = S.envDirty || {}; S.envDirty[S.qs.k] = true; }
     const base = { v: d.v ?? null, cu: d.cu || null, ...extra };
     const data = q.parPartenaire ? { p: { [me()]: { ...base, libre: d.libre || "" } } } : { ...base, libre: d.libre || "" };
     if (Object.keys(d.extra || {}).length) data.extra = d.extra;
@@ -160,7 +167,7 @@ export function makeEnvies(ctx) {
     const has = hasValue({ v: d.v, libre: d.libre, cu: d.cu });
     if (passer || !has) persist({ vu: true }); // vue ou passée : compte pour « fait », pas pour la jauge
     const n = qList().length, i = S.qs.i + delta;
-    if (i >= n) { S.qs.fin = true; renderQ(); return; }
+    if (i >= n) { finish(); return; }
     if (i < 0) return;
     S.qs.i = i; S.qs.autre = false; S.qs.draft = draftFrom(curQ()); renderQ();
   }
@@ -205,20 +212,56 @@ export function makeEnvies(ctx) {
       </div>
       <div class="qs-foot"><button class="btn ghost" data-act="qpass">${UI.passer}</button><button class="btn primary" data-act="qnext">${S.qs.i === n - 1 ? UI.terminer : UI.suivant}</button></div></div>`;
   }
-  // 4.4 (version lot 1) : fin de niveau, sans les récompenses IA (lot 2)
+  // 4.4 Fin d'un niveau : la récompense est demandée une fois (agent « récompense »), puis affichée dès qu'elle est prête
+  const recOf = (k, n) => (S.recompenses || []).find(r => r.id === `${k}.${n}`) || null;
+  function finish() {
+    const { k, niveau } = S.qs;
+    S.qs.fin = true;
+    const r = recOf(k, niveau);
+    // pas de nouvel appel si rien n'a changé depuis la dernière récompense de ce niveau
+    if (S.canWrite && (!r || r.status === "erreur" || (S.qs.changed && !(r.status === "en cours" || r.status === "demandee")))) ctx.runReward(k, niveau);
+    if (S.envDirty) delete S.envDirty[k]; // la récompense recalcule déjà les notes
+    renderQ();
+  }
   function renderFin() {
-    const k = S.qs.k, n = S.qs.niveau, j = jauge(A(), me(), pays()), nx = NIVEAUX[NIVEAUX.indexOf(n) + 1];
+    const k = S.qs.k, n = S.qs.niveau, j = jauge(A(), me(), pays()) || 0, plus = Math.max(0, j - (S.qs.j0 || 0)), nx = NIVEAUX[NIVEAUX.indexOf(n) + 1];
+    const r = recOf(k, n), m = metier(k), t = TBY[k], vend = S.vendors.filter(v => t.metiers.includes(v.cat) && v.status !== "ecarte");
+    const busy = !r || r.status === "demandee" || r.status === "en cours";
+    let corps = "";
+    if (busy) corps = `<div class="qs-wait" role="status"><span class="qs-spin" aria-hidden="true"></span><b>${UI.relit}</b>${n === "essentiel" && vend.length ? `<span>${esc(UI.relitNotes(m))}</span>` : ""}</div>`;
+    else if (r.status === "erreur") corps = `<div class="qs-wait"><b>${UI.erreur}</b><button class="btn sm" data-act="qretry">${UI.reessayer}</button></div>`;
+    else {
+      if (n === "essentiel") {
+        const ph = S.qs.edit ? `<label class="sr" for="search-qs-phrase">${UI.compris}</label><textarea id="search-qs-phrase" name="search_text" autocomplete="off">${esc(r.phrase || "")}</textarea><button class="btn sm" data-act="qphrasesave">${UI.enregistrer}</button>`
+          : `<p class="qs-phrase">${esc(r.phrase || "")}</p>${S.canWrite ? `<div class="qs-pa">${r.phraseOk ? `<span class="ev-note">${UI.merci}</span>` : `<button class="btn sm ghost-l" data-act="qphraseok">${UI.cestCa}</button>`}<button class="link" data-act="qphraseedit">${UI.corriger}</button></div>` : ""}`;
+        corps += `<section class="qs-sec"><span class="qs-k">${UI.compris}</span>${ph}</section>`;
+        corps += (r.notes || []).length ? `<section class="qs-sec"><h3>${esc(UI.recalcules(m))}</h3><div class="qs-notes">${r.notes.map(x => { const d = x.avant == null ? null : x.apres - x.avant;
+          return `<button class="qs-note" data-fiche="${x.id}"><span class="qs-nn"><b>${esc(x.nom)}</b>${x.ligne ? `<span>${x.ligne.type === "pour" ? UI.pourVous : UI.aVerifier}${esc(x.ligne.texte)}</span>` : ""}</span><span class="qs-sc">${x.avant != null && x.avant !== x.apres ? `<s class="num">${x.avant}</s>` : ""}<b class="num">${x.apres}</b>${d ? `<i class="num ${d > 0 ? "up" : "down"}">${d > 0 ? "+" : "−"}${Math.abs(d)}</i>` : ""}</span></button>`; }).join("")}</div><p class="ev-note">${UI.ia}</p></section>`
+          : t.metiers.length ? `<section class="qs-sec"><p>${esc(UI.chercher(m))}</p><button class="btn sm" data-act="qr" data-do="${esc(`ask:Peux-tu nous proposer des ${m} qui correspondent à nos envies pour « ${tName(k)} » ?`)}">${UI.chercherBtn}</button></section>` : "";
+      }
+      if (n === "details" && r.brief) { const b = ctx.briefFor(k); corps += `<section class="qs-sec qs-row"><b>${esc(UI.briefPretT(m))}</b>${b ? `<button class="btn sm primary" data-act="briefpdf" data-c="${b}">${UI.envoyer}</button>` : ""}</section>`; }
+      if (n === "pro") corps += (r.questions || []).length ? `<section class="qs-sec"><h3>${UI.questionsPretes}</h3><div class="qs-notes">${r.questions.map(x => `<button class="qs-note" data-fiche="${x.id}"><span class="qs-nn"><b>${esc(x.nom)}</b><span>${UI.questions(x.n)}</span></span><span class="link">${UI.voirFiche}</span></button>`).join("")}</div></section>` : "";
+    }
     document.getElementById("layer").innerHTML = `<div class="qs" role="dialog" aria-modal="true" aria-label="${esc(UI.finTitre(tName(k), FR.niveaux[n].nom))}">
-      <div class="qs-fin"><span class="qs-ok" aria-hidden="true">✓</span><span class="ev-k">${esc(UI.finTitre(tName(k), FR.niveaux[n].nom)).toUpperCase()}</span>
-        ${j ? `<div class="ev-j"><span>${UI.connait(j)}</span><span class="ev-bar" aria-hidden="true"><i style="width:${j}%"></i></span></div>` : ""}</div>
-      <div class="qs-foot col">${nx && !levelDone(k, nx, A(), me(), pays()) ? `<button class="btn primary" data-act="envstart" data-k="${k}" data-n="${nx}">${esc(UI.continuer(FR.niveaux[nx].nom))}</button>` : ""}<button class="btn ghost" data-act="qclose">${UI.plusTard}</button></div></div>`;
+      <div class="qs-body"><div class="qs-hero"><span class="qs-ok" aria-hidden="true">✓</span><span class="ev-k">${esc(UI.finTitre(tName(k), FR.niveaux[n].nom)).toUpperCase()}</span>
+        ${j ? `<div class="ev-j"><span>${UI.connait(j)}${plus ? ` · <b>${UI.points(plus)}</b>` : ""}</span><span class="ev-bar" aria-hidden="true"><i style="width:${j}%"></i></span></div>` : ""}</div>
+        ${corps}</div>
+      <div class="qs-foot col">${nx && !levelDone(k, nx, A(), me(), pays()) ? `<button class="btn primary" data-act="envstart" data-k="${k}" data-n="${nx}">${esc(nx === "details" && t.metiers.length ? UI.continuerBrief(FR.niveaux[nx].nom, m) : UI.continuer(FR.niveaux[nx].nom))}</button>` : ""}<button class="btn ghost" data-act="qclose">${UI.plusTard}</button></div></div>`;
   }
 
+  // Réponse modifiée après coup sur une tuile dont l'essentiel était fait : recalcul des notes à la sortie, une fois
+  function leaveTile() {
+    const k = S.f.envView === "tile" ? S.f.envTile : null;
+    if (!k || !S.envDirty || !S.envDirty[k]) return;
+    delete S.envDirty[k];
+    const t = TBY[k];
+    if (t && t.metiers.length && levelDone(k, "essentiel", A(), me(), pays()) && S.vendors.some(v => t.metiers.includes(v.cat) && v.status !== "ecarte")) ctx.runReward(k, "maj");
+  }
   /* ---------- Gestes ---------- */
   function act(a, t) {
     const d = S.qs && S.qs.draft;
     switch (a) {
-      case "envview": S.f.envView = t.dataset.v; ctx.saveF(); ctx.render(); window.scrollTo(0, 0); return true;
+      case "envview": leaveTile(); S.f.envView = t.dataset.v; ctx.saveF(); ctx.render(); window.scrollTo(0, 0); return true;
       case "envtile": S.f.envView = "tile"; S.f.envTile = t.dataset.k; ctx.saveF(); ctx.go("envies"); return true;
       case "envstart": S.qs = null; start(t.dataset.k, t.dataset.n, t.dataset.i); return true;
       case "qclose": close(); return true;
@@ -234,6 +277,10 @@ export function makeEnvies(ctx) {
       case "envactif": ctx.saveEnvie("_tuile." + t.dataset.k, { actif: true, pasPourNous: false }, ["actif", "pasPourNous", "by", "updatedAt"]); return true;
       case "envpas": ctx.saveEnvie("_tuile." + t.dataset.k, { actif: false, pasPourNous: true }, ["actif", "pasPourNous", "by", "updatedAt"]); return true;
       case "envmeta": ctx.saveEnvie("_tuile." + t.dataset.k, { [t.dataset.f]: +t.dataset.v }, [t.dataset.f, "by", "updatedAt"]); return true;
+      case "qretry": ctx.runReward(S.qs.k, S.qs.niveau); renderQ(); return true;
+      case "qphraseok": ctx.saveDoc(`recompenses/${S.qs.k}.${S.qs.niveau}`, { phraseOk: true }); return true;
+      case "qphraseedit": S.qs.edit = true; renderQ(); document.getElementById("search-qs-phrase")?.focus(); return true;
+      case "qphrasesave": { const v = (document.getElementById("search-qs-phrase")?.value || "").trim(); S.qs.edit = false; if (v) ctx.saveDoc(`recompenses/${S.qs.k}.${S.qs.niveau}`, { phrase: v, phraseOk: true, corrigee: true }); renderQ(); return true; }
       case "envphoto": ctx.pickPhoto(t.dataset.k, S.qs ? FR.questions[curQ().id].libelle : ""); return true;
     }
     return false;
@@ -263,5 +310,5 @@ export function makeEnvies(ctx) {
   const metaOf = k => A()["_tuile." + k] || {};
   const essentielFait = k => levelDone(k, "essentiel", A(), me(), pays());
   const lastAt = () => (S.envies || []).reduce((m, d) => Math.max(m, d.updatedAt || 0), 0);
-  return { vEnvies, act, input, submit, renderQ, jaugeNow: () => jauge(A(), me(), pays()), tName, inspTile, lendemainUtile, stateOf, metaOf, essentielFait, lastAt, etat: st => FR.etats[st] };
+  return { vEnvies, act, input, submit, renderQ, leaveTile, finOpen: () => !!(S.qs && S.qs.fin), jaugeNow: () => jauge(A(), me(), pays()), tName, inspTile, lendemainUtile, stateOf, metaOf, essentielFait, lastAt, etat: st => FR.etats[st] };
 }
