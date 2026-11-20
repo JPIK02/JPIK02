@@ -6,7 +6,7 @@ on:
       cible:
         description: "Diagnostic"
         type: choice
-        options: ["briefs", "ecawee"]
+        options: ["briefs", "ecawee", "envies"]
         default: "briefs"
 jobs:
   diag:
@@ -21,6 +21,6 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: if [ "${{ inputs.cible }}" = "ecawee" ]; then node diag-vendor.js ecaw; else node diag-briefs.js; fi
+      - run: if [ "${{ inputs.cible }}" = "ecawee" ]; then node diag-vendor.js ecaw; elif [ "${{ inputs.cible }}" = "envies" ]; then node diag-envies.js; else node diag-briefs.js; fi
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
