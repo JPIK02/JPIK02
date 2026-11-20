@@ -1957,6 +1957,8 @@ let bootT=0;const saveBoot=()=>{clearTimeout(bootT);bootT=setTimeout(()=>{if(S.m
   try{const d={};for(const k of BOOT_FIELDS)d[k]=S[k];localStorage.setItem(BOOT_KEY,JSON.stringify({uid:S.user.uid,email:S.user.email,at:Date.now(),d}))}
   catch(e){try{localStorage.removeItem(BOOT_KEY)}catch(_){}}},3000)};
 const dropBoot=()=>{try{localStorage.removeItem(BOOT_KEY)}catch(e){}};
+// L'app elle-même est gardée sur l'appareil par le service worker (public/sw.js) : ouverture sans attendre le réseau
+if(import.meta.env.PROD&&"serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
 render();
 
 let unsubs=[];
