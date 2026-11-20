@@ -107,7 +107,7 @@ const CAT_BUDGET={Lieu:/lieu|salle|reception|domaine/,Traiteur:/traiteur|repas|b
 const budgetNote=n=>String(n||"").replace(/\s*·?\s*\d+(?:[.,]\d+)?\s*%\s*du budget\s*·?\s*/gi," ").replace(/^\s*·\s*|\s*·\s*$/g,"").trim();
 const budgetLineFor=cat=>{const re=CAT_BUDGET[cat];return re?S.budget.find(b=>re.test(fold(b.label))):null};
 const lastBriefAt=()=>Math.max(S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0),env().lastAt());
-async function mergeDoc(path,data){try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
+async function mergeDoc(path,data){if(!S.db)return false;try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
 /* Points à regarder : incohérences entre date, budget, devis, capacité, et actions en attente. */
 /* Capacité d'accueil lue dans les notes (texte sans accents, en minuscules) : le plus grand nombre de personnes cité
    sur la ligne « capacité » (« 3 salles de 40 à 240 personnes » → 240 ; « jusqu'à 70 » → 70 ; « 100-200 » → 200).
@@ -421,7 +421,7 @@ function toast(msg){const el=document.createElement("div");el.className="toast";
 
 /* ---------- Data writes ---------- */
 async function save(col,id,data){
-  if(!S.db){toast("Connectez-vous pour enregistrer");return false}
+  if(!S.db){toast(S.user?"Connexion en cours, réessayez dans un instant":"Connectez-vous pour enregistrer");return false}
   try{
     if(id){await S.db.collection(col).doc(id).set(data)}
     else{await S.db.collection(col).add(Object.assign({createdAt:Date.now()},data))}
@@ -437,7 +437,7 @@ async function remove(col,id){
   try{await S.db.collection(col).doc(id).delete();return true}catch(e){return writeErr(e)}
 }
 async function setDoc(path,cur,data){
-  if(!S.db){toast("Connectez-vous pour enregistrer");return false}
+  if(!S.db){toast(S.user?"Connexion en cours, réessayez dans un instant":"Connectez-vous pour enregistrer");return false}
   try{await S.db.doc(path).set(Object.assign({},cur,data));return true}catch(e){return writeErr(e)}
 }
 function writeErr(e){
@@ -1861,7 +1861,7 @@ document.addEventListener("click",async e=>{
   if(a==="fire"){t.disabled=true;await fireAnalysis();render();return}
   if(a==="runnow"){t.disabled=true;await runNow(t.dataset.job);render();return}
   if(a==="editv"){openEditor("vendors",id);return}
-  if(a==="logout"){await signOut();return}
+  if(a==="logout"){dropBoot();await signOut();return}
   if(a==="google"){try{await signInGoogle()}catch(err){toast(authErr(err))}return}
 });
 function renderInvitesPart(){
@@ -1948,6 +1948,15 @@ function loginView(){
 
 /* ---------- Boot ---------- */
 const h=location.hash.slice(1);if(VIEWFN[h])S.view=h;
+// Démarrage instantané : la dernière copie des données (gardée sur cet appareil) s'affiche tout de suite,
+// pendant que la connexion et la base se confirment ; les écritures attendent que la base soit prête (S.db).
+const BOOT_KEY="lamaelle-demarrage",BOOT_FIELDS=[...COLS,"settings","agent","profil","analyse","planning","prefs","hebdo","photo","briefs","pinterest","ia","usage"];
+let bootUid=null;
+try{const b=JSON.parse(localStorage.getItem(BOOT_KEY)||"null");if(b&&b.uid&&b.d){Object.assign(S,b.d);S.user={email:b.email,uid:b.uid};bootUid=b.uid;S.mode="live"}}catch(e){}
+let bootT=0;const saveBoot=()=>{clearTimeout(bootT);bootT=setTimeout(()=>{if(S.mode!=="live"||!S.db||!S.user)return;
+  try{const d={};for(const k of BOOT_FIELDS)d[k]=S[k];localStorage.setItem(BOOT_KEY,JSON.stringify({uid:S.user.uid,email:S.user.email,at:Date.now(),d}))}
+  catch(e){try{localStorage.removeItem(BOOT_KEY)}catch(_){}}},3000)};
+const dropBoot=()=>{try{localStorage.removeItem(BOOT_KEY)}catch(e){}};
 render();
 
 let unsubs=[];
@@ -1956,10 +1965,13 @@ function boot(){
   completeEmailLink().catch(e=>toast(authErr(e)));
   auth.onAuthStateChanged(user=>{
     stopListeners();
+    // autre compte (ou déconnexion) que celui de la copie affichée : on l'oublie et on repart de zéro
+    if(bootUid&&(!user||user.uid!==bootUid)){dropBoot();location.reload();return}
+    bootUid=null;
     S.user=user;S.db=null;S.got=new Set();
     if(!user){S.mode="login";render();return}
     const email=String(user.email||"").toLowerCase();
-    if(!ALLOWED.includes(email)){S.mode="locked";S.canWrite=false;render();return}
+    if(!ALLOWED.includes(email)){dropBoot();S.mode="locked";S.canWrite=false;render();return}
     S.canWrite=true;S.linkSent=null;S.db=db;S.mode="live";render();
     // includeMetadataChanges : sans lui, Firestore ne prévient pas quand le serveur confirme que la copie
     // locale est déjà à jour (rien n'a changé) ; on croyait alors la base injoignable (faux bandeau).
@@ -1967,7 +1979,7 @@ function boot(){
     const need=["settings","agent",...COLS];
     const timer=setTimeout(()=>{if(need.some(k=>!S.got.has(k))){S.stale=true;render()}},10000);
     const mark=(k,snap)=>{if(!snap.metadata.fromCache){S.got.add(k);if(need.every(x=>S.got.has(x))){clearTimeout(timer);S.stale=false}}};
-    let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
+    let raf=0;const later=()=>{saveBoot();if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
     meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");meta("briefs","briefs");meta("pinterest","pinterest");
