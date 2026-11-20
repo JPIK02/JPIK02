@@ -117,7 +117,7 @@ export function nextStep(k, A, me, pays) {
 /** Réponse en texte lisible (coach, agents, synthèse). FR : textes du catalogue. */
 export function answerText(q, a, FR) {
   if (!a) return "";
-  const T = FR.questions[q.id] || {}, ch = T.choix || {}, out = [];
+  const T = FR.questions[q.id] || {}, ch = { ...(T.choix || {}), ...(a.extra || {}) }, out = [];
   const v = a.v;
   if (q.format === "CU" && v) out.push(`${(T.crans || [])[v - 1] || v} (sur 5, de « ${T.poles[0]} » à « ${T.poles[1]} »)`);
   else if (q.format === "JPA" && v && typeof v === "object") out.push(Object.entries(v).map(([c, x]) => `${c === "_" ? "" : (ch[c] || c) + " : "}${FR.jpa[x] || x}`).join(" ; "));

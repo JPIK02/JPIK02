@@ -2,7 +2,10 @@
 import "@fontsource/jost/300.css";import "@fontsource/jost/400.css";import "@fontsource/jost/500.css";import "@fontsource/jost/600.css";
 import "@fontsource/cormorant-garamond/400-italic.css";import "@fontsource/cormorant-garamond/500-italic.css";
 import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
-import {QCATS} from "./questions.js";
+import {QCATS} from "./questions.js"; // ancien questionnaire : archive lisible (synthèse, réponses archivées)
+import {TUILES} from "../agents/lib/envies/catalogue.js";
+import {OLD2TILE,METIER2TILE} from "../agents/lib/envies/logic.js";
+import {makeEnvies} from "./envies-ui.js";
 import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
@@ -38,7 +41,7 @@ const RSVP_CLS={attente:"warn",oui:"ok",non:"bad"};
 const VSTAT={repere:"Repéré",contacte:"Contacté",devis:"Devis reçu",reserve:"Réservé",ecarte:"Écarté"};
 const VSTAT_CLS={repere:"",contacte:"acc",devis:"warn",reserve:"ok",ecarte:"bad"};
 const VSTAT_RANK={ecarte:0,repere:1,contacte:2,devis:3,reserve:4};
-const VCATS=["Lieu","Traiteur","Photographe","Vidéaste","Musique","Fleuriste","Tenues","Alliances","Coiffure & maquillage","Papeterie","Transport","Officiant","Hébergement","Animation enfants","Autre"];
+const VCATS=["Lieu","Traiteur","Bar","Pâtissier","Photographe","Vidéaste","Musique","Fleuriste","Tenues","Alliances","Coiffure & maquillage","Papeterie","Transport","Officiant","Hébergement","Animation enfants","Wedding planner","Agence de voyage","Autre"];
 const KEY_VCATS=["Lieu","Traiteur","Photographe","Musique","Fleuriste","Tenues"];
 const GROUPS=["Famille","Amis","Collègues","Voisins","Autre"];
 const SUGTYPE={vendor:["Nouveau prestataire","acc"],quote:["Devis reçu","gold"],task:["Tâche","claire"],payment:["Paiement","warn"],rdv:["Rendez-vous","julien"],rsvp:["Réponse d'invité","ok"]};
@@ -60,10 +63,10 @@ const PHASES=[
 const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 
 /* ---------- State ---------- */
-const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","inspirations"];
+const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -98,11 +101,11 @@ const findVendor=name=>{const n=String(name||"").trim().toLowerCase();return n?S
 const fold=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const MOIS=["janvier","fevrier","mars","avril","mai","juin","juillet","aout","septembre","octobre","novembre","decembre"];
 // Catégorie de prestataire → poste de budget (par mots-clés du libellé du poste)
-const CAT_BUDGET={Lieu:/lieu|salle|reception|domaine/,Traiteur:/traiteur|repas|boisson/,Photographe:/photo/,"Vidéaste":/video/,Musique:/musique|dj|orchestre/,Fleuriste:/fleur|deco/,Tenues:/tenue|robe|costume|costard/,Alliances:/alliance/,"Coiffure & maquillage":/coiff|maquill/,Papeterie:/papeterie|faire.?part/,Transport:/transport/,Officiant:/ceremonie|officiant/,"Hébergement":/heberg/,"Animation enfants":/enfant|animation/};
+const CAT_BUDGET={Lieu:/lieu|salle|reception|domaine/,Traiteur:/traiteur|repas|boisson/,Photographe:/photo/,"Vidéaste":/video/,Musique:/musique|dj|orchestre/,Fleuriste:/fleur|deco/,Tenues:/tenue|robe|costume|costard/,Alliances:/alliance/,"Coiffure & maquillage":/coiff|maquill/,Papeterie:/papeterie|faire.?part/,Transport:/transport/,Officiant:/ceremonie|officiant/,"Hébergement":/heberg/,"Animation enfants":/enfant|animation/,Bar:/bar\b|boisson|vin|alcool/,"Pâtissier":/gateau|patiss|dessert/,"Wedding planner":/planner|organisat/,"Agence de voyage":/voyage|noces|lune de miel/};
 // Les notes importées d'Excel contiennent un « 20 % du budget » figé : on l'enlève, la part est calculée en direct
 const budgetNote=n=>String(n||"").replace(/\s*·?\s*\d+(?:[.,]\d+)?\s*%\s*du budget\s*·?\s*/gi," ").replace(/^\s*·\s*|\s*·\s*$/g,"").trim();
 const budgetLineFor=cat=>{const re=CAT_BUDGET[cat];return re?S.budget.find(b=>re.test(fold(b.label))):null};
-const lastBriefAt=()=>S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0);
+const lastBriefAt=()=>Math.max(S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0),env().lastAt());
 async function mergeDoc(path,data){try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
 /* Points à regarder : incohérences entre date, budget, devis, capacité, et actions en attente. */
 /* Capacité d'accueil lue dans les notes (texte sans accents, en minuscules) : le plus grand nombre de personnes cité
@@ -141,7 +144,7 @@ function alerts(){
   const ps=pendingSugs().length;
   if(ps)out.push({k:"sugs",lvl:"info",t:`${ps} proposition${ps>1?"s":""} de l'assistant à valider`,s:"Devis, rendez-vous et tâches repérés dans vos mails.",go:"assistant"});
   const analysed=S.vendors.filter(v=>v.status!=="ecarte"&&v.fit&&v.fit.updatedAt);
-  if(analysed.length&&allProg()<.3)out.push({k:"brief",lvl:"info",t:`Nos envies rempli à ${Math.round(allProg()*100)} %`,s:"Les notes de fit des prestataires restent peu fiables tant que vos envies ne sont pas décrites.",go:"envies"});
+  if(analysed.length&&allProg()<.3)out.push({k:"brief",lvl:"info",t:allProg()?`Lamaelle vous connaît à ${Math.round(allProg()*100)} %`:"Lamaelle apprend à vous connaître",s:"Les notes de fit des prestataires restent peu fiables tant que vos envies ne sont pas décrites.",go:"envies"});
   else if(analysed.length&&lastBriefAt()>Math.min(...analysed.map(v=>v.fit.updatedAt))+60000)
     out.push({k:"refit",lvl:"info",t:"Vos envies ont changé depuis l'analyse des prestataires",s:"Relancez l'analyse dans l'Annuaire pour mettre les notes de fit à jour.",go:"prestataires"});
   S.rdv.filter(r=>r.date&&pd(r.date)>=today()&&days(today(),pd(r.date))<=14).forEach(r=>{
@@ -224,7 +227,7 @@ function todoShort(c){
     case "devis":return [`Devis ${v.name} +${eur(a.px-num(a.line.prevu))}`,"À négocier ou comparer"];
     case "late":{const n=S.tasks.filter(isLate).length;return [`${pl(n,"tâche","tâches")} en retard`,"À reprogrammer"]}
     case "sugs":return [pl(a.n,"proposition","propositions"),"Tirées de vos mails"];
-    case "brief":return [`Nos envies à ${Math.round(allProg()*100)} %`,"À compléter"];
+    case "brief":return [allProg()?`Lamaelle vous connaît à ${Math.round(allProg()*100)} %`:"Racontez vos envies","À compléter"];
     case "refit":return ["Envies modifiées","Relancer l'analyse"];
     case "rdv":{const nq=v&&v.fit&&v.fit.questions?v.fit.questions.length:0;return [a.r.title,nq?`${nq} questions prêtes`:"Questions à préparer"]}
     case "visit":return [`Visite ${v.name}`,"À raconter au coach"];
@@ -693,7 +696,8 @@ const bGet=(c,q)=>S.brief.find(d=>d.id===bId(c,q))||{};
 const bMeta=c=>bGet(c,"_meta");
 const answered=a=>!!((a.commun&&String(a.commun).trim())||(a.choix&&a.choix.length)||(a.claire&&String(a.claire).trim())||(a.julien&&String(a.julien).trim()));
 const catProg=c=>{const qs=QC[c].qs;const n=qs.filter(q=>answered(bGet(c,q[0]))).length;return {n,t:qs.length,p:qs.length?n/qs.length:0}};
-const allProg=()=>{let n=0,t=0;QCATS.forEach(c=>{const p=catProg(c.k);n+=p.n;t+=p.t});return t?n/t:0};
+// « Lamaelle vous connaît à X % » (jauge de Nos envies), de 0 à 1
+const allProg=()=>(env().jaugeNow()||0)/100;
 async function saveBrief(c,q,patchObj){
   const cur=Object.assign({},bGet(c,q));delete cur.id;
   const base=q==="_meta"?{cat:c,qid:"_meta"}:{cat:c,qid:q,question:(QC[c].qs.find(x=>x[0]===q)||[])[2]||""};
@@ -790,9 +794,9 @@ function vPrestataires(){
   const sc=v=>v.status==="ecarte"?-2:(v.fit&&v.fit.score!=null?v.fit.score:-1);
   const groups=cats.map(c=>{
     const list=vs.filter(v=>v.cat===c).sort((a,b)=>sc(b)-sc(a)||VSTAT_RANK[b.status]-VSTAT_RANK[a.status]);
-    const qk=VCAT2Q[c],p=qk?catProg(qk):null,m=qk?bMeta(qk):{};
+    const tk=METIER2TILE[c],st=tk?env().stateOf(tk):null,m=tk?env().metaOf(tk):{};
     const cmp=S.vendors.filter(v=>v.cat===c&&v.status!=="ecarte").length>=2;
-    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${cmp?`<button class="chip acc" data-act="compare" data-cat="${esc(c)}">Comparer</button>`:""}${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${p?`<button class="chip ${p.p>=.7?"ok":p.p>0?"warn":""}" data-bgo="${qk}">Brief ${Math.round(p.p*100)} %</button>`:""}</div></div>
+    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${cmp?`<button class="chip acc" data-act="compare" data-cat="${esc(c)}">Comparer</button>`:""}${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${st?`<button class="chip ${["brief","complet"].includes(st)?"ok":st==="esquissee"?"warn":""}" data-bgo="${tk}">Nos envies · ${esc(env().etat(st))}</button>`:""}</div></div>
     <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};const sc=fi.score!=null?Math.round(fi.score):null;return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">
       <div class="vr-head">${list.length>1?`<span class="rank num">${i+1}.</span>`:""}<span class="t">${esc(v.name)}</span>${sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none" title="Pas encore analysé">à analyser</span>`}</div>
       <div class="vr-tags"><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${v.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div>
@@ -883,7 +887,7 @@ function devisSection(v){
 function openFiche(id){
   const v=S.vendors.find(x=>x.id===id);if(!v)return;
   const fi=v.fit||{},av=fi.avis||{};
-  const qk=VCAT2Q[v.cat];
+  const tk=METIER2TILE[v.cat];
   const L=(t)=>Array.isArray(t)&&t.length?`<ul class="blist">${t.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:"";
   const crit=Array.isArray(fi.criteres)&&fi.criteres.length?`<div class="fsec"><h4>Détail de la note</h4><div class="crit">${fi.criteres.map(c=>`<div class="hb-row"><span class="lab">${esc(c.label)}</span><span class="amt num">${Math.round(num(c.note))}/100</span><div class="hb-track"><i class="eng" style="width:${Math.max(0,Math.min(100,num(c.note)))}%;background:var(--${num(c.note)>=75?"ok":num(c.note)>=55?"gold":"bad"})"></i></div>${c.pourquoi?`<div class="why">${esc(c.pourquoi)}</div>`:""}</div>`).join("")}</div></div>`:"";
   const offre=[["Montant",v.prix?eur(v.prix):""],["Acompte",num(v.acompte)?eur(v.acompte)+(v.acomptePaye?" · versé":v.dateAcompte?" · avant le "+fmtD(pd(v.dateAcompte)):""):""],["Solde avant le",v.dateSolde?fmtD(pd(v.dateSolde)):""],["Contact",v.contact||""],["Téléphone",v.tel||""]].filter(x=>x[1]);
@@ -891,7 +895,7 @@ function openFiche(id){
   const layer=document.getElementById("layer");
   layer.innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Fiche ${esc(v.name)}" style="max-width:680px">
     <div class="fiche-top">${fitBadge(v,true)}<div style="min-width:0"><h3>${esc(v.name)}</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">${esc(v.cat||"")}</span><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${fi.confiance?`<span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span>`:""}</div></div></div>
-    ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'annuaire, ou attendez le passage de demain matin.${qk&&catProg(qk).p<.5?" Remplissez aussi la partie « "+esc(QC[qk].label)+" » de Nos envies pour une note plus juste.":""}</div>`}
+    ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'annuaire, ou attendez le passage de demain matin.${tk&&!env().essentielFait(tk)?" Répondez aussi à l'essentiel de « "+esc(tileName(tk))+" » dans Nos envies pour une note plus juste.":""}</div>`}
     ${offre.length?`<div class="fsec"><h4>L'offre</h4><div class="kv">${offre.map(([k,val])=>`<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div>${v.note?`<p style="font-size:14px;color:var(--muted);margin:10px 0 0;white-space:pre-line;overflow-wrap:anywhere">${esc(v.note)}</p>`:""}</div>`:""}
     ${devisSection(v)}
     ${crit}
@@ -902,7 +906,7 @@ function openFiche(id){
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
     ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
-    ${ficheBrief(qk)}
+    ${ficheBrief(TILE2BRIEF[tk])}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div>${S.vendors.filter(x=>x.cat===v.cat).length>=2?`<button type="button" class="btn" data-act="compare" data-cat="${esc(v.cat)}" data-id="${v.id}">Comparer</button>`:""}<button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
   </div></div>`;
 }
@@ -964,7 +968,7 @@ const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
 function briefBlocks(k){
   const b=S.briefs,x=b.categories[k];if(!x)return [];
   // budget : seulement le « budget cible » que vous avez choisi d'indiquer dans Nos envies (jamais vos lignes de budget)
-  const m=bMeta(k),bud=num(m.budget);
+  const m=Object.assign({},bMeta(k),env().metaOf(OLD2TILE[k]||k)),bud=num(m.budget);
   const d=wDate(),st=S.settings;
   const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
   const imgs=S.inspirations.filter(i=>i.cat===k&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
@@ -989,77 +993,62 @@ function pdfBriefs(k){
   const fr=filRougeBlocks();fr[0]={h2:"Notre vision d'ensemble (commune à tous nos prestataires)"};
   makePdf(`Brief ${BRIEF_LABEL[k]} - ${COUPLE()}.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...briefBlocks(k).slice(1),...fr]});
 }
-function vEnvies(){
-  const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
+/* Onglet « Nos envies » : écrans dans src/envies-ui.js, catalogue et règles dans agents/lib/envies (docs/nos-envies-v1.md) */
+let ENV=null;
+const env=()=>ENV||(ENV=makeEnvies({S,esc,meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
+  briefsReadyCount:()=>{const {b,ready}=briefsState();return ready?Object.keys(b.categories).length:0},briefFor,fitPill,synthHtml,archivedAnswers,moodboard,
+  pickPhoto:pickEnviePhoto,dictate,saveEnvie,render,go,saveF,SR,CHEV,BACK_SVG}));
+function vEnvies(){return env().vEnvies()}
+// Brief déjà rédigé (catégories de l'agent briefs) correspondant à une tuile
+const TILE2BRIEF={lieu:"lieu",repas:"traiteur",cocktail:"traiteur",photo:"photo",video:"video",musique:"musique",fleurs:"fleurs",papeterie:"papeterie",tenues:"tenues",beaute:"beaute",ceremonie:"ceremonie",officiant:"ceremonie",invites:"hebergement"};
+function briefFor(k){const {b,ready}=briefsState(),c=TILE2BRIEF[k];return ready&&c&&b.categories[c]?c:null}
+function fitPill(v){const fi=v.fit||{},sc=fi.score!=null?Math.round(fi.score):null;return sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none">à analyser</span>`}
+// Réponses des questions archivées lors du passage au nouveau questionnaire (docs/nos-envies-correspondance.md)
+const ARCHIVED=["vision--invites","vision--periode","vision--craintes","traiteur--budgetpp","tenues--budget","alliances--artisan"];
+function archivedAnswers(){return ARCHIVED.map(id=>{const d=S.brief.find(x=>x.id===id);if(!d)return null;const [c,q]=id.split("--"),Q=(QC[c]?.qs||[]).find(x=>x[0]===q);
+  const r=[Array.isArray(d.choix)?d.choix.join(", "):"",d.commun,d.claire,d.julien].filter(x=>x&&String(x).trim()).join(" · ");return r&&Q?{q:Q[2],r}:null}).filter(Boolean)}
+// Enregistre une réponse de « Nos envies » (fields : champs remplacés en entier, le reste du document est gardé)
+async function saveEnvie(id,data,fields){
+  if(!S.db||!S.canWrite)return false;
+  try{await S.db.collection("envies").doc(id).set(Object.assign({},data,{by:String(S.user&&S.user.email||""),updatedAt:Date.now()}),{mergeFields:fields});return true}catch(e){return writeErr(e)}
+}
+// Photo ajoutée depuis une tuile ou une question : rangée dans les inspirations de la tuile
+function pickEnviePhoto(k,label){
+  const inp=document.createElement("input");inp.type="file";inp.accept="image/*";
+  inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;try{const img=await loadImage(f),th=await resizeJpeg(img,480,.72);
+    if(await save("inspirations",null,{cat:k,description:label||"",thumb:await b64Of(th),by:prenom()||"",source:"envies"}))toast("Photo ajoutée à vos inspirations")}catch(e){toast("Photo illisible")}};
+  inp.click();
+}
+// Dictée dans un champ texte (même principe que la dictée du coach)
+function dictate(btn,ta){
+  if(!SR)return;if(btn._rec){btn._rec.stop();return}
+  const base=ta.value.trim(),r=new SR();r.lang="fr-FR";r.interimResults=true;r.continuous=false;
+  r.onresult=e=>{let t="";for(const x of e.results)t+=x[0].transcript;ta.value=(base?base+" ":"")+t;ta.dispatchEvent(new Event("input",{bubbles:true}))};
+  r.onend=()=>{btn._rec=null;btn.classList.remove("rec")};r.onerror=e=>{if(e.error==="not-allowed")toast("Autorisez le micro pour dicter")};
+  btn._rec=r;btn.classList.add("rec");r.start();
+}
+function synthHtml(){
   const pr=S.profil||{};
-  const qhtml=cat.qs.map(([id,type,q,opts],i)=>{
-    const a=bGet(c,id),done=answered(a),base=`search-q-${c}-${id}`;
-    const choix=Array.isArray(a.choix)?a.choix:[];
-    const chips=opts?`<div class="opts" role="group" aria-label="${esc(q)}">${opts.map(o=>`<button class="opt" data-bchip="${c}|${id}|${type}" data-o="${esc(o)}" aria-pressed="${choix.includes(o)}" ${dis}>${esc(o)}</button>`).join("")}</div>`:"";
-    const main=`<textarea autocomplete="off" name="search_text" id="${base}-commun" data-bq="${c}|${id}|commun" placeholder="${opts?"Une précision ?":"Votre réponse commune…"}" ${opts?'style="min-height:44px"':""} ${dis}>${esc(a.commun||"")}</textarea>`;
-    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">${esc(P1())}</span><textarea autocomplete="off" name="search_text" id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">${esc(P2())}</span><textarea autocomplete="off" name="search_text" id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
-    return `<div class="q ${done?"done":""}"><label class="ql" for="${base}-commun"><span class="n">${i+1}.</span><span>${esc(q)}</span></label>${chips}${main}
-      <label class="diff"><input type="checkbox" id="${base}-dz" data-bq="${c}|${id}|desaccord" ${a.desaccord?"checked":""} ${dis}> Nos avis diffèrent</label>${duo}</div>`;
-  }).join("");
-  const metaH=c==="vision"?"":`<div class="q"><div class="ql" style="font-weight:500">Pour conclure sur ${esc(cat.label.toLowerCase())}</div>
-    <div class="field"><span class="lab">Importance pour vous</span><div class="seg" role="group">${IMPORT.map((l,i)=>`<button data-bimp="${c}|${i+1}" aria-pressed="${m.importance===i+1}" ${dis}>${l}</button>`).join("")}</div></div>
-    <div class="duo"><div class="field"><label for="search-q-${c}-_m-budget" class="lab">Budget cible (€)</label><input type="number" min="0" step="50" inputmode="numeric" id="search-q-${c}-_m-budget" data-bm="${c}|budget" value="${esc(m.budget??"")}" ${dis}></div><div></div></div>
-    <div class="field"><label for="search-q-${c}-_m-reussite" class="lab">Ce qui en fera une vraie réussite</label><textarea autocomplete="off" name="search_text" id="search-q-${c}-_m-reussite" data-bm="${c}|reussite" ${dis}>${esc(m.reussite||"")}</textarea></div>
-    <div class="field"><label for="search-q-${c}-_m-redhibitoire" class="lab">Ce qui serait rédhibitoire</label><textarea autocomplete="off" name="search_text" id="search-q-${c}-_m-redhibitoire" data-bm="${c}|redhibitoire" ${dis}>${esc(m.redhibitoire||"")}</textarea></div></div>`;
   const synth=pr.resume?`<div class="synth"><div class="panel-h"><h3>Ce que nous retenons de vous</h3>${pr.completude!=null?`<span class="chip ${pr.completude>=70?"ok":"warn"} num">Brief complet à ${Math.round(pr.completude)} %</span>`:""}</div>
     <p>${esc(pr.resume)}</p>
     ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">${esc(P1())} :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">${esc(P2())} :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
     ${Array.isArray(pr.questionsOuvertes)&&pr.questionsOuvertes.length?`<h3 class="sec" style="margin-top:14px">Ce qu'il nous manque pour bien choisir</h3><ul class="blist">${pr.questionsOuvertes.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}</div>`:"";
-  const tot=allProg(),tab=["mood","quest","synth"].includes(S.f.envTab)?S.f.envTab:(S.inspirations.length?"mood":"quest");
-  const fr=(S.briefs||{}).filRouge||{},anyAns=S.brief.some(d=>answered(d));
-  const firstSentence=t=>String(t||"").split(/(?<=[.!?])\s/)[0];
-  const hero=`<div class="env-hero"><div class="eh-top"><div style="min-width:0"><span class="eh-k">Nos envies</span><h2>${esc(fr.titre||"Votre mariage, en images et en mots")}</h2>
-      ${fr.motsCles&&fr.motsCles.length?`<div class="eh-tags">${fr.motsCles.slice(0,5).map(x=>`<span>${esc(x)}</span>`).join("")}</div>`:`<p>${esc(pr.resume?firstSentence(pr.resume):"Tout ce qui fait votre mariage au même endroit : vos photos coup de cœur, vos réponses au coach et ce qu'il en retient pour vos prestataires.")}</p>`}</div>
-      <div class="eh-ring" title="Questionnaire rempli à ${Math.round(tot*100)} %">${ring(tot,"var(--gold)")}</div></div>
-    ${S.canWrite?`<div class="eh-acts"><button class="btn eh-main" data-act="chatcat" data-c="">${anyAns?"Continuer avec le coach":"Parler au coach"}</button><button class="btn eh-ghost" data-act="inspadd">+ Photo</button></div>`:""}</div>`;
-  const nI=S.inspirations.length;
-  const tabs=`<div class="seg env-tabs" role="tablist" aria-label="Nos envies">${[["mood",`Moodboard${nI?` <span class="num">${nI}</span>`:""}`],["quest",`Questions <span class="num">${Math.round(tot*100)} %</span>`],["synth","Synthèse"]].map(([k,l])=>`<button role="tab" data-act="envtab" data-v="${k}" aria-selected="${tab===k}" aria-pressed="${tab===k}">${l}</button>`).join("")}</div>`;
-  let body="";
-  if(tab==="mood")body=moodboard();
-  else if(tab==="synth")body=`${analyseBar("envies")}${synth||`<div class="synth"><p class="plan-when" style="margin:0">La synthèse du coach apparaîtra ici dès que vous aurez répondu à quelques questions : vos priorités, vos points d'accord et ce qu'il reste à trancher.</p></div>`}${briefsPanel(null)}`;
-  else if(!S.f.bcatOpen)body=questGrid();
-  else{
-    const i=QCATS.findIndex(x=>x.k===c),p=catProg(c);
-    body=`<div class="env-detail"><button class="link env-back" data-act="envgrid">${BACK_SVG}<span>Toutes les catégories</span></button>
-      <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p><div class="eh-prog"><span class="pbar"><i style="width:${p.p*100}%"></i></span><span>${p.n}/${p.t} réponses</span></div></div>
-      ${inspStrip(c)}
-      ${briefsState().ready&&S.briefs.categories[c]?`<div class="env-brief"><span>Le brief « ${esc(BRIEF_LABEL[c])} » est prêt à envoyer à vos prestataires.</span><button class="btn sm" data-act="briefpdf" data-c="${c}">Brief PDF</button></div>`:""}
-      ${S.canWrite?`<div class="chat-cta"><div><b>Plus simple : en discutant</b><span>Le coach vous pose les questions de « ${esc(cat.label)} » une par une et remplit pour vous.</span></div><button class="btn primary" data-act="chatcat" data-c="${c}">Remplir avec le coach</button></div>`:""}
-      <div class="qs">${qhtml}${metaH}</div>
-      <div class="env-pn">${i>0?`<button class="btn" data-bcat="${QCATS[i-1].k}">← ${esc(QCATS[i-1].label)}</button>`:"<span></span>"}${i<QCATS.length-1?`<button class="btn primary" data-bcat="${QCATS[i+1].k}">${esc(QCATS[i+1].label)} →</button>`:""}</div></div>`;
-  }
-  return `${hero}${tabs}<div class="env-body">${body}</div>`;
+  return `${analyseBar("envies")}${synth||`<div class="synth"><p class="plan-when" style="margin:0">La synthèse du coach apparaîtra ici dès que vous aurez répondu à quelques questions : vos priorités, vos points d'accord et ce qu'il reste à trancher.</p></div>`}${briefsPanel(null)}`;
 }
 /* Moodboard : toutes les inspirations en mur de photos, filtrables par catégorie ; un toucher ouvre la photo en grand */
 const inspSorted=()=>S.inspirations.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-const moodList=()=>{const f=S.f.moodCat||"all";return inspSorted().filter(x=>f==="all"||x.cat===f)};
+// Les inspirations sont rangées par tuile de « Nos envies » (anciennes catégories traduites à l'affichage)
+const inspTile=x=>env().inspTile(x),tileName=k=>env().tName(k);
+const moodList=()=>{const f=S.f.moodCat||"all";return inspSorted().filter(x=>f==="all"||inspTile(x)===f)};
 function moodboard(){
-  const all=inspSorted(),f=QC[S.f.moodCat]?S.f.moodCat:"all",list=moodList();
+  const all=inspSorted(),f=TUILES.some(t=>t.k===S.f.moodCat)?S.f.moodCat:"all",list=moodList();
   if(!all.length)return `<div class="mood-empty"><b>Votre moodboard est vide</b><p>Ajoutez une photo de lieu, de déco, de tenue ou de fleurs qui vous plaît : le coach la décrit, en tire vos goûts et la range ici. Vous pouvez aussi relier un tableau Pinterest.</p>
     ${S.canWrite?`<div class="eh-acts"><button class="btn primary" data-act="inspadd">Ajouter une photo</button><button class="btn" data-go="reglages-ia">Relier Pinterest</button></div>`:""}</div>`;
-  const cats=QCATS.filter(q=>all.some(x=>x.cat===q.k));
-  const chips=`<div class="mood-f" role="group" aria-label="Filtrer par catégorie"><button class="chip" data-act="moodcat" data-v="all" aria-pressed="${f==="all"}">Tout · ${all.length}</button>${cats.map(q=>`<button class="chip" data-act="moodcat" data-v="${q.k}" aria-pressed="${f===q.k}">${esc(q.label)} · ${all.filter(x=>x.cat===q.k).length}</button>`).join("")}</div>`;
-  const tiles=list.map(x=>`<button class="mood-i" data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"><span class="mood-c">${esc((QC[x.cat]||{}).label||"")}${x.source==="pinterest"?" · Pinterest":""}</span></button>`).join("");
+  const cats=TUILES.filter(t=>all.some(x=>inspTile(x)===t.k));
+  const chips=`<div class="mood-f" role="group" aria-label="Filtrer par tuile"><button class="chip" data-act="moodcat" data-v="all" aria-pressed="${f==="all"}">Tout · ${all.length}</button>${cats.map(t=>`<button class="chip" data-act="moodcat" data-v="${t.k}" aria-pressed="${f===t.k}">${esc(tileName(t.k))} · ${all.filter(x=>inspTile(x)===t.k).length}</button>`).join("")}</div>`;
+  const tiles=list.map(x=>`<button class="mood-i" data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"><span class="mood-c">${esc(tileName(inspTile(x)))}${x.source==="pinterest"?" · Pinterest":""}</span></button>`).join("");
   return `${chips}<div class="mood">${S.canWrite?`<button class="mood-add" data-act="inspadd"><span aria-hidden="true">+</span>Ajouter une photo</button>`:""}${tiles}</div>
     <p class="plan-when mood-n">Touchez une photo pour la voir en grand, la changer de catégorie ou en parler au coach.${S.pinterest&&(S.pinterest.boards||[]).length?"":` <button class="link" data-go="reglages-ia">Relier un tableau Pinterest</button>`}</p>`;
-}
-function inspStrip(c){
-  const list=inspSorted().filter(x=>x.cat===c);
-  if(!list.length&&!S.canWrite)return "";
-  return `<div class="strip-insp"><div class="insp-h"><h3>Inspirations${list.length?` · ${list.length}`:""}</h3></div><div class="strip-row">
-    ${S.canWrite?`<button class="mood-add sm" data-act="inspadd"><span aria-hidden="true">+</span>Photo</button>`:""}
-    ${list.map(x=>`<button class="strip-i" data-act="inspopen" data-id="${x.id}" data-scope="${c}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"></button>`).join("")}
-    ${!list.length?`<p class="plan-when" style="margin:0;align-self:center">Une photo vaut mieux qu'un long discours : montrez au coach ce qui vous plaît.</p>`:""}</div></div>`;
-}
-function questGrid(){
-  return `<div class="qcats">${QCATS.map(q=>{const p=catProg(q.k),m=bMeta(q.k),th=inspSorted().filter(x=>x.cat===q.k).slice(0,3);
-    return `<button class="qcat ${p.p>=1?"done":""}" data-bcat="${q.k}"><span class="qcat-img ${th.length?"":"none"}">${th.length?th.map(x=>`<img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy">`).join(""):`<span>${esc(q.label.charAt(0))}</span>`}</span>
-      <span class="qcat-b"><b>${esc(q.label)}</b><span class="qcat-s">${p.p>=1?"Complet":`${p.n}/${p.t} réponses`}${m.importance>=4?` · ${esc(IMPORT[m.importance-1])}`:""}</span><span class="pbar"><i style="width:${p.p*100}%"></i></span></span></button>`}).join("")}</div>`;
 }
 /* Visionneuse d'une inspiration : grande photo, description, catégorie, source, en parler au coach */
 function openInsp(id,scope){
@@ -1069,7 +1058,7 @@ function openInsp(id,scope){
     <div class="lb-img"><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description||"")}">${nav(-1,"Photo précédente")}${nav(1,"Photo suivante")}</div>
     <p class="lb-n">${i+1} / ${list.length}${x.by?` · ${esc(x.by)}`:""}${x.pinUrl?` · <a href="${esc(x.pinUrl)}" target="_blank" rel="noopener noreferrer">Voir sur Pinterest</a>`:""}</p>
     <p class="lb-d">${esc(x.description||"")}</p>
-    ${S.canWrite?`<div class="field"><label for="search-insp-cat">Catégorie</label><select id="search-insp-cat" data-inspcat="${x.id}">${QCATS.map(q=>`<option value="${q.k}" ${q.k===x.cat?"selected":""}>${esc(q.label)}</option>`).join("")}</select></div>
+    ${S.canWrite?`<div class="field"><label for="search-insp-cat">Tuile</label><select id="search-insp-cat" data-inspcat="${x.id}">${TUILES.map(t=>`<option value="${t.k}" ${t.k===inspTile(x)?"selected":""}>${esc(tileName(t.k))}</option>`).join("")}</select></div>
     <div class="lb-acts"><button class="btn primary" data-act="inspask" data-id="${x.id}">En parler au coach</button><button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button></div>`:""}</div></div>`;
 }
 /* ---------- Day-of ---------- */
@@ -1223,7 +1212,7 @@ function pinterestPanel(){
   const m=S.pinterest||{},boards=m.boards||[],dis=S.canWrite?"":"disabled",running=(S.locks.pinterest||0)>Date.now()||((m.requestedAt||0)>(m.lastSyncAt||0)&&Date.now()-(m.requestedAt||0)<10*60000);
   const n=S.inspirations.filter(x=>x.source==="pinterest").length;
   const last=m.lastSyncAt?`Dernière synchronisation ${relDay(new Date(m.lastSyncAt))} à ${new Date(m.lastSyncAt).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}${m.lastImported!=null?` · ${m.lastImported} nouvelle${m.lastImported>1?"s":""} épingle${m.lastImported>1?"s":""}`:""}${m.remaining?` · ${m.remaining} en attente (prochain passage)`:""}.`:"Jamais synchronisé.";
-  const opts=c=>`<option value="auto" ${!c||c==="auto"?"selected":""}>Rangement automatique</option>${QCATS.map(q=>`<option value="${q.k}" ${c===q.k?"selected":""}>${esc(q.label)}</option>`).join("")}`;
+  const opts=c=>{const t=c&&c!=="auto"?(OLD2TILE[c]||c):"auto";return `<option value="auto" ${t==="auto"?"selected":""}>Rangement automatique</option>${TUILES.map(x=>`<option value="${x.k}" ${t===x.k?"selected":""}>${esc(tileName(x.k))}</option>`).join("")}`};
   return `<div class="formpanel" style="margin-top:8px" id="pinterest"><div class="panel-h" style="margin-bottom:6px"><h3>Tableaux Pinterest</h3>${n?`<span class="chip ok">${n} épingle${n>1?"s":""} importée${n>1?"s":""}</span>`:""}</div>
     <p class="plan-when" style="margin:0 0 12px">Sur Pinterest, ouvrez un tableau <b>public</b>, touchez « Partager » puis « Copier le lien » et collez-le ici. Ses nouvelles épingles arrivent dans vos inspirations (Nos envies), décrites et rangées par catégorie par le coach, puis nourrissent votre fil rouge et vos briefs. Synchronisation chaque jour, 12 épingles au plus par passage.</p>
     ${boards.length?`<div class="pin-list">${boards.map((b,i)=>`<div class="pin-row"><div class="pin-t"><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(pinName(b.url))}</a></div>
@@ -1337,7 +1326,7 @@ function pdfReport(){
   if(rdv.length)blocks.push({h2:"Rendez-vous à venir"},{ul:rdv.map(r=>`${fmtD(pd(r.date))}${r.time?" "+r.time:""} — ${r.title}${r.lieu?" ("+r.lieu+")":""}`)});
   blocks.push({h2:"Invités"},{p:`${g.length} invités dont ${g.filter(x=>x.enfant).length} enfants · ${yes} présents, ${no} absents, ${g.length-yes-no} en attente · ${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length} au dîner.`},
     {note:"Par groupe : "+groups.map(([k,v])=>`${k} ${v}`).join(" · ")+(g.some(x=>x.regime)?"\nRégimes : "+g.filter(x=>x.regime).map(x=>x.name+" ("+x.regime+")").join(", "):"")});
-  blocks.push({h2:"Nos envies"},{note:`Rempli à ${Math.round(allProg()*100)} % · `+QCATS.map(c=>{const p=catProg(c.k);return `${c.label} ${p.n}/${p.t}`}).join(" · ")});
+  blocks.push({h2:"Nos envies"},{note:`Lamaelle vous connaît à ${Math.round(allProg()*100)} % · `+TUILES.map(t=>`${tileName(t.k)} : ${env().etat(env().stateOf(t.k)).toLowerCase()}`).join(" · ")});
   makePdf(`Rapport - ${COUPLE()} - ${isoD(today())}.pdf`,{docTitle:"Rapport d'organisation · "+fmtD(today()),blocks});
 }
 
@@ -1763,15 +1752,14 @@ document.addEventListener("click",async e=>{
   if(t.dataset.close){if(e.target===t||t.tagName==="BUTTON")closeModal();return}
   if(t.dataset.go){go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
-  if(t.dataset.bgo){S.f.bcat=t.dataset.bgo;S.f.envTab="quest";S.f.bcatOpen=true;saveF();go("envies");return}
-  if(t.dataset.bcat){S.f.bcat=t.dataset.bcat;S.f.envTab="quest";S.f.bcatOpen=true;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView({behavior:"smooth"});return}
-  if(t.dataset.bchip){if(!S.canWrite)return;const [c,q,type]=t.dataset.bchip.split("|"),o=t.dataset.o;const cur=Array.isArray(bGet(c,q).choix)?bGet(c,q).choix.slice():[];let next;if(type==="c")next=cur.includes(o)?[]:[o];else next=cur.includes(o)?cur.filter(x=>x!==o):cur.concat(o);t.setAttribute("aria-pressed",next.includes(o));await saveBrief(c,q,{choix:next});return}
-  if(t.dataset.bimp){if(!S.canWrite)return;const [c,n]=t.dataset.bimp.split("|");await saveBrief(c,"_meta",{importance:+n});return}
+  // ouvre la page d'une tuile de « Nos envies » (data-bgo : clé de tuile)
+  if(t.dataset.bgo||t.dataset.bcat){S.f.envView="tile";S.f.envTile=t.dataset.bgo||t.dataset.bcat;saveF();go("envies");return}
   if(t.dataset.who){S.f.owner=t.dataset.who;S.f.hideDone=true;saveF();go("planning");return}
   if(t.dataset.new){if(S.canWrite)openEditor(t.dataset.new,null);return}
   if(t.dataset.edit){openEditor(t.dataset.edit,t.dataset.id);return}
   if(t.dataset.f){S.f[t.dataset.f]=t.dataset.v;saveF();if(t.dataset.f.startsWith("g")){renderInvitesPart()}else render();return}
   const a=t.dataset.act,id=t.dataset.id;
+  if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
   if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;await patch("tasks",id,{status:k.status==="done"?"todo":"done"});return}
   if(a==="rsvp"){if(S.canWrite)openRsvp(id);return}
   if(a==="setrsvp"){if(!S.canWrite)return;closeModal();const g=S.guests.find(x=>x.id===id);if(g&&(g.rsvp||"attente")!==t.dataset.v&&await patch("guests",id,{rsvp:t.dataset.v}))toast(`${g.name} : ${RSVP[t.dataset.v]}`);return}
@@ -1787,8 +1775,6 @@ document.addEventListener("click",async e=>{
     if(await patch("tasks",A.id,{status:st,note,due:A.due||B.due||null})&&await remove("tasks",B.id))toast("Tâches fusionnées");return}
   if(a==="dupkeep"){if(S.canWrite&&await mergeDoc("meta/prefs",{notDupes:[...(S.prefs.notDupes||[]),t.dataset.k]}))toast("C'est noté");return}
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
-  if(a==="envtab"){S.f.envTab=t.dataset.v;if(t.dataset.v==="quest")S.f.bcatOpen=false;saveF();render();return}
-  if(a==="envgrid"){S.f.bcatOpen=false;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView();return}
   if(a==="moodcat"){S.f.moodCat=t.dataset.v;saveF();render();return}
   if(a==="devisadd"){const v=S.vendors.find(x=>x.id===t.dataset.id);if(!v||!S.canWrite)return;closeModal();S.chat.mode="chat";
     await openChat(undefined,`Voici le devis de ${v.name} (id ${v.id}) : lis-le et enregistre-le sur sa fiche. `);setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
@@ -1871,7 +1857,7 @@ function renderInvitesPart(){
   document.querySelectorAll('[data-f^="g"]').forEach(b=>b.setAttribute("aria-pressed",S.f[b.dataset.f]===b.dataset.v));
   if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
-document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
+document.addEventListener("input",e=>{if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
   if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,180,Math.round((window.visualViewport?.height||innerHeight)*.3))+"px"}});
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
@@ -1889,6 +1875,7 @@ document.addEventListener("focusout",()=>{setTimeout(()=>{if(S.pending&&!(docume
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.fiche){e.preventDefault();openFiche(e.target.dataset.fiche)}});
 document.addEventListener("submit",async e=>{
   const f=e.target;
+  if(env().submit(f)){e.preventDefault();return}
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
