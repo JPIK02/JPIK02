@@ -1,6 +1,6 @@
 # Lamaelle — « Nos envies » : correspondance ancien → nouveau questionnaire
 
-Version du 20 novembre 2026, lot 1 de `nos-envies-v1.md` (section 7). **À valider par Julien avant toute migration.**
+Version du 20 novembre 2026, lot 1 de `nos-envies-v1.md` (section 7). **Validé par Julien le 20 novembre 2026**, avec les trois décisions en fin de document. Règles codées dans `agents/lib/envies/migration.js`.
 
 Source : diagnostic en lecture seule (`diag.yml`, cible « envies ») du 20 novembre 2026. Ce document ne contient aucune réponse du couple : seulement si la question est répondue, et les règles de reprise.
 
@@ -102,7 +102,7 @@ Identifiants des nouvelles questions : `tuile.question` (ils seront ceux du cata
 | identite | vide | `papeterie.style` · Essentiel | — |
 | reponses | vide | `papeterie.site` · Détails | — |
 | **Transport** | | | |
-| voiture (des mariés) | répondue | **à archiver** (pas de question sur la voiture des mariés) | — |
+| voiture (des mariés) | répondue | `invites.voiture` · Enfants, logement, transport · Détails (question ajoutée au catalogue) | texte libre |
 | navettes | vide | `invites.transport` · Essentiel | — |
 | trajets | vide | `lieu.ensemble` · Détails | — |
 | **Cérémonie** | | | |
@@ -128,11 +128,11 @@ Identifiants des nouvelles questions : `tuile.question` (ils seront ceux du cata
 - **Tuiles alimentées** : Votre mariage, Lieu, Cérémonie, Repas, Bar et boissons, Gâteau et desserts, Photo, Vidéo, Musique et soirée, Fleurs et déco, Tenues et alliances, Beauté et préparatifs, Enfants, logement, transport, Le lendemain.
 - **Tuiles neuves, sans réponse reprise** : Officiant (grisée tant qu'il n'y a pas de cérémonie laïque), Cocktail, Papeterie, Voyage de noces, Wedding planner.
 - **Le lendemain** ne remonte que si « Un week-end » ou « Un brunch » est choisi dans `mariage.duree`.
-- **Archivées** : 7 questions (invites, periode, craintes, budgetpp, budget tenues, artisan, voiture), dont 3 répondues, toujours lisibles dans la synthèse et connues du coach.
+- **Archivées** : 6 questions (invites, periode, craintes, budgetpp, budget tenues, artisan), dont 2 répondues, toujours lisibles dans la synthèse et connues du coach.
 - Plusieurs anciennes réponses arrivent sur une même nouvelle question (par exemple `invites.logement`) : les textes sont mis bout à bout, chacun précédé de « Réponse précédente : ».
 
-## Points à confirmer
+## Décisions de Julien (20 novembre 2026)
 
-1. La place de l'enfant dans la journée (`vision.juliette`) va dans `invites.enfants`, et qui s'en occupe (`enfants.juliette`) dans `invites.garde`. Autre choix possible : la Cérémonie (`ceremonie.vivre`).
-2. Les deux textes de tenue (partenaire 1 et partenaire 2) restent communs jusqu'au lot 4, comme le prévoit le dossier.
-3. La voiture des mariés n'a pas de question dans le nouvel inventaire : archivée. Elle peut devenir une option « Voiture des mariés » dans `invites.transport` si vous le souhaitez.
+1. Juliette : sa place dans la journée va dans `invites.enfants`, qui s'en occupe dans `invites.garde` (tuile Enfants, logement, transport).
+2. Les deux textes de tenue restent communs jusqu'au lot 4, chacun précédé du prénom (« Tenue de … : »).
+3. La voiture des mariés est gardée : nouvelle question « La voiture des mariés » (Jamais · Pourquoi pas · Absolument sur Voiture de collection, Décapotable, Calèche, Voiture d'un proche), niveau Détails de la tuile Enfants, logement, transport.
