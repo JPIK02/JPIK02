@@ -28,8 +28,9 @@ export const FR = {
    "pourquoi": "Les officiants laïques se réservent environ 10 mois avant."
   },
   "cocktail": {
-   "nom": "Cocktail (vin d'honneur)",
-   "pourquoi": "Le vin d'honneur se construit avec le traiteur, environ 10 mois avant."
+   "nom": "Vin d'honneur",
+   "pourquoi": "Le vin d'honneur se construit avec le traiteur, environ 10 mois avant.",
+   "nomHorsFR": "Cocktail"
   },
   "repas": {
    "nom": "Repas",
@@ -121,7 +122,8 @@ export const FR = {
   "complet": "Brief prêt · complet",
   "moment": "C'est le moment",
   "gris": "Pas pour nous",
-  "chacun": "Chacun la sienne"
+  "chacun": "Chacun la sienne",
+  "enCours": "En cours"
  },
  "questions": {
   "mariage.style": {
@@ -354,7 +356,7 @@ export const FR = {
    }
   },
   "ceremonie.officie": {
-   "libelle": "Qui officie ? (laïque)",
+   "libelle": "Qui officie la cérémonie laïque ?",
    "sertA": "Active ou grise la tuile Officiant",
    "choix": {
     "un-officiant-professionnel": "Un officiant professionnel",

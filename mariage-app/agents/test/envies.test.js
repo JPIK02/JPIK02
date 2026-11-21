@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { TUILES, QUESTIONS, FAMILLES } from "../lib/envies/catalogue.js";
 import { FR } from "../lib/envies/fr.js";
-import { tileGris, jauge, explore, tileState, levelDone, answerText, QBY, nextStep } from "../lib/envies/logic.js";
+import { tileGris, jauge, explore, tileState, levelDone, levelStarted, levelCount, tileNom, answerText, QBY, nextStep } from "../lib/envies/logic.js";
 import { migrateBrief } from "../lib/envies/migration.js";
 import { QCATS } from "../../src/questions.js";
 
@@ -27,7 +27,9 @@ test("tuiles grisées : « Jamais » sur la 1re question, Officiant conditionnel
   assert.equal(tileGris("video", { "video.envie": { v: { _: "j" } }, "_tuile.video": { actif: true } }).gris, false);
   assert.equal(tileGris("planner", { "planner.accompagnement": { v: { "organisation-complete": "j", "coordination-du-jour-j": "j", "conseils-ponctuels": "j" } } }).gris, true);
   assert.equal(tileGris("planner", { "planner.accompagnement": { v: { "organisation-complete": "j" } } }).gris, false);
-  assert.deepEqual(tileGris("officiant", {}), { gris: true, raison: "pasLaique" });
+  assert.deepEqual(tileGris("officiant", {}), { gris: true, raison: "selonCeremonie" });
+  assert.equal(tileGris("officiant", { "ceremonie.types": { v: ["civile-en-mairie"] } }).raison, "pasLaique");
+  assert.equal(tileGris("officiant", { "ceremonie.types": { v: ["laique"] }, "ceremonie.officie": { v: ["nous-deux"] } }).raison, "vousOfficiez");
   assert.equal(tileGris("officiant", { "ceremonie.types": { v: ["laique"] }, "ceremonie.officie": { v: ["un-proche"] } }).raison, "procheOfficie");
   assert.equal(tileGris("officiant", { "ceremonie.types": { v: ["laique"] }, "ceremonie.officie": { v: ["un-officiant-professionnel"] } }).gris, false);
 });
@@ -130,4 +132,26 @@ test("récolte passive : proposée seulement sur une question sans réponse, com
   assert.equal(inSource("« Un château avec parc. »", "Visite : un  CHÂTEAU avec parc, très beau"), true);
   assert.equal(inSource("une grange rénovée", "Visite : un château avec parc"), false);
   assert.throws(() => toAnswer({ question: "lieu.inconnue" }, FR), /question inconnue/);
+});
+
+test("v1.1 : « En cours » dès une réponse sans niveau fini, ordre des états, libellés sans mention de pays", () => {
+  const A = { "lieu.type": { v: ["chateau"] } };
+  assert.equal(levelStarted("lieu", "essentiel", A, "claire"), true);
+  assert.equal(tileState("lieu", A, "claire"), "enCours");
+  assert.equal(tileState("lieu", { "lieu.type": { vu: true } }, "claire"), "decouvrir", "passer ne suffit pas");
+  assert.equal(tileState("lieu", A, "claire", "FR", "lieu"), "moment", "C'est le moment passe avant");
+  assert.deepEqual(levelCount("lieu", "essentiel", A, "claire"), { n: 1, total: 3 });
+  assert.equal(tileState("tenues", {}, "claire"), "chacun");
+  assert.equal(tileNom("cocktail", FR, "FR"), "Vin d'honneur");
+  assert.equal(tileNom("cocktail", FR, "BE"), "Cocktail");
+  const txt = JSON.stringify(FR.tuiles) + JSON.stringify(Object.values(FR.questions).map(q => [q.libelle, q.choix]));
+  assert.ok(!/\(FR\)|\(vin d'honneur\)/i.test(txt));
+});
+
+test("v1.1 : la photo du gâteau rangée dans « traiteur » va dans Gâteau et desserts", async () => {
+  const { rangement } = await import("../lib/envies/inspirations.js");
+  assert.equal(rangement({ cat: "repas", ancienneCat: "traiteur", description: "Une pièce montée de choux" }), "gateau");
+  assert.equal(rangement({ cat: "repas", ancienneCat: "traiteur", description: "Un buffet de fromages" }), null);
+  assert.equal(rangement({ cat: "repas", description: "Un gâteau" }), null, "rangée par le couple : on n'y touche pas");
+  assert.equal(rangement({ cat: "gateau", ancienneCat: "traiteur", rangeeLe: 1, description: "gâteau" }), null);
 });

@@ -18,7 +18,7 @@ TUILES = [
  ("lieu", "coeur", 24, ["Lieu"], "Lieu", "Le lieu fixe la date, la capacité et le budget : il se réserve en premier."),
  ("ceremonie", "coeur", 12, [], "Cérémonie", "Les cérémonies se préparent environ un an avant."),
  ("officiant", "coeur", 10, ["Officiant"], "Officiant", "Les officiants laïques se réservent environ 10 mois avant."),
- ("cocktail", "table", 10, ["Traiteur"], "Cocktail (vin d'honneur)", "Le vin d'honneur se construit avec le traiteur, environ 10 mois avant."),
+ ("cocktail", "table", 10, ["Traiteur"], "Vin d'honneur", "Le vin d'honneur se construit avec le traiteur, environ 10 mois avant."),
  ("repas", "table", 10, ["Traiteur"], "Repas", "Les bons traiteurs se réservent environ 10 mois avant."),
  ("bar", "table", 8, ["Bar"], "Bar et boissons", "Les boissons se décident environ 8 mois avant, avec le traiteur ou le lieu."),
  ("gateau", "table", 6, ["Pâtissier"], "Gâteau et desserts", "Le gâteau se choisit environ 6 mois avant, après la dégustation."),
@@ -65,7 +65,7 @@ Q = {
  ("E","CM","types","Quelles cérémonies ?","Officiant, lieux","Civile (en mairie) · Religieuse · Laïque · Pas encore décidé",{}),
  ("E","CU","ambiance","Quelle ambiance ?","Brief officiant","Solennelle ↔ Légère et drôle",{}),
  ("E","CM","duree","Combien de temps ?","Déroulé","20 min · 45 min · Une heure ou plus",{}),
- ("D","CM","officie","Qui officie ? (laïque)","Active ou grise la tuile Officiant","Un officiant professionnel · Un proche · Nous deux",{}),
+ ("D","CM","officie","Qui officie la cérémonie laïque ?","Active ou grise la tuile Officiant","Un officiant professionnel · Un proche · Nous deux",{}),
  ("D","JPA","vivre","Ce que vous voulez y vivre","Contenu","Lectures · Discours de proches · Vœux écrits par vous · Rituel symbolique · Musique live · Enfants d'honneur",{}),
  ("D","CM","entree","Votre entrée","Déroulé, musique","Accompagné(e) d'un parent · Ensemble · Chacun de son côté · Surprise",{}),
  ("D","JPA","sortie","La sortie","Déco, photo","Pétales · Bulles · Haie d'honneur · Musique entraînante",{}),
@@ -293,9 +293,11 @@ for i, (k, fam, rem, met, nom, pq) in enumerate(TUILES):
         fr_q[qd["id"]] = tx
     assert counts["E"] <= 3 and counts["D"] <= 5 and counts["P"] <= 4, (k, counts)
 
+# Nom d'une tuile hors de France (le texte d'interface ne porte jamais de mention de pays)
+NOM_HORS_FR = {"cocktail": {"nomHorsFR": "Cocktail"}}
 fr = {
  "familles": dict(FAMILLES),
- "tuiles": {k: {"nom": nom, "pourquoi": pq} for (k, fam, rem, met, nom, pq) in TUILES},
+ "tuiles": {k: {"nom": nom, "pourquoi": pq, **NOM_HORS_FR.get(k, {})} for (k, fam, rem, met, nom, pq) in TUILES},
  "niveaux": {
   "essentiel": {"nom": "L'essentiel", "phrase": "Trois questions pour orienter la recherche et noter les prestataires."},
   "details": {"nom": "Les détails", "phrase": "De quoi rédiger le brief à envoyer aux prestataires."},
@@ -304,7 +306,7 @@ fr = {
  "cc": {"lesDeux": "Les deux"},
  "cu": {"differents": "Nous ne sommes pas pareils", "nsp": "Aucune idée"},
  "etats": {"decouvrir": "À découvrir", "esquissee": "Esquissée", "brief": "Brief prêt", "complet": "Brief prêt · complet",
-           "moment": "C'est le moment", "gris": "Pas pour nous", "chacun": "Chacun la sienne"},
+           "moment": "C'est le moment", "gris": "Pas pour nous", "chacun": "Chacun la sienne", "enCours": "En cours"},
  "questions": fr_q,
 }
 

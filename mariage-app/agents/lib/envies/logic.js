@@ -43,8 +43,9 @@ export function tileGris(k, A) {
   if (meta.pasPourNous) return { gris: true, raison: "pasPourNous" };
   if (k === "officiant") {
     const types = vals(A, "ceremonie.types"), qui = vals(A, "ceremonie.officie");
+    if (!types.length) return { gris: true, raison: "selonCeremonie" };
     if (!types.includes("laique")) return { gris: true, raison: "pasLaique" };
-    if (!qui.includes("un-officiant-professionnel")) return { gris: true, raison: qui.length ? "procheOfficie" : "officiantAChoisir" };
+    if (!qui.includes("un-officiant-professionnel")) return { gris: true, raison: qui.includes("un-proche") ? "procheOfficie" : qui.includes("nous-deux") ? "vousOfficiez" : "officiantAChoisir" };
   }
   const q1 = QUESTIONS.find(q => q.tuile === k && q.niveau === "essentiel" && q.ordre === 1);
   if (q1 && q1.format === "JPA") {
@@ -61,14 +62,31 @@ export function levelDone(k, niveau, A, me, pays) {
   const qs = questionsOf(k, niveau, pays);
   return qs.length > 0 && qs.every(q => isSeen(q, A, me));
 }
-/** Mot d'état d'une tuile (clé de FR.etats). */
+/** Niveau commencé : au moins une réponse, sans être terminé (demi-trait, « En cours », « n questions sur N »). */
+export function levelStarted(k, niveau, A, me, pays) {
+  const qs = questionsOf(k, niveau, pays);
+  return !levelDone(k, niveau, A, me, pays) && qs.some(q => isAnswered(q, A, me));
+}
+/** Avancement d'un niveau : questions vues (répondues ou passées) sur le total. */
+export function levelCount(k, niveau, A, me, pays) {
+  const qs = questionsOf(k, niveau, pays);
+  return { n: qs.filter(q => isSeen(q, A, me)).length, total: qs.length };
+}
+/** Mot d'état d'une tuile (clé de FR.etats), le premier qui s'applique :
+ *  Pas pour nous > C'est le moment > Brief prêt · complet > Brief prêt > Esquissée > En cours > À découvrir
+ *  (Tenues : « Chacun la sienne » à la place de « À découvrir »). */
 export function tileState(k, A, me, pays, exploreKey) {
   if (tileGris(k, A).gris) return "gris";
   if (k === exploreKey) return "moment";
   const [e, d, p] = ["essentiel", "details", "pro"].map(n => levelDone(k, n, A, me, pays));
-  if (k === "tenues" && !d) return "chacun";
-  return e && d && p ? "complet" : d ? "brief" : e ? "esquissee" : "decouvrir";
+  if (e && d && p) return "complet";
+  if (d) return "brief";
+  if (e) return "esquissee";
+  if (["essentiel", "details", "pro"].some(n => levelStarted(k, n, A, me, pays))) return "enCours";
+  return k === "tenues" ? "chacun" : "decouvrir";
 }
+/** Nom d'une tuile selon le pays (ex. « Vin d'honneur » en France, « Cocktail » ailleurs). */
+export const tileNom = (k, FR, pays) => { const t = FR.tuiles[k]; return t ? ((pays || "FR") !== "FR" && t.nomHorsFR) || t.nom : k; };
 /** Jauge globale (0 à 100) ou null sans aucune réponse : 60 % essentielles, 30 % détails, 10 % pro, tuiles grisées exclues. */
 export function jauge(A, me, pays) {
   let score = 0, any = false;

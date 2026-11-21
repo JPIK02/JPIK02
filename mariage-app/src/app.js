@@ -312,6 +312,13 @@ function homeCover(){
         ${d?`<button class="cv-count" data-act="showdate" aria-label="${esc(`${count.replace(/<[^>]+>/g,"").replace("*","")}, ${fmtLong(d)}${ind?", date indicative":""}`)}">${count}</button>`:`<button class="cv-count set" data-go="reglages">Fixer la date</button>`}</div>
     </div></section>`;
 }
+// Nos envies (v1.1) : 1re ligne de l'en-tête unique de l'onglet : symbole, prénoms, jours restants (le bandeau bleu y est masqué)
+function envHeadTop(){
+  const d=wDate(),n=d?days(today(),d):null,ind=!!S.settings.dateIndicative;
+  const logo=(document.querySelector(".brand-mark")||{}).outerHTML||"";
+  const count=d?(n>0?`<b class="num">${n}</b> jour${n>1?"s":""}${ind?"*":""}`:n===0?"<b>Jour J</b>":"<b>Mariés</b>"):"";
+  return `<span class="ev-brand" aria-hidden="true">${logo}</span><span class="ev-names">${esc(P1())} &amp; ${esc(P2())}</span>${count?`<span class="ev-count">${count}</span>`:""}`;
+}
 // « Votre mariage » : six tuiles, un visuel et un chiffre ; « Commencer » quand c'est vide, jamais de « 0 » seul
 const TINTS=["accent","gold","ok","warn","bad"];
 const tintOf=s=>TINTS[[...String(s||"")].reduce((h,c)=>(h*31+c.charCodeAt(0))>>>0,7)%TINTS.length];
@@ -484,6 +491,8 @@ function renderBnav(){
   setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
   document.body.classList.add("compact");
   document.body.classList.toggle("on-home",S.view==="apercu");
+  // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
+  document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
 }
 function renderTabs(){
   renderBnav();
@@ -998,7 +1007,7 @@ function pdfBriefs(k){
 }
 /* Onglet « Nos envies » : écrans dans src/envies-ui.js, catalogue et règles dans agents/lib/envies (docs/nos-envies-v1.md) */
 let ENV=null;
-const env=()=>ENV||(ENV=makeEnvies({S,esc,toast,meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
+const env=()=>ENV||(ENV=makeEnvies({S,esc,toast,headTop:envHeadTop,meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
   briefsReadyCount:()=>{const {b,ready}=briefsState();return ready?Object.keys(b.categories).length:0},briefFor,fitPill,synthHtml,archivedAnswers,moodboard,
   pickPhoto:pickEnviePhoto,dictate,saveEnvie,render,go,saveF,SR,CHEV,BACK_SVG,runReward,saveDoc:(path,data)=>mergeDoc(path,data)}));
 // Récompense de fin de niveau (agent « recompense » côté serveur) ; si l'appel échoue, le passage suivant des agents la reprend

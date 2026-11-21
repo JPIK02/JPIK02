@@ -2,7 +2,7 @@
 // Aucun texte de question ici : ils viennent de agents/lib/envies/fr.js. L'app fournit ses outils via makeEnvies(ctx).
 import { TUILES, FAMILLES, NIVEAUX } from "../agents/lib/envies/catalogue.js";
 import { FR } from "../agents/lib/envies/fr.js";
-import { TBY, QBY, OLD2TILE, questionsOf, visibleChoix, answerFor, hasValue, isSeen, tileGris, tileState, levelDone, jauge, explore, nextStep, lendemainUtile, answerText } from "../agents/lib/envies/logic.js";
+import { TBY, QBY, OLD2TILE, questionsOf, visibleChoix, answerFor, hasValue, isSeen, tileGris, tileState, levelDone, jauge, explore, nextStep, lendemainUtile, answerText, levelStarted, levelCount, tileNom } from "../agents/lib/envies/logic.js";
 import { pendingFor, confirmData } from "../agents/lib/envies/reperees.js";
 
 // Textes d'interface de l'onglet (à traduire avec fr.js)
@@ -18,9 +18,13 @@ const UI = {
   vos: m => `Vos ${m}`, provisoires: "Notes provisoires : elles s'affinent après l'essentiel.", aucun: m => `Pas encore de ${m} : ajoutez-en depuis l'onglet Prestataires.`,
   ia: "L'analyse est faite par une IA. Elle éclaire votre choix, elle ne décide pas pour vous.",
   brief: m => `Brief ${m}`, briefPret: "Prêt à envoyer", briefBientot: "Prêt dès les détails remplis", envoyer: "Envoyer",
+  // raison courte sous le mot d'état d'une tuile grisée ou conditionnelle (grille de l'onglet)
+  raisonsCourtes: { selonCeremonie: "Selon votre cérémonie", officiantAChoisir: "Selon votre cérémonie", pasLaique: "Pas de cérémonie laïque", procheOfficie: "Un proche officie", vousOfficiez: "Vous officiez", lendemain: "Selon la durée choisie" },
+  nSurN: (n, t) => `${n} question${n > 1 ? "s" : ""} sur ${t}`,
   pasPourNous: "Pas pour nous", reactiver: "Réactiver cette tuile", pasPourNousQ: "Ce n'est pas pour nous",
   raisons: { pasPourNous: "Vous l'avez mise de côté.", jamais: "Vous avez répondu « Jamais » à la première question.", pasLaique: "Pas de cérémonie laïque prévue (tuile Cérémonie).",
-    procheOfficie: "Un proche ou vous deux officiez (tuile Cérémonie).", officiantAChoisir: "Dites d'abord qui officie, dans la tuile Cérémonie." },
+    procheOfficie: "Un proche officie (tuile Cérémonie).", vousOfficiez: "Vous officiez vous-mêmes (tuile Cérémonie).", officiantAChoisir: "Dites d'abord qui officie, dans la tuile Cérémonie.",
+    selonCeremonie: "Selon votre cérémonie : répondez d'abord à la tuile Cérémonie." },
   vosPrio: "Vos priorités pour cette tuile", importance: "Importance", budgetCible: "Budget cible (€)", reussite: "Ce qui en fera une vraie réussite", redhib: "Ce qui serait rédhibitoire",
   IMPORT: ["Secondaire", "Utile", "Important", "Très important", "Essentiel"],
   sur: (n, t) => `${n} sur ${t}`, sertA: "Sert à : ", autre: "Dire ou écrire autre chose", ecrire: "Écrire ou dicter ici…", photo: "Ajouter une photo",
@@ -41,6 +45,32 @@ const WHO = { essentiel: 20, details: 25, pro: 25 }; // secondes par question, p
 const METIER_PL = { Lieu: "lieux", Traiteur: "traiteurs", Photographe: "photographes", "Vidéaste": "vidéastes", Musique: "musiciens et DJ", Fleuriste: "fleuristes",
   Tenues: "boutiques de tenues", Alliances: "bijoutiers", "Coiffure & maquillage": "coiffeurs et maquilleurs", Papeterie: "papetiers", Transport: "transporteurs",
   Officiant: "officiants", "Hébergement": "hébergements", "Animation enfants": "animateurs", Bar: "bars", "Pâtissier": "pâtissiers", "Wedding planner": "wedding planners", "Agence de voyage": "agences de voyage" };
+// Icône au trait de chaque tuile (zone d'image sans photo) : 24 × 24, trait en --coral-ui (styles.css, .ev-ic)
+const TILE_ICON = {
+  mariage: '<circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/>',
+  lieu: '<path d="M4 20V9l4-3 4 3 4-3 4 3v11z"/><path d="M10 20v-5h4v5M3 20h18"/>',
+  ceremonie: '<path d="M5 20v-9a7 7 0 0 1 14 0v9M3 20h18M9 20v-7a3 3 0 0 1 6 0v7"/>',
+  officiant: '<path d="M12 6c-2-1.5-5-2-8-1.5V18c3-.5 6 0 8 1.5 2-1.5 5-2 8-1.5V4.5C17 4 14 4.5 12 6zM12 6v13.5"/>',
+  cocktail: '<path d="M5 4h14l-7 8zM12 12v8M8 20h8M8.5 8h7"/>',
+  repas: '<path d="M6 3v6a2 2 0 0 0 2 2h0a2 2 0 0 0 2-2V3M8 11v10M8 3v5M17 3c-2 2-2.5 6-.5 8H17v10"/>',
+  bar: '<path d="M10 3h4v4l2 3v11H8V10l2-3zM8 14h8"/>',
+  gateau: '<path d="M5 20h14v-6H5zM7.5 14v-4h9v4M10 10V7h4v3M12 7V4.5"/>',
+  photo: '<path d="M4 8h4l2-2.5h4L16 8h4v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+  video: '<path d="M3 7h12v10H3zM15 10.5l6-3v9l-6-3"/>',
+  musique: '<path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/>',
+  fleurs: '<path d="M12 21v-9M7 4l2.5 3L12 3.5 14.5 7 17 4v4a5 5 0 0 1-10 0zM12 17c-1.5-2-4.5-2.5-6-1.5M12 19c1.5-2 4.5-2.5 6-1.5"/>',
+  papeterie: '<path d="M3 6h18v12H3zM3 7l9 6 9-6"/>',
+  tenues: '<path d="M10 5.5a2 2 0 1 1 2 2v1.5M12 9l-9 7h18z"/>',
+  beaute: '<circle cx="12" cy="9" r="5.5"/><path d="M12 14.5V21M9.5 21h5M10 7.5a2.5 2.5 0 0 1 2-1.5"/>',
+  voyage: '<path d="M3 12l18-8-7 17-3-7zM11 14l4-4"/>',
+  invites: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',
+  lendemain: '<path d="M4 10h12v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 11.5h1.5a2 2 0 0 1 0 4H16M8 3.5v3M12 3.5v3"/>',
+  planner: '<path d="M6 5h12v16H6zM9.5 3.5h5v3h-5zM9 13l2 2 4-4"/>',
+};
+// Anciennes catégories du moodboard dont le sens ne tombe pas dans une seule tuile : leurs photos ne s'affichent dans aucune tuile
+// tant qu'elles n'ont pas été rangées à nouveau (`rangeeLe`, agents/ranger-inspirations.js) : la photo du gâteau, rangée dans
+// « traiteur » puis dans « repas » par la migration, ne doit pas illustrer « Repas »
+const AMBIGUES = new Set(["traiteur"]);
 const MIC_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
 export function makeEnvies(ctx) {
@@ -49,12 +79,19 @@ export function makeEnvies(ctx) {
   const A = () => { if (S.envies !== cArr) { cArr = S.envies; cMap = Object.fromEntries((S.envies || []).map(d => [d.id, d])); } return cMap; };
   const me = () => ctx.meKey() || "claire";
   const pays = () => S.settings.pays || "FR";
-  const tName = k => FR.tuiles[k] ? FR.tuiles[k].nom : k;
+  const tName = k => tileNom(k, FR, pays());
   const metier = k => { const t = TBY[k]; return t && t.metiers[0] ? METIER_PL[t.metiers[0]] || t.metiers[0].toLowerCase() : tName(k).toLowerCase(); };
   const inspTile = x => OLD2TILE[x.cat] || (TBY[x.cat] ? x.cat : "mariage");
-  const inspOf = k => S.inspirations.filter(x => inspTile(x) === k).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const placeholder = (k, cls = "") => { const t = inspOf(k)[0]; return t ? `<span class="ev-ph ${cls}"><img src="data:image/jpeg;base64,${t.thumb}" alt="" loading="lazy"></span>` : `<span class="ev-ph ${cls} t-${ctx.tintOf(k)}" aria-hidden="true"><b>${esc(tName(k).charAt(0))}</b></span>`; };
-  const traits = k => `<span class="ev-tr" aria-hidden="true">${NIVEAUX.map(n => `<i class="${levelDone(k, n, A(), me(), pays()) ? "on" : ""}"></i>`).join("")}</span>`;
+  // une photo ne s'affiche que dans la tuile où elle est rangée (jamais via une ancienne catégorie ambiguë)
+  const ambigue = x => AMBIGUES.has(x.cat) || (AMBIGUES.has(x.ancienneCat) && !x.rangeeLe); // rangée par la migration, pas par vous
+  const inspOf = k => S.inspirations.filter(x => x.thumb && !ambigue(x) && inspTile(x) === k).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const icon = k => `<svg class="ev-ic" viewBox="0 0 24 24" aria-hidden="true">${TILE_ICON[k] || TILE_ICON.mariage}</svg>`;
+  // zone d'image : 1re photo rangée dans la tuile, sinon (illustration à venir) l'icône au trait de la tuile
+  const placeholder = (k, cls = "") => { const t = inspOf(k)[0]; return t ? `<span class="ev-ph ${cls}"><img src="data:image/jpeg;base64,${t.thumb}" alt="" loading="lazy"></span>` : `<span class="ev-ph ev-ph-ic ${cls}" aria-hidden="true">${icon(k)}</span>`; };
+  // un trait par niveau : plein si terminé, à moitié s'il est commencé
+  const traits = k => `<span class="ev-tr" aria-hidden="true">${NIVEAUX.map(n => `<i class="${levelDone(k, n, A(), me(), pays()) ? "on" : levelStarted(k, n, A(), me(), pays()) ? "half" : ""}"></i>`).join("")}</span>`;
+  // raison courte d'une tuile grisée ou conditionnelle
+  const raisonCourte = k => { const G = tileGris(k, A()); if (G.gris) return UI.raisonsCourtes[G.raison] || ""; return k === "lendemain" && !lendemainUtile(A()) ? UI.raisonsCourtes.lendemain : ""; };
   const exploreNow = () => {
     const reserved = new Set(S.vendors.filter(v => v.status === "reserve").map(v => v.cat));
     const prios = (S.profil && Array.isArray(S.profil.priorites) ? S.profil.priorites : []).map(p => OLD2TILE[p.cat] || p.cat);
@@ -86,19 +123,21 @@ export function makeEnvies(ctx) {
     const phrase = ctx.couplePhrase(), j = jauge(A(), me(), pays());
     const prios = [...new Set((Array.isArray(pr.priorites) ? pr.priorites : []).map(p => OLD2TILE[p.cat] || p.cat).filter(k => TBY[k]))].slice(0, 3);
     const head = `<section class="ev-head">
-      <span class="ev-k">${UI.label}</span>
+      <div class="ev-top">${ctx.headTop()}</div>
       ${phrase ? `<button class="ev-phrase" data-act="envview" data-v="synth">« ${esc(phrase)} »</button>` : `<button class="ev-phrase" data-act="qr" data-do="chatbrief">${UI.racontez}</button>`}
       <div class="ev-j"><span>${j ? UI.connait(j) : UI.apprend}</span>${j ? `<span class="ev-bar" aria-hidden="true"><i style="width:${j}%"></i></span>` : ""}</div>
       ${prios.length ? `<div class="ev-prios"><span>${UI.priorites}</span>${prios.map(k => `<button class="chip" data-act="envtile" data-k="${k}">${esc(tName(k))}</button>`).join("")}</div>` : ""}
       ${pr.resume || fr.titre ? `<button class="link ev-syn" data-act="envview" data-v="synth">${UI.synthese}</button>` : ""}</section>`;
     const ex = exploreNow();
-    const exH = ex ? `<button class="ev-now" data-act="envstart" data-k="${ex.tuile}" data-n="${ex.niveau}">${placeholder(ex.tuile, "big")}
-      <span class="ev-now-b"><span class="ev-tag">${UI.moment}</span><b>${esc(tName(ex.tuile))}</b><span>${esc(FR.tuiles[ex.tuile].pourquoi)}</span>
-      <span class="ev-now-f"><span>${esc(FR.niveaux[ex.niveau].nom)} · ${UI.minutes(duree(ex.tuile, ex.niveau))}</span><span class="btn sm primary">${nextStep(ex.tuile, A(), me(), pays())?.started ? UI.reprendre : UI.commencer}</span></span></span></button>` : "";
-    const fams = FAMILLES.map(f => `<section class="ev-fam"><h3 class="home-h">${esc(FR.familles[f])}</h3><div class="ev-tiles">${TUILES.filter(t => t.famille === f).map(t => {
-      const st = tileState(t.k, A(), me(), pays(), ex && ex.tuile), gris = st === "gris";
-      return `<button class="ev-tile ${gris ? "gris" : ""}" data-act="envtile" data-k="${t.k}">${placeholder(t.k)}<span class="ev-tile-b"><b>${esc(tName(t.k))}</b>${traits(t.k)}<span class="ev-st st-${st}">${esc(FR.etats[st])}</span></span></button>`;
-    }).join("")}</div></section>`).join("");
+    const exH = ex ? `<button class="ev-now" data-act="envstart" data-k="${ex.tuile}" data-n="${ex.niveau}">${placeholder(ex.tuile, "sq")}
+      <span class="ev-now-b"><span class="ev-tag">${UI.moment}</span><b>${esc(tName(ex.tuile))}</b><span class="ev-now-p">${esc(FR.tuiles[ex.tuile].pourquoi)}</span>
+      <span class="ev-now-f"><span>${esc(FR.niveaux[ex.niveau].nom)} · ${UI.minutes(duree(ex.tuile, ex.niveau))}</span><span class="btn sm primary">${nextStep(ex.tuile, A(), me(), pays())?.started || levelStarted(ex.tuile, ex.niveau, A(), me(), pays()) ? UI.reprendre : UI.commencer}</span></span></span></button>` : "";
+    const fams = FAMILLES.map(f => { const ts = TUILES.filter(t => t.famille === f);
+      return `<section class="ev-fam"><h3 class="home-h">${esc(FR.familles[f])}</h3><div class="ev-tiles">${ts.map((t, i) => {
+      const st = tileState(t.k, A(), me(), pays(), ex && ex.tuile), gris = st === "gris", rc = raisonCourte(t.k);
+      const seule = i === ts.length - 1 && i % 2 === 0; // seule sur sa ligne : toute la largeur, au format horizontal
+      return `<button class="ev-tile ${gris ? "gris" : ""} ${seule ? "large" : ""}" data-act="envtile" data-k="${t.k}">${placeholder(t.k)}<span class="ev-tile-b"><b>${esc(tName(t.k))}</b>${traits(t.k)}<span class="ev-st st-${st}">${esc(FR.etats[st])}</span>${rc ? `<span class="ev-why">${esc(rc)}</span>` : ""}</span></button>`;
+    }).join("")}</div></section>`; }).join("");
     const nb = ctx.briefsReadyCount(), nI = S.inspirations.length, pin = S.pinterest && (S.pinterest.boards || []).length;
     const all = `<section class="ev-fam"><h3 class="home-h">${UI.toutIci}</h3><div class="ev-rows">
       <button class="ev-row" data-act="briefsmenu"><b>${UI.briefs}</b><span>${UI.briefsN(nb)}</span>${ctx.CHEV}</button>
@@ -116,9 +155,10 @@ export function makeEnvies(ctx) {
     const m = metier(k), meta = A()["_tuile." + k] || {}, dis = S.canWrite ? "" : "disabled";
     const lvl = NIVEAUX.map(n => {
       const qs = questionsOf(k, n, pays()), done = levelDone(k, n, A(), me(), pays()), next = step && step.niveau === n;
-      if (next) return `<div class="ev-lvl next"><b>${esc(FR.niveaux[n].nom)}</b><p>${esc(FR.niveaux[n].phrase)}</p><span class="ev-lvl-m">${UI.questions(qs.length)} · ${UI.minutes(duree(k, n))}</span>
-        <button class="btn primary" data-act="envstart" data-k="${k}" data-n="${n}" ${G.gris ? "disabled" : ""}>${step.started ? UI.reprendre : UI.commencer}</button></div>`;
-      return `<button class="ev-lvl-row" data-act="envstart" data-k="${k}" data-n="${n}" data-i="0"><span class="ev-dot ${done ? "on" : ""}" aria-hidden="true"></span><b>${esc(FR.niveaux[n].nom)}</b><span>${done ? `${UI.fait} · ${UI.modifier}` : `${UI.questions(qs.length)} · ${UI.minutes(duree(k, n))}`}</span>${ctx.CHEV}</button>`;
+      const c = levelCount(k, n, A(), me(), pays()), commence = c.n > 0 && !done;
+      if (next) return `<div class="ev-lvl next"><b>${esc(FR.niveaux[n].nom)}</b><p>${esc(FR.niveaux[n].phrase)}</p><span class="ev-lvl-m">${commence ? UI.nSurN(c.n, c.total) : `${UI.questions(qs.length)} · ${UI.minutes(duree(k, n))}`}</span>
+        <button class="btn primary" data-act="envstart" data-k="${k}" data-n="${n}" ${G.gris ? "disabled" : ""}>${commence ? UI.reprendre : UI.commencer}</button></div>`;
+      return `<button class="ev-lvl-row" data-act="envstart" data-k="${k}" data-n="${n}" data-i="0"><span class="ev-dot ${done ? "on" : ""}" aria-hidden="true"></span><b>${esc(FR.niveaux[n].nom)}</b><span>${done ? `${UI.fait} · ${UI.modifier}` : commence ? UI.nSurN(c.n, c.total) : `${UI.questions(qs.length)} · ${UI.minutes(duree(k, n))}`}</span>${ctx.CHEV}</button>`;
     }).join("");
     const ins = inspOf(k).slice(0, 3);
     const brief = ctx.briefFor(k);

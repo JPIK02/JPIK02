@@ -7,7 +7,7 @@ on:
       cible:
         description: "Diagnostic"
         type: choice
-        options: ["briefs", "ecawee", "envies", "migration-simulation", "migration-ecrire", "tailles"]
+        options: ["briefs", "ecawee", "envies", "migration-simulation", "migration-ecrire", "tailles", "inspirations-simulation", "inspirations-ecrire"]
         default: "briefs"
 jobs:
   diag:
@@ -22,6 +22,6 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: if [ "${{ inputs.cible }}" = "ecawee" ]; then node diag-vendor.js ecaw; elif [ "${{ inputs.cible }}" = "envies" ]; then node diag-envies.js; elif [ "${{ inputs.cible }}" = "migration-simulation" ]; then node migrate-envies.js; elif [ "${{ inputs.cible }}" = "migration-ecrire" ]; then node migrate-envies.js ecrire; elif [ "${{ inputs.cible }}" = "tailles" ]; then node diag-tailles.js; else node diag-briefs.js; fi
+      - run: if [ "${{ inputs.cible }}" = "ecawee" ]; then node diag-vendor.js ecaw; elif [ "${{ inputs.cible }}" = "envies" ]; then node diag-envies.js; elif [ "${{ inputs.cible }}" = "migration-simulation" ]; then node migrate-envies.js; elif [ "${{ inputs.cible }}" = "migration-ecrire" ]; then node migrate-envies.js ecrire; elif [ "${{ inputs.cible }}" = "tailles" ]; then node diag-tailles.js; elif [ "${{ inputs.cible }}" = "inspirations-simulation" ]; then node ranger-inspirations.js; elif [ "${{ inputs.cible }}" = "inspirations-ecrire" ]; then node ranger-inspirations.js ecrire; else node diag-briefs.js; fi
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
