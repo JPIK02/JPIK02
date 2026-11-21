@@ -40,7 +40,7 @@
         ]
       },
       {
-        "source": "**/*.@(html|webmanifest|svg)",
+        "source": "**/*.@(html|webmanifest|svg|json)",
         "headers": [
           {
             "key": "Cache-Control",

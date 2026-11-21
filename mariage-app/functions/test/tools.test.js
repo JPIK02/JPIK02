@@ -43,7 +43,7 @@ test("aperçu : retards, budget, invités", async () => {
   const exec = makeTools(base(), { qcats: QCATS, now });
   const a = JSON.parse((await exec("apercu")).content);
   assert.deepEqual(a.taches.en_retard.map(t => t.id), ["t2"]);
-  assert.equal(a.budget.prevu, 4000); assert.equal(a.invites.total, 2); assert.equal(a.envies_remplies, "0/2");
+  assert.equal(a.budget.prevu, 4000); assert.equal(a.invites.total, 2); assert.equal(a.envies, "presque rien de rempli");
 });
 
 test("ajouter puis annuler une tâche : l'action rend l'état d'avant", async () => {
@@ -70,14 +70,23 @@ test("notes de visite : le prestataire est marqué pour réanalyse", async () =>
   assert.equal(db.data["vendors/v1"].fit.score, 55); // le reste de la fiche est conservé
 });
 
-test("envies : choix filtrés sur les options, synthèse redemandée", async () => {
-  const db = base(); const exec = makeTools(db, { qcats: QCATS, now });
-  await exec("enregistrer_envie", { categorie: "lieu", question: "style", choix: ["Château", "Plage"], commun: "Un château avec parc" });
-  assert.deepEqual(db.data["brief/lieu--style"].choix, ["Château"]);
+test("envies (nouveau questionnaire) : choix filtrés, formats, par partenaire, synthèse redemandée", async () => {
+  const db = base(); const exec = makeTools(db, { qcats: QCATS, now, partner: "julien" });
+  await exec("enregistrer_envie", { question: "lieu.type", choix: ["Château", "plage-privee", "bord-de-mer"], texte: "Un château avec parc" });
+  assert.deepEqual(db.data["envies/lieu.type"].v, ["chateau", "bord-de-mer"], "libellé ou id acceptés, choix inconnus écartés");
   assert.ok(db.data["meta/analyse"].profilRequestedAt > 0);
-  assert.match((await exec("enregistrer_envie", { categorie: "lieu", question: "inconnue" })).content, /question inconnue/);
-  const l = JSON.parse((await exec("lire_envies", { categorie: "lieu" })).content);
-  assert.equal(l.questions[0].reponse.commun, "Un château avec parc");
+  await exec("enregistrer_envie", { question: "lieu.imposes", cran: 5 });
+  await exec("enregistrer_envie", { question: "lieu.exclusif", jpa: { _: "absolument" } });
+  assert.equal(db.data["envies/lieu.imposes"].v, 5); assert.deepEqual(db.data["envies/lieu.exclusif"].v, { _: "a" });
+  await exec("enregistrer_envie", { question: "tenues.style", choix: ["boheme"] });
+  assert.deepEqual(db.data["envies/tenues.style"].p.julien.v, ["boheme"], "la tenue est notée pour la personne qui parle");
+  assert.match((await exec("enregistrer_envie", { question: "lieu.inconnue" })).content, /question inconnue/);
+  const l = JSON.parse((await exec("lire_envies", { tuile: "lieu" })).content);
+  assert.match(l.questions[0].reponse, /Château, Bord de mer · Un château avec parc/);
+  const all = JSON.parse((await exec("lire_envies", {})).content);
+  assert.equal(all.tuiles.length, 19); assert.ok(all.jauge >= 1);
+  await exec("enregistrer_priorites", { tuile: "lieu", importance: 5, budget: 7000 });
+  assert.equal(db.data["envies/_tuile.lieu"].importance, 5);
 });
 
 test("rendez-vous : date obligatoire et valide", async () => {
@@ -88,11 +97,11 @@ test("rendez-vous : date obligatoire et valide", async () => {
 
 test("inspiration : la miniature de la photo jointe est gardée, annulable", async () => {
   const db = base(); const exec = makeTools(db, { qcats: QCATS, now, thumbs: ["THUMB1"], author: "Julien" });
-  const r = await exec("noter_inspiration", { photo: 1, categorie: "lieu", description: "Orangerie lumineuse, verrière, plantes" });
+  const r = await exec("noter_inspiration", { photo: 1, tuile: "lieu", description: "Orangerie lumineuse, verrière, plantes" });
   const op = r.action.ops[0];
   assert.equal(op.before, null); assert.equal(db.data[op.path].thumb, "THUMB1"); assert.equal(db.data[op.path].cat, "lieu");
-  assert.match((await exec("noter_inspiration", { photo: 2, categorie: "lieu", description: "x" })).content, /introuvable/);
-  assert.match((await makeTools(base(), { qcats: QCATS })("noter_inspiration", { photo: 1, categorie: "lieu", description: "x" })).content, /aucune photo/);
+  assert.match((await exec("noter_inspiration", { photo: 2, tuile: "lieu", description: "x" })).content, /introuvable/);
+  assert.match((await makeTools(base(), { qcats: QCATS })("noter_inspiration", { photo: 1, tuile: "lieu", description: "x" })).content, /aucune photo/);
 });
 
 test("enregistrer_devis : ajouté à l'historique de la fiche, prix mis à jour, annulable", async () => {
@@ -106,4 +115,20 @@ test("enregistrer_devis : ajouté à l'historique de la fiche, prix mis à jour,
   const n = await exec("enregistrer_devis", { nom: "Fleurs Martin", categorie: "Fleuriste", montant: 900 });
   assert.equal(JSON.parse(n.content).ok, true);
   assert.equal(Object.values(db.data).find(x => x.name === "Fleurs Martin").status, "devis");
+});
+
+test("envie repérée au passage : proposée (à confirmer), jamais sur une question déjà répondue, visible par le coach", async () => {
+  const db = base(); const exec = makeTools(db, { qcats: QCATS, now, partner: "claire", author: "Claire" });
+  const r = await exec("proposer_envie", { question: "mariage.style", choix: ["boheme"], phrase: "on voit ça plutôt bohème" });
+  assert.ok(r.action && r.action.ops[0].before === null, "annulable");
+  const d = db.data["envies_reperees/mariage.style"];
+  assert.deepEqual(d.v, ["boheme"]); assert.equal(d.status, "attente"); assert.equal(d.source, "coach"); assert.equal(d.phrase, "on voit ça plutôt bohème");
+  assert.equal(db.data["envies/mariage.style"], undefined, "rien n'est compté avant confirmation");
+  const l = JSON.parse((await exec("lire_envies", { tuile: "mariage" })).content);
+  assert.match(l.questions.find(q => q.id === "mariage.style").deja_repere_a_confirmer, /Bohème/);
+  assert.match((await exec("proposer_envie", { question: "mariage.style", choix: ["boheme"] })).content, /phrase/);
+  await exec("enregistrer_envie", { question: "lieu.type", choix: ["chateau"] });
+  assert.match((await exec("proposer_envie", { question: "lieu.type", choix: ["ferme-ou-grange"], phrase: "une ferme ?" })).content, /déjà une réponse/);
+  await exec("proposer_envie", { question: "tenues.style", choix: ["boheme"], phrase: "ma robe bohème" });
+  assert.equal(db.data["envies_reperees/tenues.style.claire"].pour, "claire", "tenue : pour la personne qui parle");
 });
