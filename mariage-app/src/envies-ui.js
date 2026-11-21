@@ -2,7 +2,8 @@
 // Aucun texte de question ici : ils viennent de agents/lib/envies/fr.js. L'app fournit ses outils via makeEnvies(ctx).
 import { TUILES, FAMILLES, NIVEAUX } from "../agents/lib/envies/catalogue.js";
 import { FR } from "../agents/lib/envies/fr.js";
-import { TBY, QBY, OLD2TILE, questionsOf, visibleChoix, answerFor, hasValue, isSeen, tileGris, tileState, levelDone, jauge, explore, nextStep, lendemainUtile } from "../agents/lib/envies/logic.js";
+import { TBY, QBY, OLD2TILE, questionsOf, visibleChoix, answerFor, hasValue, isSeen, tileGris, tileState, levelDone, jauge, explore, nextStep, lendemainUtile, answerText } from "../agents/lib/envies/logic.js";
+import { pendingFor, confirmData } from "../agents/lib/envies/reperees.js";
 
 // Textes d'interface de l'onglet (à traduire avec fr.js)
 const UI = {
@@ -31,6 +32,8 @@ const UI = {
   relit: "Lamaelle relit vos réponses…", relitNotes: m => `et recalcule la note de vos ${m}`, erreur: "La récompense n'a pas pu être préparée. Réessayez plus tard : vos réponses sont bien enregistrées.", reessayer: "Réessayer",
   recalcules: m => `Vos ${m}, recalculés`, pourVous: "Pour vous : ", aVerifier: "À vérifier : ", chercher: m => `Voulez-vous que le coach cherche des ${m} pour vous ?`, chercherBtn: "Demander au coach",
   points: n => `+${n} point${n > 1 ? "s" : ""}`, briefPretT: m => `Votre brief ${m} est prêt`, questionsPretes: "Vos questions à poser sont prêtes", voirFiche: "Voir la fiche",
+  notees: n => `${n} envie${n > 1 ? "s" : ""} notée${n > 1 ? "s" : ""} par le coach`, aConfirmer: "À confirmer", dejaNote: "Déjà noté par le coach", dapres: "D'après : ",
+  sources: { coach: "votre conversation avec le coach", visite: "vos notes de visite", pinterest: "Pinterest" }, noteesP: "Elles comptent dès que vous les confirmez.", rienANoter: "Tout est confirmé, merci.",
   continuerBrief: (n, m) => `Continuer avec ${n.charAt(0).toLowerCase() + n.slice(1)} · votre brief ${m} à la clé`, comprisTile: "Ce que nous avons compris", archive: "Vos réponses précédentes", archiveP: "Ces réponses ne correspondent à aucune question du nouveau questionnaire. Le coach les connaît toujours.",
 };
 const WHO = { essentiel: 20, details: 25, pro: 25 }; // secondes par question, pour la durée affichée
@@ -59,6 +62,24 @@ export function makeEnvies(ctx) {
   };
   const duree = (k, n) => Math.max(1, Math.round(questionsOf(k, n, pays()).length * WHO[n] / 60));
 
+  /* ---------- Récolte passive (section 6.7) : envies repérées par le coach, à confirmer ---------- */
+  const pend = () => pendingFor(S.envies_reperees || [], A(), me(), pays());
+  const repOf = qid => pend().find(r => r.q === qid) || null;
+  const repDate = at => (at ? new Date(at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "");
+  const repSrc = r => { const v = r.source === "visite" && S.vendors.find(x => x.id === r.ref); return v ? `${UI.sources.visite} (${v.name})` : UI.sources[r.source] || r.source; };
+  const repLine = r => `<span class="ev-rep-o">${UI.dapres}« ${esc(r.phrase)} » · ${esc(repSrc(r))}${r.at ? ` · ${repDate(r.at)}` : ""}</span>`;
+  const repBtns = r => S.canWrite ? `<div class="qs-pa"><button class="btn sm ghost-l" data-act="repok" data-id="${r.id}">${UI.cestCa}</button><button class="link" data-act="repfix" data-id="${r.id}">${UI.corriger}</button></div>` : "";
+  const repCard = (r, withTile) => { const q = QBY[r.q], T = FR.questions[q.id];
+    return `<div class="ev-rep">${withTile ? `<span class="qs-k">${esc(tName(q.tuile))}</span>` : ""}<b>${esc(T.libelle)}</b><span class="ev-rep-a">${esc(answerText(q, r, FR))}</span>${repLine(r)}${repBtns(r)}</div>`; };
+  // « C'est ça » : la réponse est écrite dans `envies` (elle compte alors), l'envie repérée est close
+  function repConfirm(r) {
+    const { data, fields } = confirmData(r, A()[r.q]);
+    ctx.saveEnvie(r.q, data, [...fields, "by", "updatedAt"]);
+    ctx.saveDoc(`envies_reperees/${r.id}`, { status: "confirmee", closedAt: Date.now() });
+    S.envDirty = S.envDirty || {}; S.envDirty[QBY[r.q].tuile] = true;
+  }
+  const repClose = r => { if (r && S.canWrite) ctx.saveDoc(`envies_reperees/${r.id}`, { status: "close", closedAt: Date.now() }); };
+
   /* ---------- 4.1 L'onglet ---------- */
   function vMain() {
     const pr = S.profil || {}, fr = (S.briefs || {}).filRouge || {};
@@ -82,7 +103,9 @@ export function makeEnvies(ctx) {
     const all = `<section class="ev-fam"><h3 class="home-h">${UI.toutIci}</h3><div class="ev-rows">
       <button class="ev-row" data-act="briefsmenu"><b>${UI.briefs}</b><span>${UI.briefsN(nb)}</span>${ctx.CHEV}</button>
       <button class="ev-row" data-act="envview" data-v="mood"><b>${UI.inspis}</b><span>${nI ? UI.inspisN(nI, pin) : UI.ajouter}</span>${ctx.CHEV}</button></div></section>`;
-    return `<div class="ev">${head}${exH}${fams}${all}</div>`;
+    const np = pend().length;
+    const repH = np ? `<div class="ev-rows ev-rep-rows"><button class="ev-row" data-act="envview" data-v="notees"><b>${UI.notees(np)}</b><span>${UI.aConfirmer}</span>${ctx.CHEV}</button></div>` : "";
+    return `<div class="ev">${head}${exH}${repH}${fams}${all}</div>`;
   }
 
   /* ---------- 4.2 La page d'une tuile ---------- */
@@ -105,6 +128,7 @@ export function makeEnvies(ctx) {
         <div class="ev-cover-b"><h2>${esc(tName(k))}</h2><span>${UI.remonte(t.remonte)}${t.metiers.length ? ` · ${UI.suivis(vend.length, m)}` : ""}</span></div></div>
       ${G.gris ? `<div class="ev-gris"><b>${UI.pasPourNous}</b><span>${esc(UI.raisons[G.raison] || "")}</span>${S.canWrite ? `<button class="btn sm" data-act="envactif" data-k="${k}">${UI.reactiver}</button>` : ""}</div>` : ""}
       ${(() => { const r = recOf(k, "essentiel"); return r && r.phrase ? `<section class="ev-sec ev-compris"><span class="qs-k">${UI.comprisTile}</span><p>${esc(r.phrase)}</p></section>` : ""; })()}
+      ${(() => { const rs = pend().filter(r => QBY[r.q].tuile === k); return rs.length ? `<section class="ev-sec"><h3>${UI.dejaNote}</h3><p class="ev-note">${UI.noteesP}</p>${rs.map(r => repCard(r, false)).join("")}</section>` : ""; })()}
       <div class="ev-lvls">${lvl}</div>
       ${t.metiers.length || ins.length ? `<section class="ev-sec"><div class="ev-sec-h"><h3>${esc(UI.vosInspis(k === "mariage" ? "" : m))}</h3>${S.canWrite ? `<button class="link" data-act="envphoto" data-k="${k}">${UI.ajouter}</button>` : ""}</div>
         ${ins.length ? `<div class="ev-ins">${ins.map(x => `<button data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description || "")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"></button>`).join("")}</div>` : ""}
@@ -131,8 +155,14 @@ export function makeEnvies(ctx) {
   function vMood() {
     return `<div class="ev-page"><button class="link env-back" data-act="envview" data-v="main">${ctx.BACK_SVG}<span>${UI.retour}</span></button><h2 class="ev-h2">${UI.inspis}</h2>${ctx.moodboard()}</div>`;
   }
+  function vNotees() {
+    const rs = pend();
+    return `<div class="ev-page"><button class="link env-back" data-act="envview" data-v="main">${ctx.BACK_SVG}<span>${UI.retour}</span></button><h2 class="ev-h2">${UI.notees(rs.length || 0)}</h2>
+      ${rs.length ? `<p class="ev-note">${UI.noteesP}</p>${rs.map(r => repCard(r, true)).join("")}` : `<p class="ev-note">${UI.rienANoter}</p>`}</div>`;
+  }
   function vEnvies() {
     const v = S.f.envView;
+    if (v === "notees") return vNotees();
     if (v === "tile" && TBY[S.f.envTile]) return vTile(S.f.envTile);
     if (v === "synth") return vSynth();
     if (v === "mood") return vMood();
@@ -145,6 +175,18 @@ export function makeEnvies(ctx) {
   const curQ = () => qList()[S.qs.i];
   const docOf = q => A()[q.id] || {};
   const draftFrom = q => { const a = answerFor(q, docOf(q), me()) || {}; return { v: a.v ?? null, libre: (q.parPartenaire ? ((docOf(q).p || {})[me()] || {}).libre : docOf(q).libre) || "", cu: a.cu || null, extra: { ...(docOf(q).extra || {}) } }; };
+  // « Corriger » : la question s'ouvre pré-remplie avec l'envie repérée (rien n'est enregistré avant le premier geste)
+  function startCorr(r) {
+    const q = QBY[r.q], i = questionsOf(q.tuile, q.niveau, pays()).findIndex(x => x.id === q.id);
+    if (i < 0) return;
+    start(q.tuile, q.niveau, i); corrDraft(r);
+  }
+  function corrDraft(r) {
+    S.qs.corr = r.q;
+    S.qs.draft = { ...S.qs.draft, v: r.v ?? S.qs.draft.v, libre: r.libre || S.qs.draft.libre };
+    if (r.libre) S.qs.autre = true;
+    renderQ();
+  }
   function start(k, niveau, i) {
     const st = nextStep(k, A(), me(), pays());
     const idx = i != null ? +i : st && st.niveau === niveau ? st.index : 0;
@@ -156,6 +198,7 @@ export function makeEnvies(ctx) {
   // Enregistre à chaque geste ; sur une question par partenaire, dans p.<moi>
   async function persist(extra = {}) {
     const q = curQ(), d = S.qs.draft; if (!q || !S.canWrite) return;
+    if (S.qs.corr === q.id) { repClose(repOf(q.id)); S.qs.corr = null; } // « Corriger » : la réponse donnée (ou passée) clôt l'envie repérée
     if (!extra.vu) { S.qs.changed = true; S.envDirty = S.envDirty || {}; S.envDirty[S.qs.k] = true; }
     const base = { v: d.v ?? null, cu: d.cu || null, ...extra };
     const data = q.parPartenaire ? { p: { [me()]: { ...base, libre: d.libre || "" } } } : { ...base, libre: d.libre || "" };
@@ -205,6 +248,7 @@ export function makeEnvies(ctx) {
       <div class="qs-body">
         <h2 class="qs-l">${esc(T.libelle)}</h2><p class="qs-s">${UI.sertA}${esc(T.sertA.charAt(0).toLowerCase() + T.sertA.slice(1))}</p>
         ${q.parPartenaire ? `<p class="qs-pp">${esc(UI.pourTa(ctx.prenom() || ""))}</p>` : ""}
+        ${(() => { const r = repOf(q.id); return r && S.qs.corr !== q.id && S.qs.repDone !== q.id ? `<div class="ev-rep qs-rep"><span class="qs-k">${UI.dejaNote}</span><span class="ev-rep-a">${esc(answerText(q, r, FR))}</span>${repLine(r)}${repBtns(r)}</div>` : ""; })()}
         ${zone(q)}
         ${open ? `<div class="qs-autre"><label class="sr" for="search-qs-libre">${UI.autre}</label><textarea id="search-qs-libre" name="search_text" autocomplete="off" data-qlibre="1" placeholder="${UI.ecrire}" ${S.canWrite ? "" : "disabled"}>${esc(d.libre || "")}</textarea>
           <div class="qs-autre-b">${ctx.SR ? `<button class="ch-ic" data-act="qmic" aria-label="Dicter">${MIC_SVG}</button>` : ""}${S.canWrite ? `<button class="link" data-act="envphoto" data-k="${S.qs.k}">${UI.photo}</button>` : ""}</div></div>`
@@ -261,6 +305,10 @@ export function makeEnvies(ctx) {
   function act(a, t) {
     const d = S.qs && S.qs.draft;
     switch (a) {
+      case "repok": { const r = pend().find(x => x.id === t.dataset.id); if (!r) return true; repConfirm(r);
+        if (S.qs && !S.qs.fin && curQ() && curQ().id === r.q) { S.qs.draft = { ...S.qs.draft, v: r.v ?? S.qs.draft.v, libre: r.libre || S.qs.draft.libre }; S.qs.changed = true; S.qs.repDone = r.q; renderQ(); }
+        ctx.toast(UI.merci); return true; }
+      case "repfix": { const r = pend().find(x => x.id === t.dataset.id); if (!r) return true; if (S.qs && !S.qs.fin && curQ() && curQ().id === r.q) corrDraft(r); else { S.qs = null; startCorr(r); } return true; }
       case "envview": leaveTile(); S.f.envView = t.dataset.v; ctx.saveF(); ctx.render(); window.scrollTo(0, 0); return true;
       case "envtile": S.f.envView = "tile"; S.f.envTile = t.dataset.k; ctx.saveF(); ctx.go("envies"); return true;
       case "envstart": S.qs = null; start(t.dataset.k, t.dataset.n, t.dataset.i); return true;

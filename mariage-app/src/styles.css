@@ -1320,3 +1320,10 @@ body.qs-open .bnav,body.qs-open .fab{display:none}
 .qs-row{flex-direction:row;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:14px;padding:12px 14px;background:var(--surface)}
 .ev-compris{background:var(--accent-soft);border-radius:14px;padding:12px 14px}
 .ev-compris p{margin:0;font-family:var(--f-accroche,var(--f-display));font-style:italic;font-size:20px;line-height:1.3}
+/* Récolte passive : envies repérées par le coach, à confirmer (encart de l'onglet, page de tuile, écran de question) */
+.ev-rep-rows .ev-row{border-left:3px solid var(--coral-ui)}
+.ev-rep{display:flex;flex-direction:column;gap:4px;padding:12px 14px;margin-top:10px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.ev-rep>b{font-size:15px}
+.ev-rep-a{font-size:15px;color:var(--ink);font-weight:500}
+.ev-rep-o{font-size:13px;color:var(--muted);line-height:1.4}
+.qs-rep{margin:0 0 14px;background:var(--accent-soft);border-color:transparent}

@@ -99,3 +99,35 @@ test("récompenses : ligne d'une note recalculée, reprise des demandes restées
   const now = 1e12;
   assert.deepEqual(recompensesDues([{ id: "a", status: "demandee", requestedAt: now - 5 * 60e3 }, { id: "b", status: "demandee", requestedAt: now - 60e3 }, { id: "c", status: "prete" }], now).map(d => d.id), ["a"]);
 });
+
+test("récolte passive : proposée seulement sur une question sans réponse, comptée seulement une fois confirmée", async () => {
+  const { buildReperee, pendingFor, confirmData, inSource, toAnswer } = await import("../lib/envies/reperees.js");
+  const A = {};
+  const r = buildReperee({ question: "lieu.type", choix: ["Château"], phrase: "un château avec un parc" }, FR, { A, source: "visite", ref: "v1", now: 5 });
+  assert.equal(r.id, "lieu.type");
+  assert.deepEqual(r.doc.v, ["chateau"], "libellé traduit en id de choix");
+  assert.equal(r.doc.status, "attente");
+  assert.equal(buildReperee({ question: "lieu.type", choix: ["chateau"] }, FR, { A, source: "coach" }), null, "sans phrase d'origine : rien");
+  assert.equal(buildReperee({ question: "lieu.type", choix: ["chateau"], phrase: "x y z" }, FR, { A: { "lieu.type": { v: ["ferme"] } }, source: "coach" }), null, "déjà répondue : rien");
+  assert.equal(buildReperee({ question: "video.envie", jpa: { _: "absolument" }, phrase: "on veut un film" }, FR, { A: { "_tuile.video": { pasPourNous: true } }, source: "coach" }), null, "tuile de côté : rien");
+  // par partenaire : seulement pour celui qui l'a dit
+  assert.equal(buildReperee({ question: "tenues.style", choix: ["boheme"], phrase: "une robe bohème" }, FR, { A, source: "pinterest" }), null);
+  const t = buildReperee({ question: "tenues.style", choix: ["boheme"], phrase: "une robe bohème" }, FR, { A, source: "coach", pour: "claire" });
+  assert.equal(t.id, "tenues.style.claire");
+  const reps = [{ id: r.id, ...r.doc }, { id: t.id, ...t.doc }];
+  assert.deepEqual(pendingFor(reps, A, "claire").map(x => x.id).sort(), ["lieu.type", "tenues.style.claire"]);
+  assert.deepEqual(pendingFor(reps, A, "julien").map(x => x.id), ["lieu.type"]);
+  // la jauge ne bouge pas tant que ce n'est pas confirmé
+  assert.equal(jauge(A, "claire"), null);
+  const c = confirmData(reps[0], {});
+  assert.equal(jauge({ "lieu.type": c.data }, "claire") > 0, true);
+  assert.deepEqual(confirmData(reps[1], { p: { julien: { v: ["chic"] } } }).data, { p: { julien: { v: ["chic"] }, claire: { v: ["boheme"] } } });
+  assert.deepEqual(confirmData(reps[1], {}).fields, ["p.claire"]);
+  // confirmée ou répondue entre-temps : plus montrée
+  assert.deepEqual(pendingFor([{ ...reps[0], status: "confirmee" }], A, "claire"), []);
+  assert.deepEqual(pendingFor(reps, { "lieu.type": { v: ["ferme"] } }, "julien"), []);
+  // garde-fou : la phrase doit figurer dans la source
+  assert.equal(inSource("« Un château avec parc. »", "Visite : un  CHÂTEAU avec parc, très beau"), true);
+  assert.equal(inSource("une grange rénovée", "Visite : un château avec parc"), false);
+  assert.throws(() => toAnswer({ question: "lieu.inconnue" }, FR), /question inconnue/);
+});

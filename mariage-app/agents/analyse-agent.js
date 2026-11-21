@@ -7,6 +7,9 @@ import { vendorsToAnalyse } from "./lib/scheduler.js";
 import { notify } from "./lib/push.js";
 import { enviesForAI } from "./lib/envies/context.js";
 import { coupleNames } from "./lib/couple.js";
+import { FR } from "./lib/envies/fr.js";
+import { METIER2TILE } from "./lib/envies/logic.js";
+import { openQuestions, VALEUR_PROPS, buildReperee, inSource } from "./lib/envies/reperees.js";
 
 const SYSTEM = readFileSync(new URL("./prompts/analyse.md", import.meta.url), "utf8");
 
@@ -54,6 +57,40 @@ const FIT_OUT = {
 
 const strip = ({ fit, ...v }) => v; // on n'envoie pas l'ancienne fiche à Claude
 
+// Récolte passive (Nos envies, section 6.7) : les notes de visite peuvent répondre à des questions encore ouvertes.
+// Rien de plus qu'un champ dans la même réponse de Claude (pas d'appel en plus) ; les envies repérées restent à confirmer.
+const ENVIES_OUT = { type: "array", maxItems: 5, description: "Envies que révèlent les notes de visite (vide si aucune)", items: { type: "object",
+  properties: { ...VALEUR_PROPS, phrase: { type: "string", description: "la phrase des notes de visite, mot pour mot" } }, required: ["question", "phrase"] } };
+/** Consigne et schéma de l'analyse d'un prestataire ; avec notes de visite, liste des questions ouvertes de son métier. */
+export function fitRequest(v, A = {}, pays) {
+  const user = `Analyse ce prestataire (données du couple dans <donnees>), recherche ses avis en ligne, puis appelle enregistrer_fit.\n\n<prestataire>${JSON.stringify(strip(v))}</prestataire>`;
+  const qs = String(v.visitNotes || "").trim() ? openQuestions([...new Set([METIER2TILE[v.cat], "mariage"].filter(Boolean))], A, FR, { pays, max: 30 }) : "";
+  if (!qs) return { user, output: FIT_OUT };
+  return {
+    user: `${user}\n\nSes notes de visite (champ visitNotes, écrites par le couple) peuvent aussi révéler leurs envies. Si une phrase de ces notes répond clairement à l'une de ces questions encore sans réponse, ajoute-la dans « envies », avec la phrase mot pour mot ; n'invente rien, sinon laisse « envies » vide.\n${qs}`,
+    output: { ...FIT_OUT, input_schema: { ...FIT_OUT.input_schema, properties: { ...FIT_OUT.input_schema.properties, envies: ENVIES_OUT } } },
+  };
+}
+/** Écrit les envies repérées dans les notes de visite (jamais une phrase absente des notes, jamais par-dessus une envie déjà traitée). */
+export async function saveVisitEnvies(v, envies = [], { A = {}, pays, log = console.log } = {}) {
+  const db = getDb(); let n = 0;
+  for (const e of envies) {
+    if (!inSource(e.phrase, v.visitNotes)) continue;
+    const r = buildReperee(e, FR, { A, source: "visite", ref: v.id, pays });
+    if (!r) continue;
+    const cur = await db.doc(`envies_reperees/${r.id}`).get();
+    if (cur.exists && cur.data().status !== "attente") continue;
+    await db.doc(`envies_reperees/${r.id}`).set(r.doc); n++;
+  }
+  if (n) log(`[récolte] ${n} envie(s) repérée(s) dans les notes de visite de ${v.name}`);
+  return n;
+}
+
+
+const enviesState = async () => {
+  const [envies, settings] = await Promise.all([listAll("envies"), getMeta("settings")]);
+  return { A: Object.fromEntries(envies.map(d => [d.id, d])), pays: settings.pays };
+};
 
 async function loadContext() {
   const [settings, brief, envies, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("envies"), listAll("inbox")]);
@@ -87,9 +124,11 @@ export async function fitVendors(vendors, { log = console.log } = {}) {
   if (!vendors.length) return [];
   const context = await loadContext();
   const system = [{ type: "text", text: `${SYSTEM}\n\n<donnees>${context}</donnees>`, cache_control: { type: "ephemeral" } }];
+  const { A, pays } = await enviesState();
   const out = [];
   const one = async v => {
-    const fit = await runForOutput({ system, user: `Analyse ce prestataire (données du couple dans <donnees>), recherche ses avis en ligne, puis appelle enregistrer_fit.\n\n<prestataire>${JSON.stringify(strip(v))}</prestataire>`, output: FIT_OUT, webSearch: true, feature: "analyse" });
+    const { envies = [], ...fit } = await runForOutput({ system, ...fitRequest(v, A, pays), webSearch: true, feature: "analyse" });
+    await saveVisitEnvies(v, envies, { A, pays, log });
     if (fit.avis?.sources) fit.avis.sources = fit.avis.sources.filter(s => /^https?:\/\//.test(s.url || ""));
     await getDb().doc(`vendors/${v.id}`).update({ fit: { ...fit, updatedAt: Date.now() } });
     out.push({ id: v.id, nom: v.name, avant: v.fit?.score != null ? Math.round(v.fit.score) : null, apres: Math.round(fit.score), fit });
@@ -115,18 +154,15 @@ export async function runAnalyseAgent({ log = console.log, force = false } = {})
 
   try {
     const context = await loadContext();
+    const { A, pays } = await enviesState();
     // Consignes + données communes en tête, marquées pour le cache : relues à ~5 % du prix par les fiches suivantes
     const system = [{ type: "text", text: `${SYSTEM}\n\n<donnees>${context}</donnees>`, cache_control: { type: "ephemeral" } }];
 
     // Synthèse du brief et fiches prestataires en parallèle (4 à la fois) : quelques minutes de moins
     const scores = [];
     const analyseOne = async v => {
-      const fit = await runForOutput({
-        system,
-        user: `Analyse ce prestataire (données du couple dans <donnees>), recherche ses avis en ligne, puis appelle enregistrer_fit.\n\n<prestataire>${JSON.stringify(strip(v))}</prestataire>`,
-        output: FIT_OUT,
-        webSearch: true, feature: "analyse",
-      });
+      const { envies = [], ...fit } = await runForOutput({ system, ...fitRequest(v, A, pays), webSearch: true, feature: "analyse" });
+      await saveVisitEnvies(v, envies, { A, pays, log });
       if (fit.avis?.sources) fit.avis.sources = fit.avis.sources.filter(s => /^https?:\/\//.test(s.url || ""));
       // update avec un seul champ : on ne touche à rien d'autre sur le prestataire
       await getDb().doc(`vendors/${v.id}`).update({ fit: { ...fit, updatedAt: Date.now() } });

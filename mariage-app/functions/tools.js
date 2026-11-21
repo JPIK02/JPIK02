@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { TUILES } from "./agents/lib/envies/catalogue.js";
 import { FR } from "./agents/lib/envies/fr.js";
 import { QBY, TBY, questionsOf, answerFor, isAnswered, tileState, levelDone, jauge, answerText } from "./agents/lib/envies/logic.js";
+import { toAnswer, buildReperee, pendingFor, VALEUR_PROPS } from "./agents/lib/envies/reperees.js";
 // Outils de l'assistant IA : ce qu'il peut lire et faire dans l'app.
 // Règles : aucune suppression ; chaque écriture renvoie l'état d'avant pour pouvoir l'annuler depuis l'app ;
 // les valeurs sont nettoyées ici, quoi que Claude envoie. Indépendant de Firebase : `db` est injecté (testable).
@@ -89,6 +90,7 @@ export const TOOL_DEFS = [
   { name: "enregistrer_envie", description: "Enregistre la réponse à une question de « Nos envies » (lis d'abord la tuile avec lire_envies). Reformule fidèlement ce qui a été dit, n'invente rien. Selon le format : choix (CP, CC, CM : ids des choix), cran (CU : 1 à 5), jpa (JPA : {id du choix, ou « _ » pour une question sans choix : jamais | pourquoi_pas | absolument}), ordre (CL : ids dans l'ordre), valeur (CH), texte (TL, ou précision en plus).", input_schema: S({
     question: T("id complet de la question, ex. lieu.type"), choix: { type: "array", items: { type: "string" }, description: "ids des choix" }, cran: { type: "integer", minimum: 1, maximum: 5 },
     jpa: { type: "object", additionalProperties: { type: "string", enum: ["jamais", "pourquoi_pas", "absolument"] } }, ordre: { type: "array", items: { type: "string" } }, valeur: T("chiffre ou fourchette"), texte: T("texte libre fidèle") }, ["question"]) },
+  { name: "proposer_envie", description: "Quand une envie est dite au passage (dans une conversation sur autre chose, ou ce qu'ils aiment sur une photo), sans être une réponse à une question que tu as posée ni une demande de la noter : propose-la au lieu de l'enregistrer. Elle s'affiche « Déjà noté par le coach » et ne compte qu'une fois confirmée. Seulement pour une question encore sans réponse ; phrase = leurs mots exacts. Même format que enregistrer_envie.", input_schema: S({ ...VALEUR_PROPS, phrase: T("la phrase d'origine, mot pour mot (ce qu'ils ont dit ou écrit)") }, ["question", "phrase"]) },
   { name: "mettre_de_cote_tuile", description: "Quand ils disent ne pas vouloir une prestation (« pas de wedding planner », « pas de vidéo »), mets la tuile de côté : elle apparaît « Pas pour nous » et sort de la jauge. pas_pour_nous=false la réactive. Ne dis l'avoir fait qu'après le succès de cet outil.", input_schema: S({
     tuile: E(TUILES.map(t => t.k)), pas_pour_nous: { type: "boolean" } }, ["tuile", "pas_pour_nous"]) },
   { name: "enregistrer_priorites", description: "Importance (1 à 5), budget cible, critère de réussite et rédhibitoire d'une tuile de « Nos envies ».", input_schema: S({
@@ -186,11 +188,13 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       }
       const t = TBY[tuile]; if (!t) throw new Error(`tuile inconnue : ${tuile}. Clés : ${TUILES.map(x => x.k).join(", ")}`);
       const m = A["_tuile." + t.k] || {};
+      const rep = Object.fromEntries(pendingFor(await all("envies_reperees"), A, partner, st.pays).map(r => [r.q, r]));
       return { tuile: t.k, nom: FR.tuiles[t.k].nom, priorites: clean({ importance: m.importance, budget: m.budget, reussite: m.reussite, redhibitoire: m.redhibitoire }),
         questions: questionsOf(t.k, null, st.pays).map(q => { const T = FR.questions[q.id], a = answerFor(q, A[q.id], partner);
           return clean({ id: q.id, niveau: q.niveau, format: q.format, question: T.libelle, sert_a: T.sertA, par_partenaire: q.parPartenaire || undefined,
             choix: q.choix ? q.choix.map(c => ({ id: c.id, libelle: T.choix[c.id] })) : undefined, crans: T.crans,
-            reponse: isAnswered(q, A, partner) ? answerText(q, a, FR) : undefined }); }) };
+            reponse: isAnswered(q, A, partner) ? answerText(q, a, FR) : undefined,
+            deja_repere_a_confirmer: rep[q.id] ? answerText(q, rep[q.id], FR) : undefined }); }) };
     },
     async propositions_en_attente() {
       return (await all("inbox")).filter(m => (m.status || "new") === "new" && m.type !== "ignored")
@@ -293,24 +297,20 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       return { result: { ok: true }, action: { label: "Réglages modifiés", ops: [op] } };
     },
     async enregistrer_envie(i) {
-      const q = QBY[i.question]; if (!q) throw new Error(`question inconnue : ${i.question} (lis la tuile avec lire_envies pour avoir les ids)`);
-      const T = FR.questions[q.id], ids = (q.choix || []).map(c => c.id);
-      const toId = x => (ids.includes(x) ? x : ids.find(c => fold(T.choix[c]) === fold(x)));
-      let v;
-      if (["CP", "CC", "CM"].includes(q.format) && Array.isArray(i.choix)) v = [...new Set(i.choix.map(toId).filter(Boolean))];
-      else if (q.format === "CL" && Array.isArray(i.ordre)) v = [...new Set(i.ordre.map(toId).filter(Boolean))];
-      else if (q.format === "CU" && Number.isInteger(i.cran) && i.cran >= 1 && i.cran <= 5) v = i.cran;
-      else if (q.format === "JPA" && i.jpa && typeof i.jpa === "object") { const X = { jamais: "j", pourquoi_pas: "p", absolument: "a" }; v = {};
-        for (const [c, x] of Object.entries(i.jpa)) { if (!X[x]) continue; if (c === "_" && ids.length) ids.forEach(id => { v[id] = X[x]; }); else { const id = c === "_" ? "_" : toId(c); if (id) v[id] = X[x]; } } }
-      else if (q.format === "CH" && str(i.valeur, 100)) v = str(i.valeur, 100);
-      const texte = str(i.texte, 2000);
-      if (v === undefined && !texte) throw new Error("rien à enregistrer : donne des choix (ids), un cran, un jpa, un ordre, une valeur ou un texte");
+      const { q, v, libre: texte } = toAnswer(i, FR), T = FR.questions[q.id];
       const cur = (await get(`envies/${q.id}`)) || {};
       const part = { ...(v !== undefined ? { v } : {}), ...(texte ? { libre: texte } : {}) };
       const data = q.parPartenaire ? { p: { ...(cur.p || {}), [partner]: { ...((cur.p || {})[partner] || {}), ...part } } } : part;
       const op = await write(`envies/${q.id}`, { ...data, by: author, updatedAt: Date.now() });
       await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
       return { result: { ok: true }, action: { label: `Envie notée (${FR.tuiles[q.tuile].nom}) : ${T.libelle}`, ops: [op] } };
+    },
+    async proposer_envie(i) {
+      const A = await enviesMap(), st = await settings();
+      const r = buildReperee(i, FR, { A, source: "coach", pour: partner, by: author, pays: st.pays, now: Date.now() });
+      if (!r) { toAnswer(i, FR); throw new Error(str(i.phrase, 400) ? "cette question a déjà une réponse (ou sa tuile est de côté) : rien à proposer" : "phrase d'origine manquante"); }
+      const op = await write(`envies_reperees/${r.id}`, r.doc, { merge: false });
+      return { result: { ok: true, a_confirmer: true }, action: { label: `Envie repérée, à confirmer (${FR.tuiles[QBY[r.doc.q].tuile].nom}) : ${FR.questions[r.doc.q].libelle}`, ops: [op] } };
     },
     async mettre_de_cote_tuile(i) {
       const t = TBY[i.tuile]; if (!t) throw new Error(`tuile inconnue : ${i.tuile}`);

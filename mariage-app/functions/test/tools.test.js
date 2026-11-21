@@ -116,3 +116,19 @@ test("enregistrer_devis : ajouté à l'historique de la fiche, prix mis à jour,
   assert.equal(JSON.parse(n.content).ok, true);
   assert.equal(Object.values(db.data).find(x => x.name === "Fleurs Martin").status, "devis");
 });
+
+test("envie repérée au passage : proposée (à confirmer), jamais sur une question déjà répondue, visible par le coach", async () => {
+  const db = base(); const exec = makeTools(db, { qcats: QCATS, now, partner: "claire", author: "Claire" });
+  const r = await exec("proposer_envie", { question: "mariage.style", choix: ["boheme"], phrase: "on voit ça plutôt bohème" });
+  assert.ok(r.action && r.action.ops[0].before === null, "annulable");
+  const d = db.data["envies_reperees/mariage.style"];
+  assert.deepEqual(d.v, ["boheme"]); assert.equal(d.status, "attente"); assert.equal(d.source, "coach"); assert.equal(d.phrase, "on voit ça plutôt bohème");
+  assert.equal(db.data["envies/mariage.style"], undefined, "rien n'est compté avant confirmation");
+  const l = JSON.parse((await exec("lire_envies", { tuile: "mariage" })).content);
+  assert.match(l.questions.find(q => q.id === "mariage.style").deja_repere_a_confirmer, /Bohème/);
+  assert.match((await exec("proposer_envie", { question: "mariage.style", choix: ["boheme"] })).content, /phrase/);
+  await exec("enregistrer_envie", { question: "lieu.type", choix: ["chateau"] });
+  assert.match((await exec("proposer_envie", { question: "lieu.type", choix: ["ferme-ou-grange"], phrase: "une ferme ?" })).content, /déjà une réponse/);
+  await exec("proposer_envie", { question: "tenues.style", choix: ["boheme"], phrase: "ma robe bohème" });
+  assert.equal(db.data["envies_reperees/tenues.style.claire"].pour, "claire", "tenue : pour la personne qui parle");
+});
