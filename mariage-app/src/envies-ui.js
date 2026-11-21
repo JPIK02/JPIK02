@@ -86,8 +86,9 @@ export function makeEnvies(ctx) {
   const ambigue = x => AMBIGUES.has(x.cat) || (AMBIGUES.has(x.ancienneCat) && !x.rangeeLe); // rangée par la migration, pas par vous
   const inspOf = k => S.inspirations.filter(x => x.thumb && !ambigue(x) && inspTile(x) === k).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const icon = k => `<svg class="ev-ic" viewBox="0 0 24 24" aria-hidden="true">${TILE_ICON[k] || TILE_ICON.mariage}</svg>`;
-  // zone d'image : 1re photo rangée dans la tuile, sinon (illustration à venir) l'icône au trait de la tuile
-  const placeholder = (k, cls = "") => { const t = inspOf(k)[0]; return t ? `<span class="ev-ph ${cls}"><img src="data:image/jpeg;base64,${t.thumb}" alt="" loading="lazy"></span>` : `<span class="ev-ph ev-ph-ic ${cls}" aria-hidden="true">${icon(k)}</span>`; };
+  // zone d'image (tuiles, carte « À explorer », page de tuile) : l'icône au trait de la tuile, pour le moment sans photo
+  // (choix de Julien du 21/11/2026 ; les photos restent dans « Vos inspirations » de chaque tuile)
+  const placeholder = (k, cls = "") => `<span class="ev-ph ev-ph-ic ${cls}" aria-hidden="true">${icon(k)}</span>`;
   // un trait par niveau : plein si terminé, à moitié s'il est commencé
   const traits = k => `<span class="ev-tr" aria-hidden="true">${NIVEAUX.map(n => `<i class="${levelDone(k, n, A(), me(), pays()) ? "on" : levelStarted(k, n, A(), me(), pays()) ? "half" : ""}"></i>`).join("")}</span>`;
   // raison courte d'une tuile grisée ou conditionnelle
