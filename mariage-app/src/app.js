@@ -678,7 +678,7 @@ function vInvites(){return iv().vInvites()}
 let IV=null;
 const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,render,go,patch,addDoc,remove,toast,toastUndo,openEditor,closeModal,showTask,
   layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
-  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today}));
+  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today,groupes:()=>GROUPS}));
 // Ancienne liste détaillée (une ligne par personne, filtres, « Ranger » par groupe ou côté) : déplacée sous « Liste détaillée et rangement »
 function vInvitesListe(){
   const g=S.guests,f=S.f;
@@ -1974,6 +1974,7 @@ document.addEventListener("submit",async e=>{
   const f=e.target;
   if(env().submit(f)){e.preventDefault();return}
   if(f.dataset.budep){e.preventDefault();bu().submit(f);return} // dépense hors prestataire d'un poste
+  if(f.dataset.ivnf){e.preventDefault();iv().submit(f);return} // nouveau foyer
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}

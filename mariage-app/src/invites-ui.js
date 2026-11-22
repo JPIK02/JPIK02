@@ -5,6 +5,10 @@ import { foyersDe, nomFoyer, compte, momentDe, points, cercles, proposerFoyers, 
 
 // Textes d'interface (à traduire)
 const UI = {
+  nouveauT: "Nouveau foyer", nouveauP: "Un couple, une famille ou une personne seule : une invitation, une adresse.", nomFoyerOpt: "Nom du foyer (facultatif)",
+  cote: "Côté", cercle: "Cercle", personneN: i => `Personne ${i}`, prenomNom: "Prénom et nom", enfantCase: "Enfant", ajouterLigne: "Ajouter une personne",
+  avecPlus1: "Avec un accompagnant dont nous ne connaissons pas encore le prénom (+1)", creerFoyer: "Créer le foyer", uneSeule: "Ajouter une seule personne (formulaire complet)",
+  auMoinsUn: "Indiquez au moins une personne.", foyerCree: n => `${n} ajouté à la liste`,
   titre: "Nos invités", retour: "Accueil", ajouter: "Ajouter une personne", surListe: "SUR LA LISTE", visees: c => `sur ${c} visés`, fixerCible: "Fixer une cible",
   cibleL: "Nombre d'invités visé", unPour2: "1 point = 2 personnes", libres: n => `${n} place${n > 1 ? "s" : ""} libre${n > 1 ? "s" : ""}`, auDessus: n => `+${n} au-dessus de votre cible`, commun: "Commun",
   cpt: { ae: "adultes + enfants", foyers: "foyers", adresses: "adresses" },
@@ -53,7 +57,7 @@ export function makeInvites(ctx) {
     const avecAdr = fs.filter(f => String(f.adresse || "").trim()).length;
     return `<section class="pr-head bu-head iv-head">
       <div class="pr-top"><button class="pr-round" data-go="apercu" aria-label="${UI.retour}">${ctx.BACK_SVG}</button><h2 class="bu-t">${UI.titre}</h2>
-        ${S.canWrite ? `<button class="pr-round plus" data-new="guests" aria-label="${UI.ajouter}">${SVG('<path d="M12 5v14M5 12h14"/>')}</button>` : "<span></span>"}</div>
+        ${S.canWrite ? `<button class="pr-round plus" data-act="ivnouveau" aria-label="${UI.nouveauT}">${SVG('<path d="M12 5v14M5 12h14"/>')}</button>` : "<span></span>"}</div>
       <div class="bu-k">${UI.surListe}</div>
       <div class="pr-count bu-count"><b class="num">${n}</b>${S.ui.ivCible ? `<label class="sr" for="iv-cible">${UI.cibleL}</label><input id="iv-cible" class="iv-cin num" inputmode="numeric" data-ivcible="1" value="${cible || ""}" placeholder="60">`
         : `<button class="bu-lim" data-act="ivcible" ${S.canWrite ? "" : "disabled"}>${cible ? esc(UI.visees(cible)) : UI.fixerCible}</button>`}</div>
@@ -192,6 +196,40 @@ export function makeInvites(ctx) {
     ctx.toastUndo(UI.retire(nomFoyer(f)), async () => { for (const [p, d] of docs) await ctx.setRaw(p, d); if (fdoc) { const { id: _i, ...d } = fdoc; await ctx.setRaw(`foyers/${fdoc.id}`, d); } });
   }
 
+  /* ---------- Nouveau foyer (« + » de l'en-tête) ---------- */
+  const ligne = i => `<div class="iv-nl"><label class="sr" for="iv-np-${i}">${UI.personneN(i + 1)}</label><input id="iv-np-${i}" name="p" placeholder="${UI.prenomNom}" autocomplete="off" ${i === 0 ? "required" : ""}>
+    <label class="bu-ck"><input type="checkbox" name="e${i}"> ${UI.enfantCase}</label></div>`;
+  function ouvrirNouveau() {
+    const cercles = [...new Set([...ctx.groupes(), ...S.guests.map(g => g.group).filter(Boolean)])];
+    ctx.layer(`<div class="ov" data-close="1"><div class="modal iv-pick" role="dialog" aria-modal="true" aria-label="${UI.nouveauT}"><h3>${UI.nouveauT}</h3><p class="ev-note">${UI.nouveauP}</p>
+      <form class="iv-nf" data-ivnf="1">
+        <label class="pl-f"><span>${UI.nomFoyerOpt}</span><input name="nom" placeholder="${UI.nomFoyerPh}" autocomplete="off"></label>
+        <div class="pl-f"><span>${UI.cote}</span><div class="seg" role="radiogroup" aria-label="${UI.cote}">${["claire", "julien", "commun"].map((k, i) => `<label class="iv-seg"><input type="radio" name="side" value="${k}" ${i === 2 ? "checked" : ""}><span>${esc(coteNom(k))}</span></label>`).join("")}</div></div>
+        <label class="pl-f"><span>${UI.cercle}</span><input name="cercle" list="iv-cercles" autocomplete="off"><datalist id="iv-cercles">${cercles.map(c => `<option value="${esc(c)}">`).join("")}</datalist></label>
+        <div class="iv-nls" id="iv-nls">${[0, 1].map(ligne).join("")}</div>
+        <button type="button" class="link" data-act="ivligne">+ ${UI.ajouterLigne}</button>
+        <label class="bu-ck"><input type="checkbox" name="plus1"> ${UI.avecPlus1}</label>
+        <p class="brief-err" id="iv-nf-err" role="alert"></p>
+        <div class="acts"><button type="button" class="link" data-act="ivuneseule">${UI.uneSeule}</button><div><button type="button" class="btn" data-close="1">${UI.annuler}</button><button class="btn primary" type="submit">${UI.creerFoyer}</button></div></div>
+      </form></div></div>`);
+    setTimeout(() => { const i = document.querySelector('.iv-nf [name="nom"]'); if (i) i.focus(); }, 50);
+  }
+  async function creerFoyer(form) {
+    const fd = new FormData(form), noms = fd.getAll("p").map(x => String(x).trim()), err = document.getElementById("iv-nf-err");
+    const personnes = noms.map((n, i) => ({ name: n.slice(0, 80), enfant: !!fd.get("e" + i) })).filter(p => p.name);
+    if (fd.get("plus1")) personnes.push({ name: "+1", plusUn: true, enfant: false });
+    if (!personnes.length) { if (err) err.textContent = UI.auMoinsUn; return; }
+    const side = ["claire", "julien", "commun"].includes(fd.get("side")) ? fd.get("side") : "commun", cercle = String(fd.get("cercle") || "").trim().slice(0, 40);
+    const fid = await ctx.addDoc("foyers", { nom: String(fd.get("nom") || "").trim().slice(0, 120), side, cercle, etape: "liste" });
+    if (!fid) return;
+    const ids = [];
+    for (const p of personnes) { const id = await ctx.addDoc("guests", { ...p, foyerId: fid, side, group: cercle, rsvp: "attente", ceremonie: true, vin: true, diner: true, regime: "", table: "", note: "" }); if (id) ids.push(id); }
+    ctx.closeModal();
+    const f = foyer(fid);
+    ctx.toastUndo(UI.foyerCree(f ? nomFoyer(f) : UI.nouveauT), async () => { for (const id of ids) await ctx.remove("guests", id); await ctx.remove("foyers", fid); });
+    show("foyer", { iFoyer: fid, iFrom: "main" });
+  }
+
   /* ---------- Ajouter quelqu'un de la liste à un foyer ---------- */
   function listeChoix(fid) {
     const f = foyer(fid); if (!f) return "";
@@ -270,6 +308,9 @@ export function makeInvites(ctx) {
         if (a === "ivplus1") ctx.addDoc("guests", { ...base, name: "+1", plusUn: true, enfant: false, regime: "", table: "" }); else ctx.openEditor("guests", null, base); }); return true;
       case "ivretirer": confirmerRetrait(id); return true;
       case "ivchoisir": ouvrirChoix(id); return true;
+      case "ivnouveau": ouvrirNouveau(); return true;
+      case "ivligne": { const l = document.getElementById("iv-nls"); if (l) { const n = l.querySelectorAll(".iv-nl").length; l.insertAdjacentHTML("beforeend", ligne(n)); const i = document.getElementById(`iv-np-${n}`); if (i) i.focus(); } return true; }
+      case "ivuneseule": ctx.closeModal(); ctx.openEditor("guests"); return true;
       case "ivlien": creerLien(id); return true;
       case "ivpurge": purger(); return true;
       case "ivpartager": { const f = foyer(id); if (f && f.lien && f.lien.token) partager(f, f.lien.token); return true; }
@@ -291,5 +332,6 @@ export function makeInvites(ctx) {
   function input(el) {
     if (el.dataset && el.dataset.ivpick) { S.ui.ivPickQ = el.value; majChoix(); return true; }
     if (el.dataset && el.dataset.ivq) { S.f.iq = el.value; ctx.saveF(); ctx.render(); const i = document.getElementById("iv-q"); if (i && document.activeElement !== i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return true; } return false; }
-  return { vInvites, act, change, input, foyers: F, moment: () => momentDe(F()) };
+  function submit(f) { if (f.dataset && f.dataset.ivnf) { creerFoyer(f); return true; } return false; }
+  return { vInvites, act, change, input, submit, foyers: F, moment: () => momentDe(F()) };
 }
