@@ -1939,3 +1939,8 @@ div.pr-row{cursor:default}
 .iv-nf .acts{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
 .iv-nf .acts .link{min-height:44px}
 .iv-nf .link{align-self:flex-start;min-height:44px;background:none;border:0;padding:0;font:inherit;font-size:14.5px;font-weight:600;color:var(--link);cursor:pointer;text-align:left}.iv-nf .link:hover{text-decoration:underline}
+.ad-brand{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.ad-brand .ad-sym{width:30px;height:30px}
+.ad-brand span{font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:22px;color:var(--hero-fg);letter-spacing:.01em}
+.ad-sign{display:flex;align-items:center;justify-content:center;gap:8px;margin:4px 0 0;font-size:12.5px;color:var(--muted)}
+.ad-sign .ad-sym{flex:none;width:22px;height:22px;border-radius:50%;background:var(--hero-b);padding:2px}

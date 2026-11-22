@@ -15,8 +15,12 @@ const UI = {
   envoyer: "Envoyer", envoi: "Envoi…", merci: c => `Merci ! C'est noté${c ? `, ${c} vous remercient` : ""}.`, modifier: "Vous pouvez revenir modifier vos informations avec ce même lien.",
   majLe: d => `Dernière mise à jour le ${d}`, obligatoire: "Indiquez au moins votre adresse.",
   vie: c => `Ces informations sont recueillies par ${c || "les mariés"} pour vous envoyer leur faire-part et préparer le repas. Elles ne sont visibles que d'eux, ne sont transmises à personne (le traiteur ne reçoit qu'un total des régimes, sans nom) et seront supprimées six mois après le mariage. Pour les faire supprimer plus tôt, demandez-le simplement à ${c || "eux"}.`,
+  marque: "Lamaelle", signature: c => `Lamaelle · l'app d'organisation du mariage${c ? ` de ${c}` : ""}`,
   invalide: "Ce lien n'est plus valable. Demandez-en un nouveau aux mariés.", reseau: "Pas de connexion : réessayez dans un instant.",
 };
+// symbole Lamaelle (le même que dans l'en-tête de l'app)
+const SYMBOLE = `<svg class="ad-sym" viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="54" fill="none" stroke="#F7F3EC" stroke-width="2.4"/><circle cx="60" cy="62" r="26" fill="none" stroke="#D98C6A" stroke-width="7"/><path d="M60 32 L32 25 M60 32 L88 25" fill="none" stroke="#C9A46A" stroke-width="1.8" stroke-linecap="round"/><polygon points="54.5,90 65.5,90 63.5,41 56.5,41" fill="#F7F3EC"/><rect x="55.5" y="31" width="9" height="10" fill="#F7F3EC"/><polygon points="54,31 66,31 60,23" fill="#F7F3EC"/><path d="M24 90 L96 90 M34 97 L86 97 M46 104 L74 104" fill="none" stroke="#F7F3EC" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+const marque = () => `<div class="ad-brand">${SYMBOLE}<span>${UI.marque}</span></div>`;
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
@@ -30,9 +34,9 @@ async function appel(action, data) {
 }
 function ecran() {
   const v = vue, main = $("#ad");
-  document.title = UI.titre(v.couple);
+  document.title = `${UI.titre(v.couple)} · ${UI.marque}`;
   const maj = v.majLe ? new Date(v.majLe).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "";
-  main.innerHTML = `<header class="ad-head"><span class="ad-k">${esc(UI.titre(v.couple))}</span><h1>${esc(UI.bonjour(v.foyer))}</h1><p>${UI.intro}</p></header>
+  main.innerHTML = `<header class="ad-head">${marque()}<span class="ad-k">${esc(UI.titre(v.couple))}</span><h1>${esc(UI.bonjour(v.foyer))}</h1><p>${UI.intro}</p></header>
     ${envoye ? `<div class="ad-ok" role="status"><b>${esc(UI.merci(v.couple))}</b><span>${UI.modifier}</span></div>` : ""}
     <form id="ad-form" class="ad-form" novalidate>
       <label class="ad-f"><span>${UI.adresse}</span><textarea name="adresse" rows="4" autocomplete="street-address" placeholder="${esc(UI.adressePh)}">${esc(v.adresse)}</textarea></label>
@@ -44,7 +48,8 @@ function ecran() {
       <button class="ad-btn" type="submit">${UI.envoyer}</button>
       ${maj ? `<p class="ad-maj">${esc(UI.majLe(maj))}</p>` : ""}
     </form>
-    <p class="ad-vie">${esc(UI.vie(v.couple))}</p>`;
+    <p class="ad-vie">${esc(UI.vie(v.couple))}</p>
+    <p class="ad-sign">${SYMBOLE}<span>${esc(UI.signature(v.couple))}</span></p>`;
   $("#ad-form").addEventListener("submit", envoyer);
 }
 async function envoyer(e) {
@@ -58,9 +63,10 @@ async function envoyer(e) {
 }
 async function demarrer() {
   const main = $("#ad");
-  if (!token) { main.innerHTML = `<p class="ad-load">${UI.invalide}</p>`; return; }
+  const signe = `<p class="ad-sign">${SYMBOLE}<span>${UI.marque}</span></p>`;
+  if (!token) { main.innerHTML = `<p class="ad-load">${UI.invalide}</p>${signe}`; return; }
   try { vue = await appel("lire"); ecran(); }
-  catch (x) { main.innerHTML = `<p class="ad-load">${esc(x.code === 404 ? UI.invalide : x.message)}</p>`; }
+  catch (x) { main.innerHTML = `<p class="ad-load">${esc(x.code === 404 ? UI.invalide : x.message)}</p>${signe}`; }
 }
 demarrer();
 window.addEventListener("hashchange", () => location.reload()); // autre lien collé dans le même onglet
