@@ -9,6 +9,8 @@ import {OLD2TILE,METIER2TILE} from "../agents/lib/envies/logic.js";
 import {makeEnvies} from "./envies-ui.js";
 import {makePrest} from "./prestataires-ui.js";
 import {etapeOf} from "../agents/lib/prestataires.js";
+import {PRIVES,fusion,estPrive,chemin,resumeSecret,questionSecrete,TUILE_SECRETE} from "../agents/lib/secret.js";
+import {levelDone as levelDoneEnvies} from "../agents/lib/envies/logic.js";
 import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
@@ -71,7 +73,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -111,7 +113,54 @@ const CAT_BUDGET={Lieu:/lieu|salle|reception|domaine/,Traiteur:/traiteur|repas|b
 const budgetNote=n=>String(n||"").replace(/\s*·?\s*\d+(?:[.,]\d+)?\s*%\s*du budget\s*·?\s*/gi," ").replace(/^\s*·\s*|\s*·\s*$/g,"").trim();
 const budgetLineFor=cat=>{const re=CAT_BUDGET[cat];return re?S.budget.find(b=>re.test(fold(b.label))):null};
 const lastBriefAt=()=>Math.max(S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0),env().lastAt());
-async function mergeDoc(path,data){if(!S.db)return false;try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
+async function mergeDoc(path,data){if(!S.db)return false;try{await S.db.doc(routeChemin(path)).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
+/* ---------- Tenue secrète (agents/lib/secret.js, firestore.rules) : mon espace privé prive/<moi>/… ---------- */
+const MOI=()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire";
+const secretLeve=()=>!!(S.secret&&S.secret[MOI()]&&S.secret[MOI()].montre);
+// document existant : dans mon espace privé s'il y est (marqué _prive à la fusion), sinon commun
+const enPrive=(col,id)=>col!=="envies"&&PRIVES.includes(col)&&(S[col]||[]).some(x=>x.id===id&&x._prive);
+const refDoc=(col,id)=>S.db.doc(enPrive(col,id)?`${chemin(MOI(),col)}/${id}`:`${col}/${id}`);
+// nouveau document : dans mon espace privé si c'est de la tenue (estPrive), sinon commun
+const refCol=(col,data)=>S.db.collection(estPrive(col,data,{montre:secretLeve()})?chemin(MOI(),col):col);
+// chemin écrit en entier (récompenses de la tuile Tenues) : privé tant que le secret n'est pas levé
+const routeChemin=path=>{const m=/^([^/]+)\/([^/]+)$/.exec(path);if(!m||!PRIVES.includes(m[1]))return path;
+  return enPrive(m[1],m[2])||(/^(recompenses|comparaisons)$/.test(m[1])&&estPrive(m[1],{id:m[2]},{montre:secretLeve()}))?`${chemin(MOI(),m[1])}/${m[2]}`:path};
+const autreKey=()=>MOI()==="claire"?"julien":"claire";
+const prenomDe2=k=>k==="claire"?P1():P2();
+// « Montrer ma tenue » : tout mon espace privé passe dans l'espace commun (rien n'est perdu), après confirmation
+function leverSecret(){
+  const a=prenomDe2(autreKey());
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Montrer ma tenue"><h3>Montrer votre tenue à ${esc(a)} ?</h3>
+    <p>Vos réponses, vos photos, vos prestataires de tenue et leurs rendez-vous deviennent visibles par ${esc(a)}. Ils ne pourront pas redevenir secrets.</p>
+    <div class="acts"><button class="btn" data-close="1">Annuler</button><button class="btn primary" id="lever-ok">Montrer ma tenue</button></div></div></div>`;
+  document.getElementById("lever-ok").onclick=async()=>{closeModal();const me=MOI(),db=S.db;if(!db)return;
+    try{
+      for(const d of SRC.p.envies||[]){const {id,...rep}=d;await db.doc(`envies/${id}`).set({p:{[me]:rep},updatedAt:Date.now()},{mergeFields:[`p.${me}`,"updatedAt"]});await db.doc(`${chemin(me,"envies")}/${id}`).delete()}
+      for(const col of PRIVES.filter(c=>c!=="envies"))for(const d of SRC.p[col]||[]){const {id,...x}=d;await db.doc(`${col}/${id}`).set(x);await db.doc(`${chemin(me,col)}/${id}`).delete()}
+      for(const r of (SRC.c.rdv||[]).filter(r=>r.secretDe===me))await db.doc(`rdv/${r.id}`).delete(); // repères remplacés par les vrais rendez-vous
+      await mergeDoc("meta/secret",{[me]:{montre:true,updatedAt:Date.now()}});toast(`Votre tenue est visible par ${a}`);
+    }catch(e){writeErr(e)}};
+}
+// Rendez-vous de tenue : le vrai dans mon espace privé, un repère commun sans lieu ni boutique (date et heure seulement)
+async function saveRdvSecret(id,out){
+  if(!S.db)return false;const me=MOI();
+  try{
+    let pid=id&&enPrive("rdv",id)?id:null;
+    if(pid)await S.db.doc(`${chemin(me,"rdv")}/${pid}`).set(out);
+    else{pid=(await S.db.collection(chemin(me,"rdv")).add(Object.assign({createdAt:Date.now()},out))).id;if(id)await S.db.doc(`rdv/${id}`).delete()}
+    const rep=(SRC.c.rdv||[]).find(r=>r.secretRef===pid),data={title:`Rendez-vous tenue de ${prenom()}`,date:out.date||"",time:out.time||"",qui:me,secretDe:me,secretRef:pid};
+    await (rep?S.db.doc(`rdv/${rep.id}`).set(data):S.db.collection("rdv").add(Object.assign({createdAt:Date.now()},data)));
+    return true;
+  }catch(e){return writeErr(e)}
+}
+// Écoutes : chaque collection commune qui a un pendant privé est fusionnée avec mon espace privé (fusion de secret.js)
+const SRC={c:{},p:{}};
+function fusionner(col){S[col]=fusion(col,SRC.c[col]||[],SRC.p[col]||[],MOI())}
+// Ce que l'autre peut savoir de ma tenue (avancement, nombre de prestataires) : écrit par mon app, jamais de contenu
+let secretT=0;
+function publierSecret(){clearTimeout(secretT);secretT=setTimeout(()=>{if(!S.db||!S.canWrite)return;const me=MOI();
+  const r=resumeSecret({envies:S.envies,vendors:S.vendors,me,levelDone:levelDoneEnvies,montre:secretLeve()}),cur=(S.secret||{})[me]||{};
+  if(JSON.stringify({...r,montre:!!cur.montre})!==JSON.stringify({niveaux:cur.niveaux,repondues:cur.repondues,prestataires:cur.prestataires,reserve:cur.reserve,montre:!!cur.montre}))mergeDoc("meta/secret",{[me]:{...r,montre:!!cur.montre,updatedAt:Date.now()}})},1500)}
 /* Points à regarder : incohérences entre date, budget, devis, capacité, et actions en attente. */
 /* Capacité d'accueil lue dans les notes (texte sans accents, en minuscules) : le plus grand nombre de personnes cité
    sur la ligne « capacité » (« 3 salles de 40 à 240 personnes » → 240 ; « jusqu'à 70 » → 70 ; « 100-200 » → 200).
@@ -435,18 +484,18 @@ function toast(msg){const el=document.createElement("div");el.className="toast";
 async function save(col,id,data){
   if(!S.db){toast(S.user?"Connexion en cours, réessayez dans un instant":"Connectez-vous pour enregistrer");return false}
   try{
-    if(id){await S.db.collection(col).doc(id).set(data)}
-    else{await S.db.collection(col).add(Object.assign({createdAt:Date.now()},data))}
+    if(id){await refDoc(col,id).set(data)}
+    else{await refCol(col,data).add(Object.assign({createdAt:Date.now()},data))}
     return true;
   }catch(e){return writeErr(e)}
 }
 async function patch(col,id,data){
   if(!S.db)return false;
-  try{await S.db.collection(col).doc(id).update(data);return true}catch(e){return writeErr(e)}
+  try{await refDoc(col,id).update(data);return true}catch(e){return writeErr(e)}
 }
 async function remove(col,id){
   if(!S.db)return false;
-  try{await S.db.collection(col).doc(id).delete();return true}catch(e){return writeErr(e)}
+  try{await refDoc(col,id).delete();return true}catch(e){return writeErr(e)}
 }
 async function setDoc(path,cur,data){
   if(!S.db){toast(S.user?"Connexion en cours, réessayez dans un instant":"Connectez-vous pour enregistrer");return false}
@@ -805,7 +854,7 @@ function vPrestataires(){
 let PR=null;
 const pr=()=>PR||(PR=makePrest({S,esc,toast,toastUndo,go,render,saveF,CHEV,BACK_SVG,tintOf,initials,eur,pd,today,wDate,fold,env,briefFor,pdfBriefs,patch,devisSection,
   ficheDetails,pendingSugs,openEditor,closeModal,fileForAI,addVendor,kick,acceptSug,runAgentNow,openCompare,runQr,
-  addDoc,remove,phaseFor,budgetLineFor,setDoc:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
+  addDoc,remove,phaseFor,budgetLineFor,prenom,moi:MOI,autreKey,prenomAutre:()=>prenomDe2(autreKey()),setDoc:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
   logo:()=>(document.querySelector(".brand-mark")||{}).outerHTML||"",userEmail:()=>String(S.user&&S.user.email||""),
   prenomDe:by=>{const k=PARTNER[String(by||"").toLowerCase()];return k==="claire"?P1():k==="julien"?P2():""}}));
 
@@ -996,14 +1045,16 @@ function pdfBriefs(k){
 }
 /* Onglet « Nos envies » : écrans dans src/envies-ui.js, catalogue et règles dans agents/lib/envies (docs/nos-envies-v1.md) */
 let ENV=null;
-const env=()=>ENV||(ENV=makeEnvies({S,esc,toast,headTop:envHeadTop,meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
+const env=()=>ENV||(ENV=makeEnvies({S,esc,toast,headTop:envHeadTop,secretLeve,leverSecret,autreKey,prenomAutre:()=>prenomDe2(autreKey()),meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
   briefsReadyCount:()=>{const {b,ready}=briefsState();return ready?Object.keys(b.categories).length:0},briefFor,fitPill,synthHtml,archivedAnswers,moodboard,
   pickPhoto:pickEnviePhoto,dictate,saveEnvie,render,go,saveF,SR,CHEV,BACK_SVG,runReward,saveDoc:(path,data)=>mergeDoc(path,data)}));
 // Récompense de fin de niveau (agent « recompense » côté serveur) ; si l'appel échoue, le passage suivant des agents la reprend
 async function runReward(tuile,niveau){
   if(!S.canWrite)return;
   await mergeDoc(`recompenses/${tuile}.${niveau}`,{tuile,niveau,status:"demandee",requestedAt:Date.now(),erreur:null});
-  runAgentNow("recompense",{tuile,niveau}).catch(()=>{});
+  // tuile Tenues : la récompense est rédigée dans mon espace privé, à partir de mes seules réponses
+  const pour=tuile===TUILE_SECRETE&&!secretLeve()?MOI():undefined;
+  runAgentNow("recompense",{tuile,niveau,...(pour?{pour}:{})}).catch(()=>{});
 }
 function vEnvies(){return env().vEnvies()}
 // Brief déjà rédigé (catégories de l'agent briefs) correspondant à une tuile
@@ -1017,6 +1068,11 @@ function archivedAnswers(){return ARCHIVED.map(id=>{const d=S.brief.find(x=>x.id
 // Enregistre une réponse de « Nos envies » (fields : champs remplacés en entier, le reste du document est gardé)
 async function saveEnvie(id,data,fields){
   if(!S.db||!S.canWrite)return false;
+  // question secrète (tenue) : ma réponse va dans mon espace privé, jamais dans le document commun
+  if(questionSecrete(id)&&!secretLeve()){
+    const me=MOI(),mine=Object.assign({},(data.p&&data.p[me])||{},data.extra?{extra:data.extra}:{});
+    try{await S.db.doc(`${chemin(me,"envies")}/${id}`).set(Object.assign(mine,{updatedAt:Date.now()}),{merge:true});return true}catch(e){return writeErr(e)}
+  }
   try{await S.db.collection("envies").doc(id).set(Object.assign({},data,{by:String(S.user&&S.user.email||""),updatedAt:Date.now()}),{mergeFields:fields});
     // la synthèse du coach se refait après quelques minutes de calme (profilDue), pas à chaque réponse
     clearTimeout(saveEnvie.t);saveEnvie.t=setTimeout(()=>mergeDoc("meta/analyse",{profilRequestedAt:Date.now()}),4000);return true}catch(e){return writeErr(e)}
@@ -1453,13 +1509,13 @@ async function fileForAI(file){
 // Réservation (Prestataires, lot 3) : création d'un document avec son id (annulable), période d'une tâche selon son échéance
 async function addDoc(col,data){
   if(!S.db)return null;
-  try{const ref=await S.db.collection(col).add(Object.assign({createdAt:Date.now()},data));return ref.id}catch(e){writeErr(e);return null}
+  try{const ref=await refCol(col,data).add(Object.assign({createdAt:Date.now()},data));return ref.id}catch(e){writeErr(e);return null}
 }
 const phaseFor=due=>{const d=wDate(),x=due?pd(due):null;if(!d||!x)return (currentPhase()||PHASES[0]).k;return (PHASES.find(p=>p.due(d)>=x)||PHASES[PHASES.length-1]).k};
 // Nouveau prestataire : rend son id (pour ouvrir sa fiche)
 async function addVendor(data){
   if(!S.db){toast("Connexion en cours, réessayez dans un instant");return null}
-  try{const ref=await S.db.collection("vendors").add(Object.assign({createdAt:Date.now(),updatedAt:Date.now(),by:String(S.user&&S.user.email||""),acomptePaye:false},data));return ref.id}catch(e){writeErr(e);return null}
+  try{const ref=await refCol("vendors",data).add(Object.assign({createdAt:Date.now(),updatedAt:Date.now(),by:String(S.user&&S.user.email||""),acomptePaye:false},data));return ref.id}catch(e){writeErr(e);return null}
 }
 async function pickFiles(files){
   const c=S.chat;c.atts=c.atts||[];
@@ -1643,7 +1699,8 @@ const SCHEMAS={
     {row:[{k:"date",label:"Date",type:"date"},{k:"time",label:"Heure",type:"time"}]},
     {row:[{k:"avec",label:"Avec",type:"text"},{k:"lieu",label:"Lieu",type:"text"}]},
     {k:"qui",label:"Qui y va",type:"seg",options:Object.entries(OWNERS),def:"deux"},
-    {k:"note",label:"Notes",type:"textarea"}]},
+    {k:"note",label:"Notes",type:"textarea"},
+    {k:"tenue",label:"Rendez-vous de tenue (secret : l'autre ne voit que « Rendez-vous tenue », la date et l'heure)",type:"check"}]},
   budget:{one:"le poste",fields:[
     {k:"label",label:"Poste",type:"text",req:1},
     {row:[{k:"prevu",label:"Prévu (€)",type:"number"},{k:"engage",label:"Engagé (€)",type:"number"}]},
@@ -1722,7 +1779,7 @@ function openEditor(col,id,preset){
     if(col==="vendors"&&isNew&&!out.by)out.by=String(S.user&&S.user.email||"");
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
-    const ok=await save(col,id,out);
+    const ok=col==="rdv"&&out.tenue&&!secretLeve()?await saveRdvSecret(id,out):await save(col,id,out);
     const refit=out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000;
     if(ok){closeModal();if(refit)kick("analyse");toast(refit?"Enregistré : la note est recalculée (1 à 2 minutes)":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
   });
@@ -1979,7 +2036,7 @@ function loginView(){
 const h=location.hash.slice(1);if(VIEWFN[h])S.view=h;
 // Démarrage instantané : la dernière copie des données (gardée sur cet appareil) s'affiche tout de suite,
 // pendant que la connexion et la base se confirment ; les écritures attendent que la base soit prête (S.db).
-const BOOT_KEY="lamaelle-demarrage",BOOT_FIELDS=[...COLS,"settings","agent","profil","analyse","planning","prefs","hebdo","photo","briefs","pinterest","ia","usage"];
+const BOOT_KEY="lamaelle-demarrage",BOOT_FIELDS=[...COLS,"settings","agent","profil","analyse","planning","prefs","hebdo","photo","briefs","pinterest","ia","usage","secret"];
 let bootUid=null;
 try{const b=JSON.parse(localStorage.getItem(BOOT_KEY)||"null");if(b&&b.uid&&b.d){Object.assign(S,b.d);S.user={email:b.email,uid:b.uid};bootUid=b.uid;S.mode="live"}}catch(e){}
 let bootT=0;const saveBoot=()=>{clearTimeout(bootT);bootT=setTimeout(()=>{if(S.mode!=="live"||!S.db||!S.user)return;
@@ -2018,8 +2075,14 @@ function boot(){
       for(const [k,m] of [["cur",monthKey(d)],["prev",prev]])unsubs.push(db.doc("usage/"+m).onSnapshot(LIVE,x=>{S.usage[k]=x.exists?x.data():{};later()},()=>{})); }
     db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});
     COLS.forEach(c=>{
-      unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));
+      unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{const docs=s.docs.map(d=>Object.assign({id:d.id},d.data()));
+        if(PRIVES.includes(c)){SRC.c[c]=docs;fusionner(c)}else S[c]=docs;mark(c,s);later()},onErr));
     });
+    // mon espace privé (tenue secrète) : lisible par moi seul (firestore.rules)
+    const me=PARTNER[email]||"claire";
+    PRIVES.forEach(c=>unsubs.push(db.collection(chemin(me,c)).onSnapshot(s=>{SRC.p[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));fusionner(c);
+      if(c==="envies"||c==="vendors")publierSecret();later()},()=>{})));
+    meta("secret","secret");
   });
 }
 boot();

@@ -3,6 +3,7 @@ import { TUILES } from "./agents/lib/envies/catalogue.js";
 import { FR } from "./agents/lib/envies/fr.js";
 import { QBY, TBY, questionsOf, answerFor, isAnswered, tileState, levelDone, jauge, answerText } from "./agents/lib/envies/logic.js";
 import { toAnswer, buildReperee, pendingFor, VALEUR_PROPS } from "./agents/lib/envies/reperees.js";
+import { PRIVES, fusion, estPrive, chemin, questionSecrete } from "./agents/lib/secret.js";
 // Outils de l'assistant IA : ce qu'il peut lire et faire dans l'app.
 // Règles : aucune suppression ; chaque écriture renvoie l'état d'avant pour pouvoir l'annuler depuis l'app ;
 // les valeurs sont nettoyées ici, quoi que Claude envoie. Indépendant de Firebase : `db` est injecté (testable).
@@ -118,7 +119,12 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
   const get = async path => { const s = await db.doc(path).get(); return s.exists ? s.data() : null; };
   const all = async c => docs(await db.collection(c).get());
   const settings = async () => (await get("meta/settings")) || {};
-  const enviesMap = async () => Object.fromEntries((await all("envies")).map(d => [d.id, d]));
+  // Tenue secrète : le coach lit l'espace privé de la personne qui lui parle (jamais celui de l'autre) et y range sa tenue
+  let montreCache;
+  const montre = async () => (montreCache ??= !!((((await get("meta/secret")) || {})[partner]) || {}).montre);
+  const allM = async c => (PRIVES.includes(c) ? fusion(c, await all(c), await all(chemin(partner, c)), partner) : all(c));
+  const pathOf = async (col, id) => (PRIVES.includes(col) && (await get(`${chemin(partner, col)}/${id}`)) ? `${chemin(partner, col)}/${id}` : `${col}/${id}`);
+  const enviesMap = async () => Object.fromEntries((await allM("envies")).map(d => [d.id, d]));
 
   const taskDue = (t, wd) => (t.due ? new Date(t.due + "T12:00:00") : wd && PHASES[t.phase] ? PHASES[t.phase][1](wd) : null);
 
@@ -129,16 +135,17 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
     return { path, before };
   }
   async function create(col, data) {
-    const ref = db.collection(col).doc();
+    const path = estPrive(col, data, { montre: await montre() }) ? chemin(partner, col) : col;
+    const ref = db.collection(path).doc();
     await ref.set({ createdAt: Date.now(), ...data });
-    return { op: { path: `${col}/${ref.id}`, before: null }, id: ref.id };
+    return { op: { path: `${path}/${ref.id}`, before: null }, id: ref.id };
   }
-  const need = async (col, id) => { const d = await get(`${col}/${id}`); if (!d) throw new Error(`${col}/${id} introuvable : relis la liste pour avoir le bon id`); return d; };
+  const need = async (col, id) => { const d = await get(await pathOf(col, id)); if (!d) throw new Error(`${col}/${id} introuvable : relis la liste pour avoir le bon id`); return d; };
 
   const run = {
     async apercu() {
       const [st, tasks, guests, vendors, budget, rdv, inbox, brief] = await Promise.all(
-        [settings(), all("tasks"), all("guests"), all("vendors"), all("budget"), all("rdv"), all("inbox"), enviesMap()]);
+        [settings(), all("tasks"), all("guests"), allM("vendors"), all("budget"), allM("rdv"), all("inbox"), enviesMap()]);
       const wd = st.date ? new Date(st.date + "T12:00:00") : null;
       const late = tasks.filter(t => t.status !== "done" && taskDue(t, wd) && taskDue(t, wd) < now);
       const sum = k => budget.reduce((s, b) => s + (num(b[k]) || 0), 0);
@@ -169,7 +176,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
         .map(g => clean({ id: g.id, nom: g.name, groupe: g.group || undefined, cote: g.side || "commun", reponse: g.rsvp || "attente", enfant: g.enfant || undefined, table: g.table || undefined, regime: g.regime || undefined, diner: g.diner === false ? false : undefined }));
     },
     async lister_prestataires({ categorie } = {}) {
-      return (await all("vendors")).filter(v => !categorie || v.cat === categorie)
+      return (await allM("vendors")).filter(v => !categorie || v.cat === categorie)
         .map(v => clean({ id: v.id, nom: v.name, categorie: v.cat, statut: v.status, prix: v.prix ?? undefined, note_fit: v.fit?.score ?? undefined, confiance: v.fit?.confiance, verdict: v.fit?.verdict, notes: v.note ? String(v.note).slice(0, 300) : undefined, notes_visite: v.visitNotes || undefined }));
     },
     async detail_prestataire({ id }) { return { id, ...(await need("vendors", id)) }; },
@@ -177,7 +184,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       return { budget_total: num((await settings()).budgetTotal) ?? null, postes: (await all("budget")).map(b => clean({ id: b.id, poste: b.label, prevu: b.prevu ?? undefined, engage: b.engage ?? undefined, paye: b.paye ?? undefined, note: b.note || undefined })) };
     },
     async lister_rendez_vous({ a_venir_seulement = true } = {}) {
-      return (await all("rdv")).filter(r => !a_venir_seulement || (r.date && r.date >= iso(now)))
+      return (await allM("rdv")).filter(r => !a_venir_seulement || (r.date && r.date >= iso(now)))
         .sort((a, b) => String(a.date).localeCompare(String(b.date))).map(r => clean({ id: r.id, titre: r.title, date: r.date, heure: r.time || undefined, avec: r.avec || undefined, lieu: r.lieu || undefined }));
     },
     async lire_envies({ tuile } = {}) {
@@ -190,7 +197,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       }
       const t = TBY[tuile]; if (!t) throw new Error(`tuile inconnue : ${tuile}. Clés : ${TUILES.map(x => x.k).join(", ")}`);
       const m = A["_tuile." + t.k] || {};
-      const rep = Object.fromEntries(pendingFor(await all("envies_reperees"), A, partner, st.pays).map(r => [r.q, r]));
+      const rep = Object.fromEntries(pendingFor(await allM("envies_reperees"), A, partner, st.pays).map(r => [r.q, r]));
       return { tuile: t.k, nom: FR.tuiles[t.k].nom, priorites: clean({ importance: m.importance, budget: m.budget, reussite: m.reussite, redhibitoire: m.redhibitoire }),
         questions: questionsOf(t.k, null, st.pays).map(q => { const T = FR.questions[q.id], a = answerFor(q, A[q.id], partner);
           return clean({ id: q.id, niveau: q.niveau, format: q.format, question: T.libelle, sert_a: T.sertA, par_partenaire: q.parPartenaire || undefined,
@@ -248,7 +255,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
         contact: str(i.contact, 300), tel: str(i.tel, 60), note: str(i.note, 3000), visitNotes: str(i.notes_visite, 3000) });
       if (upd.visitNotes) upd.fitRequestedAt = Date.now();
       if (!Object.keys(upd).length) throw new Error("aucun changement valide");
-      const op = await write(`vendors/${i.id}`, upd);
+      const op = await write(await pathOf("vendors", i.id), upd);
       return { result: { ok: true, reanalyse: !!upd.visitNotes }, action: { label: `Prestataire modifié : ${v.name}`, ops: [op] } };
     },
     async enregistrer_devis(i) {
@@ -269,7 +276,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       });
       const upd = clean({ devis: [entry, ...(v.devis || [])].slice(0, 12), prix: montant, acompte: entry.acompte, dateAcompte: entry.dateAcompte, dateSolde: entry.dateSolde,
         status: !v.status || v.status === "repere" ? "discussion" : undefined, updatedAt: Date.now() }); // updatedAt : la note de fit sera recalculée
-      ops.push(await write(`vendors/${id}`, upd));
+      ops.push(await write(await pathOf("vendors", id), upd));
       return { result: { ok: true, id, devisPrecedents: (v.devis || []).length }, action: { label: `Devis enregistré : ${v.name} (${montant} €)`, ops } };
     },
     async ajouter_rendez_vous(i) {
@@ -300,8 +307,13 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
     },
     async enregistrer_envie(i) {
       const { q, v, libre: texte } = toAnswer(i, FR), T = FR.questions[q.id];
-      const cur = (await get(`envies/${q.id}`)) || {};
       const part = { ...(v !== undefined ? { v } : {}), ...(texte ? { libre: texte } : {}) };
+      // tenue secrète : la réponse va dans l'espace privé de la personne qui parle
+      if (questionSecrete(q.id) && !(await montre())) {
+        const op = await write(`${chemin(partner, "envies")}/${q.id}`, { ...part, updatedAt: Date.now() });
+        return { result: { ok: true, secret: true }, action: { label: `Envie notée (${FR.tuiles[q.tuile].nom}, secrète) : ${T.libelle}`, ops: [op] } };
+      }
+      const cur = (await get(`envies/${q.id}`)) || {};
       const data = q.parPartenaire ? { p: { ...(cur.p || {}), [partner]: { ...((cur.p || {})[partner] || {}), ...part } } } : part;
       const op = await write(`envies/${q.id}`, { ...data, by: author, updatedAt: Date.now() });
       await db.doc("meta/analyse").set({ ...((await get("meta/analyse")) || {}), profilRequestedAt: Date.now() });
@@ -311,7 +323,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       const A = await enviesMap(), st = await settings();
       const r = buildReperee(i, FR, { A, source: "coach", pour: partner, by: author, pays: st.pays, now: Date.now() });
       if (!r) { toAnswer(i, FR); throw new Error(str(i.phrase, 400) ? "cette question a déjà une réponse (ou sa tuile est de côté) : rien à proposer" : "phrase d'origine manquante"); }
-      const op = await write(`envies_reperees/${r.id}`, r.doc, { merge: false });
+      const op = await write(`${r.doc.pour && questionSecrete(r.doc.q) && !(await montre()) ? chemin(partner, "envies_reperees") : "envies_reperees"}/${r.id}`, r.doc, { merge: false });
       return { result: { ok: true, a_confirmer: true }, action: { label: `Envie repérée, à confirmer (${FR.tuiles[QBY[r.doc.q].tuile].nom}) : ${FR.questions[r.doc.q].libelle}`, ops: [op] } };
     },
     async mettre_de_cote_tuile(i) {

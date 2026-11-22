@@ -1,20 +1,41 @@
 rules_version = '2';
 // Seuls Claire et Julien peuvent lire et écrire. Les agents (GitHub Actions) passent par
 // le SDK Admin avec un compte de service : ils ne sont pas soumis à ces règles.
-// ⚠️ Garder cette liste identique à VITE_ALLOWED_EMAILS dans .env
+// ⚠️ Garder cette liste identique à VITE_ALLOWED_EMAILS dans .env, et le lien compte → partenaire
+// identique à PARTNER (src/app.js, functions/index.js).
+//
+// Tenue secrète (docs/nos-envies-v1.md 6.8, docs/prestataires-v1.md 6.9) : chaque partenaire a un espace
+// privé `prive/<claire|julien>/...`, lisible et modifiable par lui seul ; la conversation de chacun avec
+// le coach (`chats/<e-mail>`) aussi. Tout le reste est commun au couple.
 service cloud.firestore {
   match /databases/{database}/documents {
+    function email() {
+      return request.auth.token.email.lower();
+    }
     function isCouple() {
       return request.auth != null
         && request.auth.token.email_verified == true
-        && request.auth.token.email.lower() in [
+        && email() in [
           'julienpicquet@gmail.com',
           'duquesne.claire@yahoo.fr',
           'claiire.duquesne59@gmail.com'
         ];
     }
-    match /{document=**} {
-      allow read, write: if isCouple();
+    // partenaire du compte connecté (clé technique : claire = partenaire 1, julien = partenaire 2)
+    function partenaire() {
+      return email() == 'julienpicquet@gmail.com' ? 'julien' : 'claire';
+    }
+    // espace commun : toutes les collections sauf l'espace privé et les conversations
+    match /{col}/{document=**} {
+      allow read, write: if isCouple() && col != 'prive' && col != 'chats';
+    }
+    // espace privé : seulement son propriétaire
+    match /prive/{qui}/{document=**} {
+      allow read, write: if isCouple() && partenaire() == qui;
+    }
+    // conversation avec le coach : seulement son auteur
+    match /chats/{adresse} {
+      allow read, write: if isCouple() && email() == adresse.lower();
     }
   }
 }

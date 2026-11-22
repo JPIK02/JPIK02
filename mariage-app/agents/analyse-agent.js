@@ -7,6 +7,7 @@ import { vendorsToAnalyse } from "./lib/scheduler.js";
 import { notify } from "./lib/push.js";
 import { enviesForAI } from "./lib/envies/context.js";
 import { coupleNames } from "./lib/couple.js";
+import { QUI, chemin, fusion } from "./lib/secret.js";
 import { FR } from "./lib/envies/fr.js";
 import { METIER2TILE } from "./lib/envies/logic.js";
 import { openQuestions, VALEUR_PROPS, buildReperee, inSource } from "./lib/envies/reperees.js";
@@ -93,8 +94,10 @@ const enviesState = async () => {
   return { A: Object.fromEntries(envies.map(d => [d.id, d])), pays: settings.pays };
 };
 
-async function loadContext() {
-  const [settings, brief, envies, inbox] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("envies"), listAll("inbox")]);
+// pour : partenaire dont on analyse un prestataire de tenue secrète (ses réponses secrètes s'ajoutent, jamais celles de l'autre)
+async function loadContext(pour) {
+  const [settings, brief, commun, inbox, prive] = await Promise.all([getMeta("settings"), listAll("brief"), listAll("envies"), listAll("inbox"), pour ? listAll(chemin(pour, "envies")) : []]);
+  const envies = pour ? fusion("envies", commun, prive, pour) : commun;
   return JSON.stringify({
     settings,
     envies: enviesForAI(envies, brief, coupleNames(settings)),
@@ -121,9 +124,9 @@ export async function runProfil({ log = console.log } = {}) {
 
 /** Recalcule la note de fit de quelques prestataires (fin de l'essentiel d'une tuile de « Nos envies »).
  *  @returns [{id, nom, avant, apres, fit}] */
-export async function fitVendors(vendors, { log = console.log } = {}) {
+export async function fitVendors(vendors, { log = console.log, pour } = {}) {
   if (!vendors.length) return [];
-  const context = await loadContext();
+  const context = await loadContext(pour), col = pour ? chemin(pour, "vendors") : "vendors";
   const system = [{ type: "text", text: `${SYSTEM}\n\n<donnees>${context}</donnees>`, cache_control: { type: "ephemeral" } }];
   const { A, pays } = await enviesState();
   const out = [];
@@ -131,13 +134,13 @@ export async function fitVendors(vendors, { log = console.log } = {}) {
     const { envies = [], ...fit } = await runForOutput({ system, ...fitRequest(v, A, pays), webSearch: true, feature: "analyse" });
     await saveVisitEnvies(v, envies, { A, pays, log });
     if (fit.avis?.sources) fit.avis.sources = fit.avis.sources.filter(s => /^https?:\/\//.test(s.url || ""));
-    await getDb().doc(`vendors/${v.id}`).update({ fit: { ...fit, updatedAt: Date.now() } });
+    await getDb().doc(`${col}/${v.id}`).update({ fit: { ...fit, updatedAt: Date.now() } });
     out.push({ id: v.id, nom: v.name, avant: v.fit?.score != null ? Math.round(v.fit.score) : null, apres: Math.round(fit.score), fit });
   };
   const list = vendors.slice();
   if (list.length > 1) await one(list.shift()); // la première écrit le cache, les suivantes le relisent
   await mapPool(list, 4, one);
-  log(`[fit] ${out.map(x => `${x.nom} : ${x.avant ?? "—"} → ${x.apres}`).join(" · ")}`);
+  log(pour ? `[fit] ${out.length} prestataire(s) de tenue secrète` : `[fit] ${out.map(x => `${x.nom} : ${x.avant ?? "—"} → ${x.apres}`).join(" · ")}`); // jamais de nom secret dans les journaux
   return out;
 }
 
@@ -146,7 +149,11 @@ export async function runAnalyseAgent({ log = console.log, force = false } = {})
   const vendors = await listAll("vendors");
   const todo = vendorsToAnalyse(vendors, { requestedAt: analyse.requestedAt, changedAt: analyse.profilRequestedAt, fullAt: analyse.fullRequestedAt });
   const asked = analyse.requestedAt && analyse.requestedAt > (analyse.lastRunAt || analyse.lastRun || 0);
-  if (!todo.length && !asked && !force) {
+  // prestataires de tenue secrète : dans l'espace privé de chacun, analysés avec ses seules réponses
+  const opts = { requestedAt: analyse.requestedAt, changedAt: analyse.profilRequestedAt, fullAt: analyse.fullRequestedAt };
+  const prives = Object.fromEntries(await Promise.all(QUI.map(async q => [q, vendorsToAnalyse(await listAll(chemin(q, "vendors")), opts)])));
+  const nPrives = QUI.reduce((n, q) => n + prives[q].length, 0);
+  if (!todo.length && !nPrives && !asked && !force) {
     log("Rien à analyser.");
     await mergeMeta("analyse", { lastRunAt: Date.now() });
     return { analyses: 0 };
@@ -175,6 +182,8 @@ export async function runAnalyseAgent({ log = console.log, force = false } = {})
     // une première fiche seule écrit le cache, les suivantes le relisent
     if (todo.length > 1) await analyseOne(todo.shift());
     await Promise.all([profilStale ? writeProfil(context) : null, mapPool(todo, 4, analyseOne)]);
+    for (const q of QUI) if (prives[q].length) await fitVendors(prives[q], { log, pour: q });
+    if (nPrives) scores.push(`${nPrives} tenue${nPrives > 1 ? "s" : ""} (secrète${nPrives > 1 ? "s" : ""})`); // jamais le nom
     await mergeMeta("analyse", { status: "terminée", lastRun: Date.now(), lastRunAt: Date.now() });
     log(`${scores.length} prestataire(s) analysé(s). ${scores.join(" · ") || "Tout était déjà à jour."}`);
     if (scores.length) await notify({ title: "Analyse des prestataires terminée", body: scores.join(" · "), url: "/#prestataires", tag: "analyse" }, { log });

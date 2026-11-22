@@ -161,8 +161,9 @@ export function empreinte(ids, vendors, enviesAt) {
 export function enviesDuMetier(m, envies) {
   const k = tuileDe(m); if (!k) return [];
   const A = Object.fromEntries(envies.map(d => [d.id, d]));
-  return QUESTIONS.filter(q => q.tuile === k && !q.parPartenaire && hasValue(A[q.id]))
-    .map(q => ({ question: FR.questions[q.id].libelle, niveau: q.niveau, reponse: answerText(q, A[q.id], FR) }));
+  // questions par partenaire (tenue) : la réponse de celui à qui appartiennent ces prestataires (fusion de secret.js : p.<lui>)
+  return QUESTIONS.filter(q => q.tuile === k && (q.parPartenaire ? A[q.id] && A[q.id].p && Object.values(A[q.id].p).some(hasValue) : hasValue(A[q.id])))
+    .map(q => ({ question: FR.questions[q.id].libelle, niveau: q.niveau, reponse: q.parPartenaire ? Object.values(A[q.id].p).filter(hasValue).map(a => answerText(q, a, FR)).join(" ; ") : answerText(q, A[q.id], FR) }));
 }
 
 

@@ -121,6 +121,9 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
   const job = req.data?.job;
+  // tenue secrète : un partenaire ne peut demander un travail que sur son propre espace privé, jamais sur celui de l'autre
+  const moi = PARTNER[email];
+  const sonEspace = v => { if (v == null || v === "") return undefined; if (v !== moi) throw new HttpsError("permission-denied", "Espace privé de l'autre partenaire."); return v; };
   // Récompense de fin de niveau de « Nos envies » (phrase, notes du métier, brief, questions à poser)
   if (job === "recompense") {
     const { runRecompense, NIVEAUX_RECOMPENSE } = await import("./agents/recompense-agent.js");
@@ -128,7 +131,7 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
     const tuile = String(req.data?.tuile || ""), niveau = String(req.data?.niveau || "");
     if (!TBY[tuile] || !NIVEAUX_RECOMPENSE.includes(niveau)) throw new HttpsError("invalid-argument", "Récompense inconnue.");
     const { withLock } = await import("./agents/lib/lock.js");
-    await withLock(`recompense-${tuile}-${niveau}`, 10 * 60 * 1000, () => runRecompense({ tuile, niveau }));
+    await withLock(`recompense-${tuile}-${niveau}${req.data?.pour ? "-" + moi : ""}`, 10 * 60 * 1000, () => runRecompense({ tuile, niveau, pour: sonEspace(req.data?.pour) }));
     return { ok: true };
   }
   // Prestataires (docs/prestataires-v1.md) : fiche préremplie à partir d'un lien, d'une photo ou d'un PDF (rien n'est enregistré ici :
@@ -140,13 +143,13 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
   }
   if (job === "reserve") {
     const { runReserve } = await import("./agents/reserve-agent.js");
-    try { return { ok: true, reservation: await runReserve({ id: String(req.data?.id || "") }) }; }
+    try { return { ok: true, reservation: await runReserve({ id: String(req.data?.id || ""), prive: sonEspace(req.data?.prive) }) }; }
     catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
   }
   if (job === "comparer") {
     const { runComparer } = await import("./agents/comparer-agent.js");
     const ids = Array.isArray(req.data?.ids) ? req.data.ids.map(String).slice(0, 3) : [];
-    try { return { ok: true, comparaison: await runComparer({ metier: String(req.data?.metier || ""), ids }) }; }
+    try { return { ok: true, comparaison: await runComparer({ metier: String(req.data?.metier || ""), ids, prive: sonEspace(req.data?.prive) }) }; }
     catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
   }
   if (!["mail", "analyse", "hebdo", "briefs", "pinterest"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");

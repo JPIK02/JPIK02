@@ -43,6 +43,7 @@ const UI = {
   ecarteOk: n => `${n} écarté`, reserveOk: n => `${n} réservé`, remisOk: n => `${n} remis en lice`, dejaReserve: (m, n) => `${n} est déjà réservé pour ce métier : remettez-le en lice d'abord.`,
   doublon: n => `Doublon possible : ${n}`, histo: { repere: "Repéré", devis: v => `Devis${v ? ` v${v}` : ""} reçu`, rdv: "Rendez-vous", visite: "Notes de visite", brief: "Brief envoyé", mail: "Mail", ecarte: "Écarté" },
   src: { mail: "par l'agent mail", assistant: "avec le coach", coach: "avec le coach", couple: "par vous" },
+  secrete: "Secrète", tenueAutre: p => `Tenue de ${p} · secrète`, tenueAutreS: (n, r) => (r ? "Réservée" : `${n} prestataire${n > 1 ? "s" : ""} en lice`),
   ecartesTitre: "Écartés · gardés pour mémoire", rienEcarte: "Aucun prestataire écarté.", outils: "Outils", briefsTous: "Briefs à envoyer",
   // onglet vide (4.7)
   videT: "Trouvons ceux qui vous ressemblent", videP: "Pas de catalogue : Lamaelle part de vos envies et note chaque prestataire que vous ajoutez ou que le coach trouve pour vous.",
@@ -83,6 +84,10 @@ export function makePrest(ctx) {
   const echeance = m => { const t = T(m), d = dateM(); if (!t || !d || t.remonte >= 99) return null; const x = new Date(d); x.setMonth(x.getMonth() - t.remonte); return x; };
   const briefPret = m => { const k = tuile(m); return !!(k && ctx.briefFor(k)); };
   const vendorsOf = m => S.vendors.filter(v => v.cat === m);
+  // tenue secrète de l'autre (meta/secret) : comptée dans la frise et l'état du métier, sans nom ni contenu
+  const secretAutre = () => { const k = ctx.autreKey(), s2 = (S.secret || {})[k] || {}; return !s2.montre && (s2.prestataires || s2.reserve) ? s2 : null; };
+  const VS = () => { const s2 = secretAutre(); return s2 ? [...S.vendors, { id: "_secret", cat: "Tenues", name: "", status: s2.reserve ? "reserve" : "repere", _secretDe: ctx.autreKey() }] : S.vendors; };
+  const badgeSecret = v => (v._prive ? `<span class="pr-secret">${UI.secrete}</span>` : "");
   const metiersPresents = () => METIERS.filter(m => m !== AUTRE || vendorsOf(AUTRE).length);
 
   /* ---------- texte d'une prochaine étape (onglet, métier, fiche) ---------- */
@@ -102,7 +107,7 @@ export function makePrest(ctx) {
 
   /* ---------- 4.1 L'onglet ---------- */
   function head() {
-    const c = compteur(S.vendors, A());
+    const c = compteur(VS(), A());
     const dots = c.frise.map(x => `<i class="pr-dot ${x.etat}" title="${esc(x.m)}"></i>`).join("");
     return `<section class="pr-head">
       <div class="pr-top"><span class="pr-k">${UI.label.toUpperCase()}</span><span class="pr-btns">
@@ -149,7 +154,7 @@ export function makePrest(ctx) {
       ${best != null ? `<span class="pr-sc"><b class="num">${best}</b><small>${UI.fitL}</small></span>` : ""}</button>`;
   }
   function ligneALancer(m) {
-    const t = T(m), st = etatMetier(m, S.vendors, A()), gris = st === "pasPourNous";
+    const t = T(m), st = etatMetier(m, VS(), A()), gris = st === "pasPourNous";
     const ess = t && ctx.env().essentielFait(t.k), venu = t && dateM() && retard(t, dateM(), today()) >= 0;
     const sub = gris ? `${UI.pasPourNous}` : [UI.vers(t ? t.remonte : 99), ess ? UI.essFait : ""].filter(Boolean).join(" · ");
     return `<div class="pr-row big ${gris ? "gris" : ""}">${vign(m)}<button class="pr-rb pr-link" data-act="prmetier" data-m="${esc(m)}"><b>${esc(nomMetier(m))}</b><span>${esc(sub)}</span></button>
@@ -166,12 +171,12 @@ export function makePrest(ctx) {
   }
   function vMain() {
     if (!S.vendors.length) return vVide();
-    const ms = metiersPresents(), et = m => etatMetier(m, S.vendors, A());
+    const ms = metiersPresents(), et = m => etatMetier(m, VS(), A());
     const enCours = ms.filter(m => et(m) === "enCours");
     const aLancer = ms.filter(m => m !== AUTRE && ["aLancer", "pasPourNous"].includes(et(m))).sort((a, b) => (et(a) === "pasPourNous") - (et(b) === "pasPourNous") || ((T(b) || {}).remonte || 0) - ((T(a) || {}).remonte || 0));
     const res = S.vendors.filter(v => etapeOf(v) === "reserve");
     const nEc = S.vendors.filter(v => etapeOf(v) === "ecarte").length;
-    const d = aDecider(S.vendors, A(), ctxRegles());
+    const d = aDecider(VS(), A(), ctxRegles());
     return `<div class="pr">${head()}${rechercheRes()}${carteDecider(d)}${encartMails() ? `<section class="pr-sec">${encartMails()}</section>` : ""}
       ${enCours.length ? `<section class="pr-sec"><h3 class="home-h">${UI.enCours(enCours.length)}</h3><div class="pr-list">${enCours.map(ligneEnCours).join("")}</div></section>` : ""}
       ${aLancer.length ? `<section class="pr-sec"><h3 class="home-h">${UI.aLancer(aLancer.filter(m => et(m) !== "pasPourNous").length)}</h3><div class="pr-list">${aLancer.map(ligneALancer).join("")}</div></section>` : ""}
@@ -195,7 +200,7 @@ export function makePrest(ctx) {
   function carteCandidat(v, i) {
     const f = v.fit || {}, av = f.avis || {}, sc = score(v), m = mentionTxt(v), e = etapeOf(v), prix = dernierPrix(v);
     const meta = [v.ville, av.note ? `${String(av.note).replace(".", ",")}${av.nombre ? ` sur ${av.nombre} avis` : ""}` : ""].filter(Boolean).join(" · ");
-    return `<button class="pr-cand ${i === 0 ? "first" : ""}" data-fiche="${v.id}"><span class="pr-ct">${ini(v)}<span class="pr-rb"><b>${esc(v.name)}</b>${meta ? `<span>${esc(meta)}</span>` : ""}</span>${sc != null ? `<span class="pr-big num">${sc}<small>/100</small></span>` : `<span class="fit-pill none">à analyser</span>`}</span>
+    return `<button class="pr-cand ${i === 0 ? "first" : ""}" data-fiche="${v.id}"><span class="pr-ct">${ini(v)}<span class="pr-rb"><b>${esc(v.name)}</b>${badgeSecret(v)}${meta ? `<span>${esc(meta)}</span>` : ""}</span>${sc != null ? `<span class="pr-big num">${sc}<small>/100</small></span>` : `<span class="fit-pill none">à analyser</span>`}</span>
       ${(f.forces || []).length || (f.vigilance || []).length ? `<span class="pr-pv">${f.forces && f.forces[0] ? `<span><b class="ok-t">${UI.pourVous}</b> · ${esc(f.forces[0])}</span>` : ""}${f.vigilance && f.vigilance[0] ? `<span><b class="warn-t">${UI.aVerifier}</b> · ${esc(f.vigilance[0])}</span>` : ""}</span>` : ""}
       <span class="pr-cf"><span class="pr-chip ${e}">${esc(m || UI.etapes[e])}</span><span class="num">${prix ? ctx.eur(prix) : UI.prixInconnu}</span></span></button>`;
   }
@@ -212,7 +217,8 @@ export function makePrest(ctx) {
       ${res.length ? `<section class="pr-sec"><div class="pr-box">${res.map(v => `<button class="pr-res" data-fiche="${v.id}"><span class="pr-ck" aria-hidden="true">✓</span><span class="pr-rn"><b>${esc(v.name)}</b></span>${etatSuivi(v)}</button>`).join("")}</div></section>` : ""}
       <section class="pr-sec"><div class="pr-sec-h"><h3 class="home-h">${UI.enLiceH(cs.length)}</h3>${cs.length > 1 ? `<span class="ev-note">${UI.classes}</span>` : ""}</div>
         ${cs.length ? `<div class="pr-cands">${cs.map(carteCandidat).join("")}</div>` : `<p class="ev-note">${esc(UI.aucunCand(pl(m)))}</p>`}
-        ${cs.length >= 2 ? `<button class="btn primary pr-cmp" data-act="compare" data-cat="${esc(m)}">${UI.comparerN(cs.length)}</button>` : ""}</section>
+        ${cs.length >= 2 ? `<button class="btn primary pr-cmp" data-act="compare" data-cat="${esc(m)}">${UI.comparerN(cs.length)}</button>` : ""}
+        ${m === "Tenues" && secretAutre() ? `<div class="pr-row"><span class="pr-lock" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></span><span class="pr-rb"><b>${esc(UI.tenueAutre(ctx.prenomAutre()))}</b><span>${esc(UI.tenueAutreS(secretAutre().prestataires || 0, secretAutre().reserve))}</span></span></div>` : ""}</section>
       ${S.canWrite ? `<section class="pr-coach"><span class="pr-ck2"><span class="pr-mi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg></span><b>${UI.convaincus.toUpperCase()}</b></span>
         <p>${esc(coachP)}</p><span class="pr-small">${UI.avecAccord}</span><button class="btn" data-act="qr" data-do="${esc(askChercher(m))}">${UI.lancer}</button></section>` : ""}
       ${t && m !== AUTRE ? `<section class="pr-card pr-brief"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/></svg>
@@ -295,7 +301,7 @@ export function makePrest(ctx) {
     const action = S.canWrite && (e === "repere" || e === "discussion") ? `<div class="pr-bar"><button class="btn" data-act="precart" data-id="${v.id}">${UI.ecarter}</button><button class="btn primary" data-act="prreserve" data-id="${v.id}">${UI.reserver}</button></div>` : "";
     return `<div class="pr-fiche ${action ? "has-bar" : ""}">
       <section class="pr-fh"><div class="pr-top"><button class="pr-round" data-act="prback" aria-label="Retour">${ctx.BACK_SVG}</button>${S.canWrite ? `<button class="pr-round" data-act="editv" data-id="${v.id}" aria-label="Modifier la fiche"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>` : ""}</div>
-        <div class="pr-fh-m"><span class="pr-fh-t"><span class="pr-k">${esc(nomMetier(v.cat).toUpperCase())}${e === "ecarte" ? ` · ${UI.etapes.ecarte.toUpperCase()}` : ""}</span><h2>${esc(v.name)}</h2>${sub ? `<span class="pr-fh-s">${esc(sub)}</span>` : ""}</span>${anneau(sc)}</div>${bar}</section>
+        <div class="pr-fh-m"><span class="pr-fh-t"><span class="pr-k">${esc(nomMetier(v.cat).toUpperCase())}${e === "ecarte" ? ` · ${UI.etapes.ecarte.toUpperCase()}` : ""}${v._prive ? ` · ${UI.secrete.toUpperCase()}` : ""}</span><h2>${esc(v.name)}</h2>${sub ? `<span class="pr-fh-s">${esc(sub)}</span>` : ""}</span>${anneau(sc)}</div>${bar}</section>
       ${dup.length ? `<p class="banner warn">${esc(UI.doublon(dup.map(x => x.name).join(", ")))}</p>` : ""}
       ${boxProchaine(v)}${paiements(v)}${prevenirFiche(v)}${pourquoi(v)}${devisCarte(v)}${histo(v)}${contactSec(v)}
       <details class="pr-sec pr-plus"><summary>${UI.plusH}</summary>${ctx.ficheDetails(v)}</details>
@@ -304,7 +310,7 @@ export function makePrest(ctx) {
 
   /* ---------- 4.7 L'onglet vide ---------- */
   function vVide() {
-    const d = aDecider(S.vendors, A(), ctxRegles()) || { m: "Lieu" };
+    const d = aDecider(VS(), A(), ctxRegles()) || { m: "Lieu" };
     const t = T(d.m), A0 = A(), logo = ctx.logo();
     const pills = t ? questionsOf(t.k, "essentiel", pays()).map(q => A0[q.id] && answerText(q, A0[q.id], FR).split(" · ")[0]).filter(Boolean).slice(0, 3) : [];
     const cal = calendrier(S.vendors, A0, { date: dateM(), today: today() });
@@ -433,7 +439,7 @@ export function makePrest(ctx) {
     c.data = comparaisonGardee(); c.err = null;
     if (!c.data && c.ids.length >= 2) {
       c.busy = true; renderComparer();
-      try { const r = await ctx.runAgentNow("comparer", { metier: c.m, ids: c.ids }); if (!r || !r.ok) throw new Error((r && r.erreur) || "réponse vide"); if (S.ui.prCmp === c) c.data = r.comparaison; }
+      try { const r = await ctx.runAgentNow("comparer", { metier: c.m, ids: c.ids, ...(S.vendors.some(v => c.ids.includes(v.id) && v._prive) ? { prive: ctx.moi() } : {}) }); if (!r || !r.ok) throw new Error((r && r.erreur) || "réponse vide"); if (S.ui.prCmp === c) c.data = r.comparaison; }
       catch (e) { c.err = e.message || String(e); }
       c.busy = false;
     }
@@ -505,12 +511,12 @@ export function makePrest(ctx) {
     const eff = { id: v.id, avant, taches: [], line: null, montant };
     // budget : le poste du métier passe le montant en « engagé » (créé s'il n'existe pas)
     if (montant) {
-      const line = ctx.budgetLineFor(v.cat);
+      const lib = `Tenue de ${ctx.prenom()}`, line = v._prive ? (S.budget || []).find(b => b.label === lib) : ctx.budgetLineFor(v.cat);
       if (line) { eff.line = { id: line.id, avant: { engage: line.engage ?? null } }; await ctx.patch("budget", line.id, { engage: montant }); }
-      else { const id = await ctx.addDoc("budget", { label: nomMetier(v.cat), prevu: null, engage: montant, paye: null, note: "", order: 99 }); if (id) eff.line = { id, cree: true }; }
+      else { const id = await ctx.addDoc("budget", { label: v._prive ? `Tenue de ${ctx.prenom()}` : nomMetier(v.cat), prevu: null, engage: montant, paye: null, note: "", order: 99 }); if (id) eff.line = { id, cree: true }; }
     }
     // planning : contrat, acompte, point un mois avant
-    for (const t of tachesReservation({ ...v, name: v.name }, { date: dateM(), today: today(), acompte, dateAcompte, eur: ctx.eur })) {
+    for (const t of tachesReservation({ ...v, name: v._prive ? `tenue de ${ctx.prenom()}` : v.name }, { date: dateM(), today: today(), acompte, dateAcompte, eur: ctx.eur })) {
       const id = await ctx.addDoc("tasks", { title: t.title, due: t.due, phase: ctx.phaseFor(t.due), owner: "deux", status: "todo", note: "", order: 999, vendorId: v.id, kind: t.kind });
       if (id) eff.taches.push({ id, title: t.title });
     }
@@ -518,7 +524,7 @@ export function makePrest(ctx) {
     ctx.toastUndo(UI.reserveOk(v.name), () => annulerReservation(eff));
     renderReserve();
     // phrase de l'écran et messages aux autres candidats (un appel IA) ; l'écran se met à jour à la réponse
-    ctx.runAgentNow("reserve", { id: v.id }).then(r => { if (r && r.ok && S.ui.prRes === eff) { eff.reservation = r.reservation; renderReserve(); } }).catch(() => {});
+    ctx.runAgentNow("reserve", { id: v.id, ...(v._prive ? { prive: ctx.moi() } : {}) }).then(r => { if (r && r.ok && S.ui.prRes === eff) { eff.reservation = r.reservation; renderReserve(); } }).catch(() => {});
   }
   async function annulerReservation(eff) {
     await ctx.patch("vendors", eff.id, eff.avant);
@@ -536,12 +542,12 @@ export function makePrest(ctx) {
   function renderReserve() {
     const eff = S.ui.prRes; if (!eff) return;
     const v = S.vendors.find(x => x.id === eff.id); if (!v) return;
-    const res = eff.reservation || v.reservation || {}, c = compteur(S.vendors, A());
+    const res = eff.reservation || v.reservation || {}, c = compteur(VS(), A());
     const autres = candidats(v.cat, S.vendors).filter(x => x.id !== v.id);
     const totalEng = (S.budget || []).reduce((s, b) => s + (+b.engage || 0), 0), bt = +S.settings.budgetTotal || 0;
     const pct = bt ? Math.round(totalEng / bt * 100) : null, C = 2 * Math.PI * 22, x = pct == null ? 0 : Math.min(100, pct) / 100 * C;
     const dots = c.frise.map(f => `<i class="pr-dot ${f.etat}"></i>`).join("");
-    const d = aDecider(S.vendors, A(), ctxRegles());
+    const d = aDecider(VS(), A(), ctxRegles());
     document.body.classList.add("qs-open");
     document.getElementById("layer").innerHTML = `<div class="cv rs" role="dialog" aria-modal="true" aria-label="${esc(UR.reserve(v.cat))}">
       <section class="rs-head"><div class="pr-top"><span class="rs-ck" aria-hidden="true">✓</span><button class="pr-round" data-act="prres-close" aria-label="${UR.fermer}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>

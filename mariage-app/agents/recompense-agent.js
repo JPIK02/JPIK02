@@ -10,6 +10,7 @@ import { enviesForAI } from "./lib/envies/context.js";
 import { FR } from "./lib/envies/fr.js";
 import { TBY } from "./lib/envies/logic.js";
 import { coupleNames } from "./lib/couple.js";
+import { QUI, chemin, fusion } from "./lib/secret.js";
 import { fitVendors } from "./analyse-agent.js";
 import { runBriefs } from "./briefs-agent.js";
 import { ligneNote, recompensesDues } from "./lib/envies/recompense.js";
@@ -21,13 +22,16 @@ const PHRASE_OUT = { name: "enregistrer_phrase", description: "Ce que l'app a co
 const QUESTIONS_OUT = { name: "enregistrer_questions", description: "Questions à poser à chaque prestataire.", input_schema: { type: "object",
   properties: { prestataires: { type: "array", items: { type: "object", properties: { id: { type: "string" }, questions: { type: "array", items: { type: "string" }, minItems: 3, maxItems: 6 } }, required: ["id", "questions"] } } }, required: ["prestataires"] } };
 
-export async function runRecompense({ tuile, niveau, log = console.log }) {
+// pour : tuile Tenues d'un partenaire (tenue secrète) : ses seules réponses, ses prestataires, résultat dans son espace privé
+export async function runRecompense({ tuile, niveau, pour, log = console.log }) {
   const t = TBY[tuile];
   if (!t || !NIVEAUX_RECOMPENSE.includes(niveau)) throw new Error(`récompense inconnue : ${tuile}.${niveau}`);
-  const db = getDb(), ref = db.doc(`recompenses/${tuile}.${niveau}`);
+  if (pour && !QUI.includes(pour)) throw new Error("partenaire inconnu");
+  const db = getDb(), ref = db.doc(`${pour ? chemin(pour, "recompenses") : "recompenses"}/${tuile}.${niveau}`);
   await ref.set({ tuile, niveau, status: "en cours", startedAt: Date.now(), erreur: null }, { merge: true });
   try {
-    const [settings, envies, brief, vendors] = await Promise.all([getMeta("settings"), listAll("envies"), listAll("brief"), listAll("vendors")]);
+    const [settings, commun, brief, vendors] = await Promise.all([getMeta("settings"), listAll("envies"), listAll("brief"), listAll(pour ? chemin(pour, "vendors") : "vendors")]);
+    const envies = pour ? fusion("envies", commun, await listAll(chemin(pour, "envies")), pour) : commun;
     const ctx = enviesForAI(envies, brief, coupleNames(settings));
     const de = ctx.tuiles.find(x => x.tuile === tuile) || { reponses: [] }, filRouge = ctx.tuiles.find(x => x.tuile === "mariage");
     const vend = vendors.filter(v => t.metiers.includes(v.cat) && v.status !== "ecarte");
@@ -42,10 +46,10 @@ export async function runRecompense({ tuile, niveau, log = console.log }) {
       out.phraseOk = false;
     }
     if (niveau === "essentiel" || niveau === "maj") {
-      const res = await fitVendors(vend, { log });
+      const res = await fitVendors(vend, { log, pour });
       out.notes = res.map(x => ({ id: x.id, nom: x.nom, avant: x.avant, apres: x.apres, ligne: ligneNote(x.avant, x.apres, x.fit) }));
     }
-    if (niveau === "details") {
+    if (niveau === "details" && !pour) { // brief tenue : jamais dans les briefs communs
       await runBriefs({ tuiles: [tuile], log });
       out.brief = true;
     }
@@ -60,7 +64,7 @@ export async function runRecompense({ tuile, niveau, log = console.log }) {
       for (const p of r.prestataires || []) {
         if (!ids.has(p.id)) continue;
         const qs = (p.questions || []).map(q => String(q).trim()).filter(Boolean).slice(0, 6);
-        await db.doc(`vendors/${p.id}`).update({ questionsAPoser: { tuile, questions: qs, at: Date.now() } });
+        await db.doc(`${pour ? chemin(pour, "vendors") : "vendors"}/${p.id}`).update({ questionsAPoser: { tuile, questions: qs, at: Date.now() } });
         out.questions.push({ id: p.id, nom: vend.find(v => v.id === p.id).name, n: qs.length });
       }
     }

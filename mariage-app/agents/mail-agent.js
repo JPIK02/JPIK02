@@ -2,6 +2,7 @@
 // Ne touche jamais aux prestataires, tâches, invités ou budget : le couple valide dans l'app.
 import { readFileSync } from "node:fs";
 import { getMeta, listAll, batchWrite, mergeMeta } from "./lib/firestore.js";
+import { proprietaireTenue, chemin, METIER_SECRET } from "./lib/secret.js";
 import { gmailClient, recentThreads, threadUrl, attachmentData } from "./lib/gmail.js";
 import { readableFiles } from "./lib/mailtext.js";
 import { runForOutput } from "./lib/claude.js";
@@ -113,8 +114,13 @@ export async function runMailAgent({ log = console.log } = {}) {
       if (used.has(id)) id = `${p.messageId}-${String(p.suffix || p.type).replace(/[^\w-]/g, "").slice(0, 20) || p.type}`;
       while (used.has(id)) id += "x";
       used.add(id);
+      // tenue secrète : un prestataire ou un devis de tenue va dans l'espace privé de son propriétaire
+      // (règle du couple : robe → Claire, costume → Julien) ; dans l'espace commun, un simple repère sans sujet ni expéditeur
+      const owner = ["vendor", "quote"].includes(p.type) && payload.cat === METIER_SECRET
+        ? proprietaireTenue([p.subject, p.summary, payload.name, payload.vendorName, payload.note].filter(Boolean).join(" ")) : null;
+      if (owner) writes.push({ collection: "inbox", id, data: { type: "ignored", status: "ignored", secret: true, messageId: p.messageId, createdAt: Date.now() } });
       writes.push({
-        collection: "inbox", id,
+        collection: owner ? chemin(owner, "inbox") : "inbox", id,
         data: {
           type: p.type, status: "new",
           from: String(p.from || "").slice(0, 200),
@@ -127,7 +133,7 @@ export async function runMailAgent({ log = console.log } = {}) {
           createdAt: Date.now(),
         },
       });
-      stats[p.type] = (stats[p.type] || 0) + 1;
+      if (owner) stats.secret = (stats.secret || 0) + 1; else stats[p.type] = (stats[p.type] || 0) + 1;
     }
     // Les messages sans proposition sont marqués comme vus pour ne pas les relire à chaque passage.
     for (const m of fresh) {
@@ -142,7 +148,7 @@ export async function runMailAgent({ log = console.log } = {}) {
   }
 
   if (writes.length) await batchWrite(writes);
-  const nb = Object.values(stats).reduce((a, b) => a + b, 0);
+  const nb = Object.entries(stats).filter(([k]) => k !== "secret").reduce((a, [, b]) => a + b, 0); // une proposition de tenue secrète n'est pas annoncée à tous
   if (nb) await notify({ title: `${nb} nouvelle${nb > 1 ? "s" : ""} proposition${nb > 1 ? "s" : ""} à valider`,
     body: "L'assistant e-mails a repéré des devis, rendez-vous ou tâches dans vos mails.", url: "/#assistant", tag: "mail" }, { log });
   await mergeMeta("agent", { lastRun: parisClock().isoDate, lastRunAt: Date.now(), status: "actif" });

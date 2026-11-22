@@ -1588,3 +1588,12 @@ div.pr-row{cursor:default}
 .pr-pay .why{grid-column:1/-1;font-size:13px;color:var(--muted)}
 .pr-pay .link{margin-top:6px;color:var(--link);font-weight:600;background:none;border:0;padding:0;min-height:44px;cursor:pointer}
 .pr-res .chev,.pr-row .chev,.pr-mails .chev{flex:none;width:18px;height:18px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+/* Tenue secrète (lot 4) */
+.ev-secret{background:var(--accent-soft);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.ev-secret p{margin:0;font-size:14.5px;line-height:1.4}
+.ev-secret .btn{align-self:flex-start}
+.ev-sec-l{display:flex;flex-direction:column;gap:2px;padding-top:10px;border-top:1px solid var(--line)}
+.ev-sec-l span{font-size:13.5px;color:var(--muted)}
+.pr-secret{font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--coral-ink)}
+.pr-fh .pr-secret{color:var(--hero-gold)}
+.pr-lock{flex:none;width:24px;height:24px;display:grid;place-items:center}.pr-lock svg{width:20px;height:20px;fill:none;stroke:var(--coral-ui);stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}

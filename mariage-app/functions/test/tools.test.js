@@ -5,11 +5,11 @@ import { makeTools, TOOL_DEFS } from "../tools.js";
 // Faux Firestore en mémoire (doc/collection/get/set), même forme que le SDK Admin.
 function fakeDb(init = {}) {
   const data = structuredClone(init); let n = 0;
-  const doc = path => ({ id: path.split("/")[1], async get() { return { exists: path in data, data: () => structuredClone(data[path]) }; },
+  const doc = path => ({ id: path.split("/").pop(), async get() { return { exists: path in data, data: () => structuredClone(data[path]) }; },
     async set(d) { data[path] = structuredClone(d); } });
   return { data, doc, collection: c => ({
     doc: () => doc(`${c}/new${++n}`),
-    async get() { return { docs: Object.keys(data).filter(k => k.split("/")[0] === c).map(k => ({ id: k.split("/")[1], data: () => structuredClone(data[k]) })) }; } }) };
+    async get() { return { docs: Object.keys(data).filter(k => k.startsWith(c + "/") && !k.slice(c.length + 1).includes("/")).map(k => ({ id: k.slice(c.length + 1), data: () => structuredClone(data[k]) })) }; } }) };
 }
 const QCATS = [{ k: "lieu", label: "Lieu", qs: [["style", "m", "Quel style de lieu ?", ["Château", "Grange"]], ["capacite", "t", "Combien de personnes ?"]] }];
 const now = new Date("2026-11-09T12:00:00");
@@ -79,7 +79,7 @@ test("envies (nouveau questionnaire) : choix filtrés, formats, par partenaire, 
   await exec("enregistrer_envie", { question: "lieu.exclusif", jpa: { _: "absolument" } });
   assert.equal(db.data["envies/lieu.imposes"].v, 5); assert.deepEqual(db.data["envies/lieu.exclusif"].v, { _: "a" });
   await exec("enregistrer_envie", { question: "tenues.style", choix: ["boheme"] });
-  assert.deepEqual(db.data["envies/tenues.style"].p.julien.v, ["boheme"], "la tenue est notée pour la personne qui parle");
+  assert.deepEqual(db.data["prive/julien/envies/tenues.style"].v, ["boheme"], "la tenue est notée pour la personne qui parle, dans son espace privé");
   assert.match((await exec("enregistrer_envie", { question: "lieu.inconnue" })).content, /question inconnue/);
   const l = JSON.parse((await exec("lire_envies", { tuile: "lieu" })).content);
   assert.match(l.questions[0].reponse, /Château, Bord de mer · Un château avec parc/);
@@ -130,5 +130,28 @@ test("envie repérée au passage : proposée (à confirmer), jamais sur une ques
   await exec("enregistrer_envie", { question: "lieu.type", choix: ["chateau"] });
   assert.match((await exec("proposer_envie", { question: "lieu.type", choix: ["ferme-ou-grange"], phrase: "une ferme ?" })).content, /déjà une réponse/);
   await exec("proposer_envie", { question: "tenues.style", choix: ["boheme"], phrase: "ma robe bohème" });
-  assert.equal(db.data["envies_reperees/tenues.style.claire"].pour, "claire", "tenue : pour la personne qui parle");
+  assert.equal(db.data["prive/claire/envies_reperees/tenues.style.claire"].pour, "claire", "tenue : pour la personne qui parle, dans son espace privé");
+});
+
+test("tenue secrète : ce que Claire dit au coach va dans son espace, le coach de Julien n'en voit rien", async () => {
+  const db = base();
+  const claire = makeTools(db, { qcats: QCATS, now, partner: "claire", author: "Claire" });
+  await claire("enregistrer_envie", { question: "tenues.style", choix: ["boheme"], texte: "une robe fluide" });
+  assert.deepEqual(db.data["prive/claire/envies/tenues.style"].v, ["boheme"]);
+  assert.equal(db.data["envies/tenues.style"], undefined, "rien dans l'espace commun");
+  const r = await claire("ajouter_prestataire", { nom: "Maison Blanche", categorie: "Tenues" });
+  const pid = Object.keys(db.data).find(k => k.startsWith("prive/claire/vendors/"));
+  assert.ok(pid, "le prestataire de tenue est privé"); assert.ok(r.action.ops[0].path.startsWith("prive/claire/vendors/"), "annulable au bon endroit");
+  await claire("modifier_prestataire", { id: pid.split("/").pop(), prix: 1800 });
+  assert.equal(db.data[pid].prix, 1800);
+  await claire("enregistrer_envie", { question: "tenues.temoins", choix: [], texte: "en bleu" });
+  assert.ok(db.data["envies/tenues.temoins"], "les questions communes de la tuile restent communes");
+  const lc = JSON.parse((await claire("lire_envies", { tuile: "tenues" })).content);
+  assert.match(lc.questions.find(q => q.id === "tenues.style").reponse || "", /Bohème/);
+  const julien = makeTools(db, { qcats: QCATS, now, partner: "julien", author: "Julien" });
+  const lj = JSON.parse((await julien("lire_envies", { tuile: "tenues" })).content);
+  assert.equal(lj.questions.find(q => q.id === "tenues.style").reponse, undefined, "Julien ne voit pas la réponse de Claire");
+  const vj = (await julien("lister_prestataires", {})).content;
+  assert.ok(!vj.includes("Maison Blanche"), "ni son prestataire");
+  assert.match((await julien("detail_prestataire", { id: pid.split("/").pop() })).content, /introuvable/);
 });

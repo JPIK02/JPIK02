@@ -30,7 +30,11 @@ const UI = {
   sur: (n, t) => `${n} sur ${t}`, sertA: "Sert à : ", autre: "Dire ou écrire autre chose", ecrire: "Écrire ou dicter ici…", photo: "Ajouter une photo",
   passer: "Passer", suivant: "Suivant", terminer: "Terminer", fermer: "Fermer et revenir à la tuile", ajouterOption: "+ Ajouter", nouvelleOption: "Votre option",
   glisser: "Faites glisser pour choisir", chiffre: "Un chiffre ou une fourchette", classer: "Touchez dans l'ordre de vos priorités", effacer: "Recommencer",
-  pourTa: p => `Votre réponse, ${p}`, finTitre: (t, n) => `${t} · ${n}, c'est fait`, finJauge: "Lamaelle vous connaît mieux", continuer: n => `Continuer avec ${n.charAt(0).toLowerCase() + n.slice(1)}`, plusTard: "Plus tard",
+  pourTa: p => `Votre réponse, ${p}`, secreteQ: a => ` · secrète : ${a} ne la voit pas`,
+  // tenue secrète (lot 4) : l'autre ne voit que l'avancement
+  votreSecrete: a => `Votre tenue est secrète : ${a} ne voit ni vos réponses, ni vos photos, ni vos prestataires de tenue.`, montrer: a => `Montrer ma tenue à ${a}`,
+  montree: a => `Votre tenue est visible par ${a}.`, tenueDe: p => `Tenue de ${p} · secrète`, tenueDeVue: p => `Tenue de ${p}`,
+  avancement: (n, ess, pr) => [n ? `${n} réponse${n > 1 ? "s" : ""}` : "Pas encore commencée", ess ? "essentiel fait" : "", pr ? `${pr} prestataire${pr > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · "), finTitre: (t, n) => `${t} · ${n}, c'est fait`, finJauge: "Lamaelle vous connaît mieux", continuer: n => `Continuer avec ${n.charAt(0).toLowerCase() + n.slice(1)}`, plusTard: "Plus tard",
   retour: "Nos envies",
   compris: "Voilà ce que nous avons compris :", cestCa: "C'est ça", corriger: "Corriger", enregistrer: "Enregistrer", merci: "Noté, merci",
   relit: "Lamaelle relit vos réponses…", relitNotes: m => `et recalcule la note de vos ${m}`, erreur: "La récompense n'a pas pu être préparée. Réessayez plus tard : vos réponses sont bien enregistrées.", reessayer: "Réessayer",
@@ -182,8 +186,17 @@ export function makeEnvies(ctx) {
         <div class="field"><label class="lab" for="search-ev-${k}-reussite">${UI.reussite}</label><textarea autocomplete="off" name="search_text" id="search-ev-${k}-reussite" data-evmeta="${k}|reussite" ${dis}>${esc(meta.reussite || "")}</textarea></div>
         <div class="field"><label class="lab" for="search-ev-${k}-redhib">${UI.redhib}</label><textarea autocomplete="off" name="search_text" id="search-ev-${k}-redhib" data-evmeta="${k}|redhibitoire" ${dis}>${esc(meta.redhibitoire || "")}</textarea></div>
       </details>
+      ${k === "tenues" ? blocSecret() : ""}
       ${!G.gris && S.canWrite && k !== "mariage" ? `<button class="link ev-pas" data-act="envpas" data-k="${k}">${UI.pasPourNousQ}</button>` : ""}
     </div>`;
+  }
+
+  // Tuile Tenues : ma tenue est secrète (ou montrée), celle de l'autre n'apparaît que par son avancement
+  function blocSecret() {
+    const a = ctx.prenomAutre(), sa = (S.secret || {})[ctx.autreKey()] || {};
+    const autreH = sa.montre ? "" : `<div class="ev-sec-l"><b>${esc(UI.tenueDe(a))}</b><span>${esc(UI.avancement(sa.repondues || 0, sa.niveaux && sa.niveaux.essentiel, sa.prestataires || 0))}</span></div>`;
+    return `<section class="ev-sec ev-secret"><p>${ctx.secretLeve() ? esc(UI.montree(a)) : esc(UI.votreSecrete(a))}</p>
+      ${!ctx.secretLeve() && S.canWrite ? `<button class="btn sm" data-act="envmontrer">${esc(UI.montrer(a))}</button>` : ""}${autreH}</section>`;
   }
 
   /* ---------- Synthèse et inspirations (déplacées, jamais supprimées) ---------- */
@@ -288,7 +301,7 @@ export function makeEnvies(ctx) {
       <div class="qs-seg" aria-hidden="true">${qList().map((x, i) => `<i class="${i < S.qs.i || isSeen(x, A(), me()) ? "on" : ""} ${i === S.qs.i ? "cur" : ""}"></i>`).join("")}</div>
       <div class="qs-body">
         <h2 class="qs-l">${esc(T.libelle)}</h2><p class="qs-s">${UI.sertA}${esc(T.sertA.charAt(0).toLowerCase() + T.sertA.slice(1))}</p>
-        ${q.parPartenaire ? `<p class="qs-pp">${esc(UI.pourTa(ctx.prenom() || ""))}</p>` : ""}
+        ${q.parPartenaire ? `<p class="qs-pp">${esc(UI.pourTa(ctx.prenom() || ""))}${q.secret && !ctx.secretLeve() ? esc(UI.secreteQ(ctx.prenomAutre())) : ""}</p>` : ""}
         ${(() => { const r = repOf(q.id); return r && S.qs.corr !== q.id && S.qs.repDone !== q.id ? `<div class="ev-rep qs-rep"><span class="qs-k">${UI.dejaNote}</span><span class="ev-rep-a">${esc(answerText(q, r, FR))}</span>${repLine(r)}${repBtns(r)}</div>` : ""; })()}
         ${zone(q)}
         ${open ? `<div class="qs-autre"><label class="sr" for="search-qs-libre">${UI.autre}</label><textarea id="search-qs-libre" name="search_text" autocomplete="off" data-qlibre="1" placeholder="${UI.ecrire}" ${S.canWrite ? "" : "disabled"}>${esc(d.libre || "")}</textarea>
@@ -364,6 +377,7 @@ export function makeEnvies(ctx) {
       case "qcuflag": { const x = t.dataset.c; d.cu = d.cu === x ? null : x; renderQ(); persist(); return true; }
       case "qmic": { const ta = document.getElementById("search-qs-libre"); if (ta) ctx.dictate(t, ta); return true; }
       case "envactif": ctx.saveEnvie("_tuile." + t.dataset.k, { actif: true, pasPourNous: false }, ["actif", "pasPourNous", "by", "updatedAt"]); return true;
+      case "envmontrer": ctx.leverSecret(); return true;
       case "envpas": ctx.saveEnvie("_tuile." + t.dataset.k, { actif: false, pasPourNous: true }, ["actif", "pasPourNous", "by", "updatedAt"]); return true;
       case "envmeta": ctx.saveEnvie("_tuile." + t.dataset.k, { [t.dataset.f]: +t.dataset.v }, [t.dataset.f, "by", "updatedAt"]); return true;
       case "qretry": ctx.runReward(S.qs.k, S.qs.niveau); renderQ(); return true;

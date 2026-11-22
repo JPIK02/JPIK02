@@ -4,6 +4,7 @@
 import { getDb, getMeta, listAll } from "./lib/firestore.js";
 import { runForOutput } from "./lib/claude.js";
 import { tuileDe, cleComparaison, empreinte, enviesDuMetier } from "./lib/prestataires.js";
+import { QUI, chemin, fusion } from "./lib/secret.js";
 
 const OUT = {
   name: "enregistrer_comparaison", description: "Lignes de comparaison et avis du coach.",
@@ -29,14 +30,17 @@ const strip = v => ({ id: v.id, nom: v.name, ville: v.ville, prix: v.prix, note:
   fit: v.fit ? { score: v.fit.score, verdict: v.fit.verdict, criteres: v.fit.criteres, forces: v.fit.forces, vigilance: v.fit.vigilance, avis: v.fit.avis && { note: v.fit.avis.note, nombre: v.fit.avis.nombre, resume: v.fit.avis.resume } } : null });
 
 /** Rend la comparaison (en cache si rien n'a changé). @returns {{ids, lignes, disponibilite, avis, at, empreinte}} */
-export async function runComparer({ metier, ids, log = console.log }) {
+// prive : partenaire dont on compare les prestataires de tenue secrète (son espace seulement)
+export async function runComparer({ metier, ids, prive, log = console.log }) {
   const db = getDb();
-  const [vendors, envies, settings] = await Promise.all([listAll("vendors"), listAll("envies"), getMeta("settings")]);
+  if (prive && !QUI.includes(prive)) throw new Error("partenaire inconnu");
+  const [vendors, commun, settings, envP] = await Promise.all([listAll(prive ? chemin(prive, "vendors") : "vendors"), listAll("envies"), getMeta("settings"), prive ? listAll(chemin(prive, "envies")) : []]);
+  const envies = prive ? fusion("envies", commun, envP, prive) : commun;
   const vs = ids.map(id => vendors.find(v => v.id === id && v.cat === metier)).filter(Boolean).slice(0, 3);
   if (vs.length < 2) throw new Error("il faut 2 ou 3 prestataires du même métier");
   const k = tuileDe(metier), tEnv = envies.filter(d => k && (d.id.startsWith(k + ".") || d.id === "_tuile." + k));
   const emp = empreinte(vs.map(v => v.id), vendors, tEnv.reduce((m, d) => Math.max(m, +d.updatedAt || 0), 0));
-  const ref = db.doc(`comparaisons/${cleComparaison(metier)}`), cur = (await ref.get()).data();
+  const ref = db.doc(`${prive ? chemin(prive, "comparaisons") : "comparaisons"}/${cleComparaison(metier)}`), cur = (await ref.get()).data();
   if (cur && cur.empreinte === emp && cur.lignes) { log(`[comparer] ${metier} : comparaison gardée`); return cur; }
   const env = enviesDuMetier(metier, envies), meta = (envies.find(d => d.id === "_tuile." + k) || {});
   const out = await runForOutput({
