@@ -52,3 +52,20 @@ test("fichier .ics d'un rendez-vous", () => {
   const journee = ics({ id: "r2", date: "2027-03-31", title: "Essayage" });
   assert.match(journee, /DTSTART;VALUE=DATE:20270331/); assert.match(journee, /DTEND;VALUE=DATE:20270401/);
 });
+import { creneauxLibres, actionCoach } from "../lib/planning.js";
+test("créneaux libres : un par jour, jamais un jour déjà pris", () => {
+  const today = new Date("2026-11-22T10:00:00"); // dimanche
+  const c = creneauxLibres([{ date: "2026-11-24" }], { today });
+  assert.deepEqual(c, [{ date: "2026-11-26", time: "18:30" }, { date: "2026-11-28", time: "10:00" }, { date: "2026-12-01", time: "18:30" }]);
+});
+test("action du coach sur une tâche : la première qui s'applique", () => {
+  const vendors = [{ id: "v", cat: "Photographe" }];
+  assert.equal(actionCoach({ title: "Répondre au photographe", source: "mail" }, { mail: { id: "m" } }).k, "reponse");
+  assert.equal(actionCoach({ title: "Visiter le domaine des Roses" }).k, "creneaux");
+  assert.deepEqual(actionCoach({ title: "Payer l'acompte", kind: "acompte" }, { depasse: true }), { k: "budget", arbitrer: true });
+  assert.deepEqual(actionCoach({ title: "Signer le contrat", vendorId: "v", kind: "contrat" }, { vendors }), { k: "metier", metier: "Photographe" });
+  assert.equal(actionCoach({ id: "t05", title: "Visiter et réserver le lieu" }).k, "creneaux");
+  assert.equal(actionCoach({ title: "Acheter des bougies" }), null);
+  assert.equal(actionCoach({ title: "Visite", status: "done" }), null);
+  assert.equal(actionCoach({ title: "x" }, { aVenir: { id: "r" } }).k, "preparer");
+});

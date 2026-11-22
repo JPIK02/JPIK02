@@ -26,7 +26,23 @@ export function attendus(guests = [], invitesCible = 0) {
 }
 
 const montantRes = v => num(v.prix) || dernierPrix(v) || 0;
-const payeRes = v => (v.soldePaye ? montantRes(v) : v.acomptePaye ? num(v.acompte) : 0);
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/**
+ * Échéances d'un prestataire réservé (3.7) : d'après le devis (acompte, dates lues par l'agent mail ou saisies) ;
+ * conditions inconnues : acompte de 30 % à la signature et solde 7 jours avant le mariage, marqués « à confirmer ».
+ * date : date du mariage (Date) ou null. @returns [{kind: acompte|solde, montant, date: "AAAA-MM-JJ"|null, aConfirmer, paye}]
+ */
+export function echeancesDe(v = {}, { date = null } = {}) {
+  const prix = montantRes(v); if (!prix) return [];
+  const acConnu = num(v.acompte) > 0, ac = acConnu ? num(v.acompte) : Math.round(prix * 0.3);
+  const signe = v.reserveLe ? new Date(typeof v.reserveLe === "number" ? v.reserveLe : String(v.reserveLe)) : null;
+  const j7 = date ? new Date(date.getFullYear(), date.getMonth(), date.getDate() - 7) : null;
+  return [
+    { kind: "acompte", montant: Math.min(ac, prix), date: v.dateAcompte || (!acConnu && signe && !isNaN(signe) ? iso(signe) : null), aConfirmer: !acConnu, paye: !!v.acomptePaye || !!v.soldePaye },
+    { kind: "solde", montant: Math.max(0, prix - Math.min(ac, prix)), date: v.dateSolde || (j7 ? iso(j7) : null), aConfirmer: !v.dateSolde, paye: !!v.soldePaye },
+  ].filter(e => e.montant > 0);
+}
+const payeRes = v => echeancesDe(v).filter(e => e.paye).reduce((s, e) => s + e.montant, 0);
 const depensesDe = b => (Array.isArray(b.depenses) ? b.depenses : []).filter(d => num(d.montant) > 0);
 
 /** À quel poste revient chaque prestataire réservé : celui qui le nomme (`vendorIds`), sinon pour ma tenue secrète la ligne
@@ -92,3 +108,26 @@ export function devisFace(metier, vendors = [], enveloppe = 0) {
 
 /** Enveloppe et budget de la tuile Nos envies : la phrase s'affiche si l'écart dépasse 10 %. */
 export const ecartEnvies = (enveloppe, budgetEnvies) => (budgetEnvies > 0 && enveloppe > 0 && Math.abs(enveloppe - budgetEnvies) / budgetEnvies > 0.1 ? enveloppe - budgetEnvies : 0);
+
+/**
+ * Pistes d'arbitrage (3.3) rendues par le coach, nettoyées : seulement des postes existants, jamais une enveloppe sous ce qui est
+ * déjà signé ni au-dessus de l'actuelle ; le gain est recalculé (jamais celui annoncé par l'IA). 2 à 4 pistes au plus, gain > 0.
+ * postes : [{b: {id, label}, prevu, signe}] (bilan().postes).
+ */
+export function nettoyerPistes(pistes = [], postes = []) {
+  const P = Object.fromEntries(postes.map(p => [p.b.id, p]));
+  return (Array.isArray(pistes) ? pistes : []).map(x => {
+    const vus = new Set(), changements = [];
+    for (const c of Array.isArray(x.changements) ? x.changements : []) {
+      const p = P[c.posteId], n = Math.round(num(c.enveloppe));
+      if (!p || vus.has(c.posteId) || !(n >= 0)) continue;
+      const cible = Math.max(n, Math.ceil(p.signe));
+      if (cible >= p.prevu) continue;
+      vus.add(c.posteId); changements.push({ posteId: c.posteId, label: p.b.label, avant: p.prevu, apres: cible });
+    }
+    const gain = changements.reduce((s, c) => s + c.avant - c.apres, 0);
+    return { titre: String(x.titre || "").trim().slice(0, 80), pourquoi: String(x.pourquoi || "").trim().slice(0, 240), perte: String(x.perte || "").trim().slice(0, 200), changements, gain };
+  }).filter(x => x.titre && x.gain > 0).slice(0, 4);
+}
+/** Empreinte du budget : les pistes en cache ne valent que tant que limite et enveloppes n'ont pas changé. */
+export const empreinteBudget = (lignes = [], limite = 0) => [num(limite), ...lignes.map(b => `${b.id}:${num(b.prevu)}:${num(b.engage)}`).sort()].join("|");

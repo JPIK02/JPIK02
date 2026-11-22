@@ -59,3 +59,24 @@ test("devis face à l'enveloppe et écart avec Nos envies", () => {
   assert.deepEqual(d.map(x => [x.v.id, x.prix, x.ecart, x.fit]), [["a", 2800, 300, 81], ["b", 0, null, null]]);
   assert.equal(ecartEnvies(3000, 2500), 500); assert.equal(ecartEnvies(2600, 2500), 0);
 });
+import { echeancesDe } from "../lib/budget.js";
+test("échéances : d'après le devis, sinon 30 % à la signature et solde J-7 « à confirmer »", () => {
+  const date = new Date("2028-05-20T12:00:00");
+  assert.deepEqual(echeancesDe({ prix: 8500, acompte: 2500, dateAcompte: "2026-12-01", dateSolde: "2028-04-20", acomptePaye: true }, { date }),
+    [{ kind: "acompte", montant: 2500, date: "2026-12-01", aConfirmer: false, paye: true }, { kind: "solde", montant: 6000, date: "2028-04-20", aConfirmer: false, paye: false }]);
+  const e = echeancesDe({ prix: 2000, reserveLe: new Date("2026-11-22T10:00:00").getTime() }, { date });
+  assert.deepEqual(e, [{ kind: "acompte", montant: 600, date: "2026-11-22", aConfirmer: true, paye: false }, { kind: "solde", montant: 1400, date: "2028-05-13", aConfirmer: true, paye: false }]);
+  assert.deepEqual(echeancesDe({}), []);
+});
+import { nettoyerPistes } from "../lib/budget.js";
+test("pistes d'arbitrage : postes réels, jamais sous le signé, gain recalculé", () => {
+  const postes = [{ b: { id: "a", label: "Traiteur" }, prevu: 7000, signe: 0 }, { b: { id: "b", label: "Lieu" }, prevu: 4000, signe: 3500 }];
+  const p = nettoyerPistes([
+    { titre: "Menu plus simple", pourquoi: "x", perte: "y", gain: 99999, changements: [{ posteId: "a", enveloppe: 5600 }] },
+    { titre: "Lieu moins cher", changements: [{ posteId: "b", enveloppe: 3000 }] },        // ramené au signé : 500 €
+    { titre: "Inventée", changements: [{ posteId: "zzz", enveloppe: 1 }] },                // poste inconnu : retirée
+    { titre: "Hausse", changements: [{ posteId: "a", enveloppe: 8000 }] },                 // pas une économie : retirée
+  ], postes);
+  assert.deepEqual(p.map(x => [x.titre, x.gain]), [["Menu plus simple", 1400], ["Lieu moins cher", 500]]);
+  assert.equal(p[1].changements[0].apres, 3500);
+});

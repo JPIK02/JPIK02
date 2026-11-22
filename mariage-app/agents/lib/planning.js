@@ -121,3 +121,38 @@ export function ics(r, { titre, lieu = "", note = "" } = {}) {
   return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Lamaelle//FR", "BEGIN:VEVENT", `UID:${uid}`, deb, fin, `SUMMARY:${esc(titre || r.title)}`,
     ...(lieu ? [`LOCATION:${esc(lieu)}`] : []), ...(note ? [`DESCRIPTION:${esc(note)}`] : []), "END:VEVENT", "END:VCALENDAR"].join("\r\n");
 }
+
+/**
+ * 3 créneaux libres pour une visite (4.7) : à partir d'après-demain et dans les 3 semaines, un par jour (mardi et jeudi 18 h 30,
+ * samedi 10 h puis 14 h 30), jamais un jour qui a déjà un rendez-vous.
+ */
+export function creneauxLibres(rdv = [], { today = new Date(), n = 3, jours = 21 } = {}) {
+  const pris = new Set(rdv.map(r => String(r.date || "")).filter(Boolean)), out = [];
+  const p2 = x => String(x).padStart(2, "0");
+  for (let i = 2; i <= jours && out.length < n; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + i), k = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`;
+    if (pris.has(k)) continue;
+    // un créneau par jour : samedi 10 h (14 h 30 un samedi sur deux), mardi et jeudi 18 h 30
+    const h = d.getDay() === 6 ? (out.some(x => new Date(x.date + "T12:00:00").getDay() === 6) ? "14:30" : "10:00") : d.getDay() === 2 || d.getDay() === 4 ? "18:30" : null;
+    if (h) out.push({ date: k, time: h });
+  }
+  return out;
+}
+
+const RE_VISITE = /visite|visiter|rendez-vous|\brdv\b|degustation|essai|essayage|rencontr|caler/;
+/**
+ * Action du coach sur une tâche (4.7), la première qui s'applique, ou null (pas de bouton).
+ * mail : proposition d'origine (inbox) ; depasse : budget au-dessus de la limite ; aVenir : rendez-vous relié à venir.
+ */
+export function actionCoach(t = {}, { vendors = [], mail = null, depasse = false, aVenir = null } = {}) {
+  if (t.status === "done") return null;
+  const titre = fold(t.title), v = t.vendorId ? vendors.find(x => x.id === t.vendorId) : null;
+  if (aVenir) return { k: "preparer", rdv: aVenir };
+  if (t.source === "mail" && mail) return { k: "reponse" };
+  if (RE_VISITE.test(titre)) return { k: "creneaux", vendor: v || null };
+  if (themeDe(t, vendors) === "argent" || t.kind === "acompte" || t.kind === "solde") return { k: "budget", arbitrer: !!depasse };
+  if (v) return { k: "metier", metier: v.cat };
+  const lien = (THEMES[themeDe(t, vendors)] || {}).lien;
+  if (lien && lien.metier) return { k: "metier", metier: lien.metier };
+  return null;
+}

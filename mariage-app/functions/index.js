@@ -148,6 +148,15 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
     try { await withLock(`brieftenue-${moi}`, 10 * 60 * 1000, () => runBriefTenue({ pour: sonEspace(moi) })); return { ok: true }; }
     catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
   }
+  // Le coach dans les pages Budget et Planning (docs/budget-planning-v1.md, lot 3) : sur action seulement
+  if (job === "arbitrer" || job === "reponse" || job === "creneaux") {
+    const A = await import("./agents/pages-agent.js");
+    try {
+      if (job === "arbitrer") return { ok: true, arbitrage: await A.runArbitrer({ autres: !!req.data?.autres }) };
+      const tacheId = String(req.data?.id || "");
+      return { ok: true, brouillon: await (job === "reponse" ? A.runReponse({ tacheId }) : A.runCreneaux({ tacheId })) };
+    } catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
   if (job === "reserve") {
     const { runReserve } = await import("./agents/reserve-agent.js");
     try { return { ok: true, reservation: await runReserve({ id: String(req.data?.id || ""), prive: sonEspace(req.data?.prive) }) }; }

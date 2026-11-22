@@ -12,6 +12,7 @@ import {makeBudget,METIER_OPTIONS} from "./budget-ui.js";
 import {makePlanning} from "./planning-ui.js";
 import {ETAPES} from "../agents/lib/planning.js";
 import {tuileDe} from "../agents/lib/prestataires.js";
+import {echeancesDe} from "../agents/lib/budget.js";
 import {etapeOf} from "../agents/lib/prestataires.js";
 import {PRIVES,fusion,estPrive,chemin,resumeSecret,questionSecrete,TUILE_SECRETE} from "../agents/lib/secret.js";
 import {levelDone as levelDoneEnvies} from "../agents/lib/envies/logic.js";
@@ -77,7 +78,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -545,7 +546,7 @@ function renderBnav(){
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
   document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"); // Budget, Planning : même modèle de page (en-tête propre)
-  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&pl().enTache()))}
+  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer"))))}
 }
 function renderTabs(){
   renderBnav();
@@ -566,14 +567,12 @@ function milestones(){
     ["Dossier mairie déposé",tDone("t29")],["Plan de table finalisé",tDone("t36")]
   ];
 }
+// Échéances à payer des prestataires réservés (agents/lib/budget.js, echeancesDe) : d'après le devis, sinon acompte de 30 % à la
+// signature et solde 7 jours avant le mariage, marqués « à confirmer » (docs/budget-planning-v1.md, 3.7)
 function payments(){
   const out=[];
-  S.vendors.forEach(v=>{
-    if(v.status==="ecarte")return;
-    const ac=num(v.acompte),px=num(v.prix);
-    if(ac&&!v.acomptePaye&&v.status==="reserve")out.push({v,kind:"Acompte",amount:ac,date:pd(v.dateAcompte)});
-    if(px&&!v.soldePaye&&v.status==="reserve")out.push({v,kind:"Solde",amount:Math.max(0,px-(v.acomptePaye?ac:0)-(v.acomptePaye?0:ac)),date:pd(v.dateSolde)});
-  });
+  S.vendors.filter(v=>v.status==="reserve").forEach(v=>echeancesDe(v,{date:wDate()}).filter(e=>!e.paye).forEach(e=>
+    out.push({v,kind:e.kind==="acompte"?"Acompte":"Solde",amount:e.montant,date:pd(e.date),aConfirmer:e.aConfirmer})));
   return out.sort((a,b)=>(a.date?+a.date:9e15)-(b.date?+b.date:9e15));
 }
 /* Blocs de l'ancien tableau de bord, déplacés : Jalons et Qui fait quoi dans Planning, Paiements à venir dans Budget */
@@ -621,7 +620,7 @@ function dupBanner(){
 }
 let PL=null;
 const pl=()=>PL||(PL=makePlanning({S,esc,eur,BACK_SVG,CHEV,PH,OWNERS,P1,P2,pd,today,wDate,taskDue,isLate,tintOf,initials,saveF,render,go,patch,toastUndo,budgetLineFor,tuileDe,
-  moi:MOI,nomTuile:k=>(FR_ENVIES.tuiles[k]||{}).nom||"",dupH:dupBanner,milestonesPanel,whoPanel}));
+  moi:MOI,nomTuile:k=>(FR_ENVIES.tuiles[k]||{}).nom||"",dupH:dupBanner,milestonesPanel,whoPanel,runAgentNow,toast,budgetDepasse:()=>budgetChiffres().depasse>0}));
 
 /* ---------- Agenda ---------- */
 function vAgenda(){
@@ -640,8 +639,9 @@ function vAgenda(){
 // docs/budget-planning-v1.md (lot 1) : la page et un poste ouvert dans src/budget-ui.js, règles dans agents/lib/budget.js
 function vBudget(){return bu().vBudget()}
 let BU=null;
-const bu=()=>BU||(BU=makeBudget({S,esc,eur,tintOf,initials,BACK_SVG,CHEV,today,payments,emptyBlock,saveF,render,go,patch,toastUndo,prenom,
-  vendorsVisibles:()=>S.vendors,metaTuile:k=>env().metaOf(k)}));
+const bu=()=>BU||(BU=makeBudget({S,esc,eur,tintOf,initials,BACK_SVG,CHEV,today,payments,emptyBlock,saveF,render,go,patch,toastUndo,prenom,runAgentNow,
+  vendorsVisibles:()=>S.vendors,metaTuile:k=>env().metaOf(k),
+  setLimite:v=>setDoc("meta/settings",S.settings,{budgetTotal:v==null||v===""?null:num(v),updatedAt:Date.now()})}));
 // Chiffres du budget (prévu, signé, payé, par invité) : les mêmes partout (page, accueil, alertes, rapport PDF)
 const budgetChiffres=()=>bu().chiffres();
 
@@ -2069,6 +2069,7 @@ function boot(){
     PRIVES.forEach(c=>unsubs.push(db.collection(chemin(me,c)).onSnapshot(s=>{SRC.p[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));fusionner(c);
       if(c==="envies"||c==="vendors")publierSecret();later()},()=>{})));
     meta("secret","secret");
+    meta("arbitrage","arbitrage"); // pistes du coach pour revenir sous la limite (docs/budget-planning-v1.md, 3.3)
     // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
     unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });

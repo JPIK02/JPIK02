@@ -2,7 +2,7 @@
 // Tâches et rendez-vous dans une seule page (plus d'onglet Agenda). Règles dans agents/lib/planning.js (testées) ;
 // tableau des étapes et thèmes validé : docs/planning-migration.md. Aucun appel IA à l'affichage.
 // Lot 3 : actions du coach sur une tâche ; lot 4 : vue calendrier et planning vide.
-import { ETAPES, ETAPE, THEMES, ORDRE_THEMES, themeDe, pourQui, etapeCourante, avancement, prochainement, joursDeRetard, ics } from "../agents/lib/planning.js";
+import { ETAPES, ETAPE, THEMES, ORDRE_THEMES, themeDe, pourQui, etapeCourante, avancement, prochainement, joursDeRetard, ics, actionCoach } from "../agents/lib/planning.js";
 import { candidats } from "../agents/lib/prestataires.js";
 
 // Textes d'interface (à traduire)
@@ -27,6 +27,12 @@ const UI = {
   faitOk: t => `« ${t} » faite`, reporteOk: d => `Reportée au ${d}`, toutModifier: "Tout modifier", ouvrirMail: "Ouvrir le mail d'origine", mail: "E-mail d'origine",
   posteBudget: p => `Budget · ${p}`, tuile: n => `Nos envies · ${n}`, prest: (n, c) => `${n} · ${c}`,
   // rendez-vous
+  // le coach peut aider (4.7)
+  coachH: "Le coach peut aider", coachBtn: { reponse: "Rédiger la réponse", creneaux: "Proposer des créneaux", budget: "Ouvrir le budget", arbitrer: "Ouvrir le budget · arbitrer", preparer: "Préparer avec le coach", metier: m => `Voir les ${m}` },
+  coachP: { reponse: "Un brouillon court, à relire, à partir du mail reçu.", creneaux: "Trois créneaux libres (sans conflit avec vos rendez-vous) et le message qui les propose.", preparer: "Vos envies pour ce métier et les questions à poser." },
+  redige: "Le coach rédige…", brouillon: "Brouillon à relire", ouvrirMailApp: "Ouvrir dans l'app mail", copier: "Copier", copie: "Copié", refaire: "Refaire",
+  creneauxL: "Créneaux proposés", rienEnvoye: "Rien n'est envoyé par l'app : vous relisez et envoyez depuis votre messagerie.", echecCoach: e => `Le coach n'a pas pu rédiger : ${e}`,
+  preparerAsk: (t, d, v) => `Prépare notre rendez-vous « ${t} »${v ? ` avec ${v}` : ""}${d ? ` le ${d}` : ""} : rappelle nos envies pour ce métier et donne-nous les questions à poser.`,
   heure: "Heure", lieu: "Lieu", ajouterTel: "Ajouter à mon téléphone", rdvSecret: "Rendez-vous secret : seuls la date et l'heure sont partagés.",
 };
 const MOIS = ["JANV.", "FÉVR.", "MARS", "AVR.", "MAI", "JUIN", "JUIL.", "AOÛT", "SEPT.", "OCT.", "NOV.", "DÉC."];
@@ -83,7 +89,8 @@ export function makePlanning(ctx) {
   function retards() {
     const l = tasks().filter(ctx.isLate).sort((a, b) => ctx.taskDue(a) - ctx.taskDue(b));
     if (!l.length) return "";
-    return `<section class="pr-card pl-retards"><h3 class="home-h">${UI.enRetard(l.length)}</h3><div class="pl-list">${l.slice(0, 8).map(t => ligneTache(t)).join("")}</div>
+    const avecCoach = t => { const a = action(t); return ligneTache(t) + (a && S.canWrite ? `<div class="pl-cb">${boutonCoach(t, a, "sm")}</div>` : ""); };
+    return `<section class="pr-card pl-retards"><h3 class="home-h">${UI.enRetard(l.length)}</h3><div class="pl-list">${l.slice(0, 8).map(avecCoach).join("")}</div>
       ${l.length > 8 ? `<button class="link" data-act="pletape" data-k="${l[8].phase}">+ ${l.length - 8}</button>` : ""}</section>`;
   }
   function lienObjet(x, type) {
@@ -145,6 +152,47 @@ export function makePlanning(ctx) {
   }
 
   /* ---------- 4.4 Une tâche ---------- */
+  /* ---------- 4.7 Le coach sur une tâche ---------- */
+  const mailDe = t => (t.sourceId && S.inbox.find(x => x.id === t.sourceId)) || null;
+  const rdvAVenir = v => v && S.rdv.find(r => r.vendorId === v.id && dateRdv(r) && dateRdv(r) >= today());
+  const action = t => actionCoach(t, { vendors: S.vendors, mail: mailDe(t), depasse: ctx.budgetDepasse(), aVenir: rdvAVenir(vendor(t.vendorId)) });
+  const plM = m => ({ Lieu: "lieux", Traiteur: "traiteurs", Photographe: "photographes", "Vidéaste": "vidéastes", Musique: "musiciens", Fleuriste: "fleuristes", Tenues: "boutiques" }[m] || String(m).toLowerCase());
+  function askPreparer(r) { const d = dateRdv(r), v = vendor(r.vendorId); return "ask:" + UI.preparerAsk(r.title, d ? dLong(d) : "", v ? v.name : r.avec || ""); }
+  function boutonCoach(t, a, taille = "") {
+    const cls = `btn ${taille} ${taille ? "" : "primary"}`;
+    switch (a.k) {
+      case "reponse": case "creneaux": return `<button class="${cls}" data-act="plcoach" data-id="${t.id}" data-k="${a.k}" ${S.ui.plCoach === t.id ? "disabled" : ""}>${S.ui.plCoach === t.id ? UI.redige : UI.coachBtn[a.k]}</button>`;
+      case "budget": return `<button class="${cls}" data-act="plbudgetgo" data-arb="${a.arbitrer ? 1 : ""}">${a.arbitrer ? UI.coachBtn.arbitrer : UI.coachBtn.budget}</button>`;
+      case "metier": return `<button class="${cls}" data-act="plmetier" data-m="${esc(a.metier)}">${esc(UI.coachBtn.metier(plM(a.metier)))}</button>`;
+      case "preparer": return `<button class="${cls}" data-act="qr" data-do="${esc(askPreparer(a.rdv))}">${UI.coachBtn.preparer}</button>`;
+    }
+    return "";
+  }
+  function brouillonCarte(t) {
+    const b = t.brouillon; if (!b || !b.corps) return "";
+    const v = vendor(t.vendorId), to = v && /\S+@\S+\.\S+/.test(v.email || "") ? v.email.trim() : "";
+    const href = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(b.objet || "")}&body=${encodeURIComponent(b.corps)}`;
+    const cr = Array.isArray(b.creneaux) && b.creneaux.length ? `<p class="pl-cr"><b>${UI.creneauxL} :</b> ${b.creneaux.map(c => esc(`${dFmt(ctx.pd(c.date))} ${c.time.replace(":", " h ")}`)).join(" · ")}</p>` : "";
+    return `<div class="pl-brouillon"><span class="ev-tag">${UI.brouillon}</span>${cr}<b>${esc(b.objet || "")}</b><p class="pl-p">${esc(b.corps)}</p>
+      <div class="pl-acts"><a class="btn primary" href="${href}">${UI.ouvrirMailApp}</a><button class="btn" data-act="plcopie" data-id="${t.id}">${UI.copier}</button>
+      ${S.canWrite ? `<button class="link" data-act="plcoach" data-id="${t.id}" data-k="${b.k}">${UI.refaire}</button>` : ""}</div><p class="ev-note">${UI.rienEnvoye}</p></div>`;
+  }
+  const coachEntete = `<span class="pr-ck2"><span class="pr-mi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg></span><b>${UI.coachH.toUpperCase()}</b></span>`;
+  function coachTache(t) {
+    const a = action(t); if (!a || !S.canWrite) return t.brouillon ? `<section class="pr-card pl-coach">${brouillonCarte(t)}</section>` : "";
+    const aBrouillon = t.brouillon && t.brouillon.k === a.k;
+    return `<section class="pr-card pl-coach">${coachEntete}
+      ${UI.coachP[a.k] && !aBrouillon ? `<p>${UI.coachP[a.k]}</p>` : ""}${S.ui.plCoachErr ? `<p class="brief-err">${esc(UI.echecCoach(S.ui.plCoachErr))}</p>` : ""}
+      ${aBrouillon ? brouillonCarte(t) : boutonCoach(t, a)}</section>`;
+  }
+  async function lancerCoach(id, k) {
+    if (S.ui.plCoach) return;
+    S.ui.plCoach = id; S.ui.plCoachErr = ""; ctx.render();
+    try { const r = await ctx.runAgentNow(k, { id }); if (r && r.ok === false) S.ui.plCoachErr = r.erreur || "erreur"; }
+    catch (e) { S.ui.plCoachErr = e.message || "erreur"; }
+    S.ui.plCoach = null; ctx.render();
+  }
+
   function relies(t) {
     const out = [], v = vendor(t.vendorId), th = themeDe(t, S.vendors);
     if (v) out.push(`<button class="pr-row" data-fiche="${v.id}"><span class="pr-av t-${ctx.tintOf(v.cat)}" aria-hidden="true">${esc(ctx.initials(v.name))}</span><span class="pr-rb"><b>${esc(v.name)}</b><span>${esc(v.cat)}</span></span>${ctx.CHEV}</button>`);
@@ -160,17 +208,19 @@ export function makePlanning(ctx) {
   function vTache(id) {
     const t = S.tasks.find(x => x.id === id); if (!t) { S.f.plView = "main"; return vMain(); }
     const due = ctx.taskDue(t), late = ctx.isLate(t), dis = S.canWrite ? "" : "disabled", th = themeDe(t, S.vendors);
+    const coachEnHaut = S.ui.plCoach === t.id || !!(t.brouillon && t.brouillon.corps); // le brouillon arrive sous les yeux
     const etat = t.status === "done" ? UI.etat.done : late ? UI.etat.retard(joursDeRetard(due, today())) : t.status === "doing" ? UI.etat.doing : UI.etat.todo;
     return `<div class="ev-page pl-tache">
       <button class="link env-back" data-act="plback">${ctx.BACK_SVG}<span>${esc(S.f.plBackLabel || UI.titre)}</span></button>
       <span class="pl-etat ${t.status === "done" ? "ok" : late ? "bad" : ""}">${esc(etat)}</span><h2 class="ev-h2">${esc(t.title)}</h2>
+      ${coachEnHaut ? coachTache(t) : ""}
       <section class="pr-card pl-champs">
         <label class="pl-f"><span>${UI.echeance}</span><input type="date" data-plf="due" data-id="${t.id}" value="${esc(t.due || "")}" ${dis}>${!t.due && due ? `<small>${esc(UI.echeanceCalc(dLong(due)))}</small>` : ""}</label>
         <div class="pl-f"><span>${UI.qui}</span><div class="seg" role="group" aria-label="${UI.qui}">${["claire", "julien", "deux"].map(o => `<button data-act="plowner" data-id="${t.id}" data-v="${o}" aria-pressed="${(t.owner || "deux") === o}" ${dis}>${esc(ctx.OWNERS[o])}</button>`).join("")}</div></div>
         <div class="pl-f2"><label class="pl-f"><span>${UI.etape}</span><select data-plf="phase" data-id="${t.id}" ${dis}>${ETAPES.map((e, i) => `<option value="${e.k}" ${t.phase === e.k ? "selected" : ""}>${i + 1} · ${esc(e.nom)}</option>`).join("")}</select></label>
           <label class="pl-f"><span>${UI.theme}</span><select data-plf="theme" data-id="${t.id}" ${dis}>${ORDRE_THEMES.map(k => `<option value="${k}" ${th === k ? "selected" : ""}>${esc(THEMES[k].nom)}</option>`).join("")}</select></label></div>
       </section>
-      ${relies(t)}
+      ${coachEnHaut ? "" : coachTache(t)}${relies(t)}
       <section class="pr-sec"><h3 class="home-h">${UI.note}</h3><label class="sr" for="pl-note">${UI.note}</label><textarea id="pl-note" class="pl-note" data-plf="note" data-id="${t.id}" placeholder="${UI.notePh}" ${dis}>${esc(t.note || "")}</textarea></section>
       ${S.canWrite ? `<button class="link" data-edit="tasks" data-id="${t.id}">${UI.toutModifier}</button>` : ""}
       ${S.canWrite ? `<div class="pr-bar pl-bar"><details class="pl-rep"><summary class="btn">${UI.reporter}</summary><div class="pl-repm">
@@ -193,6 +243,7 @@ export function makePlanning(ctx) {
         ${secretAutre ? `<p class="ev-note">${UI.rdvSecret}</p>` : ""}</section>
       ${v ? `<section class="pr-sec"><h3 class="home-h">${UI.reliA}</h3><button class="pr-row" data-fiche="${v.id}"><span class="pr-av t-${ctx.tintOf(v.cat)}" aria-hidden="true">${esc(ctx.initials(v.name))}</span><span class="pr-rb"><b>${esc(v.name)}</b><span>${esc(v.cat)}</span></span>${ctx.CHEV}</button></section>` : ""}
       ${r.note ? `<section class="pr-sec"><h3 class="home-h">${UI.note}</h3><p class="pl-p">${esc(r.note)}</p></section>` : ""}
+      ${d && d >= today() && !secretAutre ? `<section class="pr-card pl-coach">${coachEntete}<p>${UI.coachP.preparer}</p><button class="btn" data-act="qr" data-do="${esc(askPreparer(r))}">${UI.coachBtn.preparer}</button></section>` : ""}
       <div class="pl-acts">${d ? `<button class="btn primary" data-act="plics" data-id="${r.id}">${UI.ajouterTel}</button>` : ""}${S.canWrite && !secretAutre ? `<button class="btn" data-edit="rdv" data-id="${r.id}">${UI.toutModifier}</button>` : ""}</div></div>`;
   }
 
@@ -226,6 +277,13 @@ export function makePlanning(ctx) {
         setTache(id, { due: iso }, UI.reporteOk(dLong(base))); return true; }
       case "plmetier": S.f.pView = "metier"; S.f.pMetier = t.dataset.m; ctx.saveF(); ctx.go("prestataires"); return true;
       case "plposte": S.f.bView = "poste"; S.f.bPoste = id; ctx.saveF(); ctx.go("budget"); return true;
+      case "plcoach": { const x = S.tasks.find(y => y.id === id); if (!x) return true;
+        if (S.view === "planning" && S.f.plView !== "tache") show("tache", { plId: id }); // depuis « En retard » : la page de la tâche, où arrive le brouillon
+        lancerCoach(id, t.dataset.k); return true; }
+      case "plcopie": { const x = S.tasks.find(y => y.id === id), b = x && x.brouillon; if (!b) return true;
+        const txt = `Objet : ${b.objet || ""}\n\n${b.corps}`;
+        (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => ctx.toast(UI.copie), () => ctx.toast(UI.copie)); return true; }
+      case "plbudgetgo": S.f.bView = t.dataset.arb ? "arbitrer" : "main"; ctx.saveF(); ctx.go("budget"); return true;
       case "plics": { const r = S.rdv.find(x => x.id === id); if (!r) return true;
         const blob = new Blob([ics(r, { lieu: r.lieu, note: r.avec ? UI.avec(r.avec) : "" })], { type: "text/calendar" }), a2 = document.createElement("a");
         a2.href = URL.createObjectURL(blob); a2.download = `${String(r.title || "rendez-vous").replace(/[^\p{L}\p{N} -]/gu, "").slice(0, 40) || "rendez-vous"}.ics`; document.body.appendChild(a2); a2.click(); a2.remove(); setTimeout(() => URL.revokeObjectURL(a2.href), 4000); return true; }
