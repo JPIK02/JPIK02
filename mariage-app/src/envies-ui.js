@@ -287,7 +287,7 @@ export function makeEnvies(ctx) {
       return `<div class="qz-cu"><b class="qz-cu-v" aria-live="polite">${v ? esc(T.crans[v - 1]) : UI.glisser}</b>
         <input type="range" min="1" max="5" step="1" value="${v || 3}" class="${v ? "" : "unset"}" data-qcu="1" aria-label="${esc(T.libelle)}" aria-valuetext="${esc(v ? T.crans[v - 1] : UI.glisser)}" ${dis}>
         <div class="qz-poles"><span>${esc(T.poles[0])}</span><span>${esc(T.poles[1])}</span></div>
-        <div class="opts">${["differents", "nsp"].map(x => `<button class="opt" data-act="qcuflag" data-c="${x}" aria-pressed="${d.cu === x}" ${dis}>${esc(FR.cu[x])}</button>`).join("")}</div></div>`;
+        <div class="opts">${(q.parPartenaire ? ["nsp"] : ["differents", "nsp"]).map(x => /* réponse de chacun (tenue secrète) : « pas pareils » n'a pas de sens */ `<button class="opt" data-act="qcuflag" data-c="${x}" aria-pressed="${d.cu === x}" ${dis}>${esc(FR.cu[x])}</button>`).join("")}</div></div>`;
     }
     if (q.format === "JPA") {
       const v = d.v && typeof d.v === "object" && !Array.isArray(d.v) ? d.v : {};
