@@ -48,11 +48,16 @@ export function mentions(v, { rdv = [], today = new Date() } = {}) {
 }
 
 /** Prochaine étape d'une fiche (6.4), par priorité. ctx : { rdv, today, briefPret, candidats (nb en lice du métier) } */
-export function prochaineEtape(v, { rdv = [], today = new Date(), briefPret = false, candidats = 1 } = {}) {
+export function prochaineEtape(v, { rdv = [], today = new Date(), briefPret = false, candidats = 1, taches = [] } = {}) {
   const e = etapeOf(v), list = rdvOf(v, rdv), t0 = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   if (e === "reserve") {
+    // mode suivi : contrat, acompte, solde, point un mois avant (tâches ajoutées à la réservation)
+    const t = k => taches.find(x => x.vendorId === v.id && x.kind === k && x.status !== "done");
+    if (t("contrat")) return { k: "contrat", tache: t("contrat") };
     if (+v.acompte && !v.acomptePaye) return { k: "acompte", date: pd(v.dateAcompte), montant: +v.acompte };
-    if (v.dateSolde && !v.soldePaye) return { k: "solde", date: pd(v.dateSolde) };
+    const point = t("point"), dp = point && pd(point.due);
+    if (dp && dp - t0 <= 45 * DAY) return { k: "point", date: dp, tache: point };
+    if (+v.prix && !v.soldePaye && (v.dateSolde || +v.prix > (+v.acompte || 0))) return { k: "solde", date: pd(v.dateSolde), montant: Math.max(0, +v.prix - (v.acomptePaye ? +v.acompte || 0 : 0)) };
     return { k: "ajour" };
   }
   if (e === "ecarte") return { k: "ecarte" };
@@ -160,3 +165,14 @@ export function enviesDuMetier(m, envies) {
     .map(q => ({ question: FR.questions[q.id].libelle, niveau: q.niveau, reponse: answerText(q, A[q.id], FR) }));
 }
 
+
+/* ---------- Réservation (6.6) : tâches ajoutées au planning ---------- */
+const iso = d => d.toISOString().slice(0, 10);
+/** Tâches à créer à la réservation : contrat, acompte (avec échéance si connue), point un mois avant le mariage. */
+export function tachesReservation(v, { date = null, today = new Date(), acompte = null, dateAcompte = null, eur = x => `${x} €` } = {}) {
+  const dans = n => iso(new Date(+today + n * DAY));
+  const out = [{ kind: "contrat", title: `Signer le contrat · ${v.name}`, due: dans(14) }];
+  if (+acompte > 0) out.push({ kind: "acompte", title: `Payer l'acompte · ${v.name} (${eur(+acompte)})`, due: dateAcompte || dans(14) });
+  if (date) { const d = new Date(date); d.setMonth(d.getMonth() - 1); if (d > today) out.push({ kind: "point", title: `Faire le point avec ${v.name} · 1 mois avant`, due: iso(d) }); }
+  return out;
+}

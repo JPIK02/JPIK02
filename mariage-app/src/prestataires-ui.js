@@ -5,7 +5,7 @@ import { FR } from "../agents/lib/envies/fr.js";
 import { TBY, questionsOf, answerText, tileNom, retard } from "../agents/lib/envies/logic.js";
 import { TILE_ICON } from "./envies-ui.js";
 import { METIERS, AUTRE, tuileDe, multiple, etapeOf, enLice, etatMetier, compteur, meilleurFit, candidats, aDecider, prochaineEtape,
-  mentions, doublons, contacts, historique, calendrier, dernierPrix, aDevis, cleComparaison, empreinte } from "../agents/lib/prestataires.js";
+  mentions, doublons, contacts, historique, calendrier, dernierPrix, aDevis, cleComparaison, empreinte, tachesReservation } from "../agents/lib/prestataires.js";
 
 // Textes d'interface (à traduire)
 const UI = {
@@ -97,7 +97,7 @@ export function makePrest(ctx) {
       default: return "";
     }
   }
-  const peOf = v => prochaineEtape(v, { rdv: S.rdv, today: today(), briefPret: briefPret(v.cat), candidats: candidats(v.cat, S.vendors).length });
+  const peOf = v => prochaineEtape(v, { rdv: S.rdv, today: today(), briefPret: briefPret(v.cat), candidats: candidats(v.cat, S.vendors).length, taches: S.tasks || [] });
   const mentionTxt = v => mentions(v, { rdv: S.rdv, today: today() }).map(x => (x.k === "devis" ? "Devis reçu" : x.k === "rdv" ? `RDV ${dFmt(x.date)}` : "Brief envoyé")).join(" · ");
 
   /* ---------- 4.1 L'onglet ---------- */
@@ -159,6 +159,7 @@ export function makePrest(ctx) {
     return `ask:Peux-tu nous proposer 3 ${pl(m)} qui correspondent à nos envies${d ? `, libres le ${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : ""}${lieu ? `, à moins d'une heure de ${lieu.name}` : ""} ?`; };
   function etatSuivi(v) {
     const pe = peOf(v);
+    if (pe.k === "contrat") return `<span class="pr-st warn">Contrat à signer</span>`;
     if (pe.k === "acompte") return `<span class="pr-st warn">${UI.etatReserve.acompte}</span>`;
     if (pe.k === "solde") return `<span class="pr-st">${UI.etatReserve.solde(dFmt(pe.date))}</span>`;
     return `<span class="pr-st">${UI.etatReserve.ajour}</span>`;
@@ -246,8 +247,10 @@ export function makePrest(ctx) {
       case "brief": corps = `<span><b>${UI.pe.briefT}</b><span>${UI.pe.briefS}</span></span>`; btns = S.canWrite ? `<button class="btn dark" data-act="prbrief" data-id="${v.id}">${UI.pe.envoyerBrief}</button>` : ""; break;
       case "devis": corps = `<span><b>${UI.pe.devisT}</b><span>${UI.pe.devisS}</span></span>`; btns = S.canWrite ? `<button class="btn dark" ${ask(`Rédige un mail pour demander un devis à ${v.name} (${v.cat}), à partir de nos envies.`)}>${UI.pe.ecrire}</button>` : ""; break;
       case "attendre": corps = `<span><b>${UI.pe.attendreT}</b></span>`; btns = S.canWrite ? `<button class="btn" ${ask(`Rédige une relance courtoise pour ${v.name} (${v.cat}).`)}>${UI.pe.relancer}</button>` : ""; break;
-      case "acompte": corps = `${pe.date ? cal(pe.date) : ""}<span><b>${esc(UI.pe.acompteT(ctx.eur(pe.montant), pe.date ? dFmt(pe.date) : ""))}</b></span>`; btns = S.canWrite ? `<button class="btn" data-act="editv" data-id="${v.id}">Marquer payé</button>` : ""; break;
-      case "solde": corps = `${pe.date ? cal(pe.date) : ""}<span><b>${esc(UI.pe.soldeT(pe.date ? dFmt(pe.date) : ""))}</b></span>`; break;
+      case "acompte": corps = `${pe.date ? cal(pe.date) : ""}<span><b>${esc(UI.pe.acompteT(ctx.eur(pe.montant), pe.date ? dFmt(pe.date) : ""))}</b></span>`; btns = S.canWrite ? `<button class="btn" data-act="prpaye" data-id="${v.id}" data-k="acompte">${UR.marquer}</button>` : ""; break;
+      case "solde": corps = `${pe.date ? cal(pe.date) : ""}<span><b>${esc(UI.pe.soldeT(pe.date ? dFmt(pe.date) : ""))}${pe.montant ? ` · ${ctx.eur(pe.montant)}` : ""}</b></span>`; btns = S.canWrite ? `<button class="btn" data-act="prpaye" data-id="${v.id}" data-k="solde">${UR.marquer}</button>` : ""; break;
+      case "contrat": corps = `<span><b>${UR.contratT}</b></span>`; btns = S.canWrite ? `<button class="btn dark" data-act="prcontrat" data-id="${pe.tache.id}">${UR.contratB}</button>` : ""; break;
+      case "point": corps = `${cal(pe.date)}<span><b>${esc(UR.pointT(dFmt(pe.date)))}</b></span>`; btns = S.canWrite ? `<button class="btn" ${ask(`Prépare avec nous le point d'un mois avant le mariage avec ${v.name} (${v.cat}) : ce qu'il faut leur confirmer et leur demander.`)}>${UR.pointB}</button>` : ""; break;
       case "ajour": corps = `<span><b>${UI.pe.ajourT}</b></span>`; break;
       case "ecarte": corps = `<span><b>${esc(UI.pe.ecarteT(v.raisonEcart))}</b></span>`; btns = S.canWrite ? `<button class="btn" data-act="prlice" data-id="${v.id}">${UI.remettre}</button>` : ""; break;
     }
@@ -294,7 +297,7 @@ export function makePrest(ctx) {
       <section class="pr-fh"><div class="pr-top"><button class="pr-round" data-act="prback" aria-label="Retour">${ctx.BACK_SVG}</button>${S.canWrite ? `<button class="pr-round" data-act="editv" data-id="${v.id}" aria-label="Modifier la fiche"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>` : ""}</div>
         <div class="pr-fh-m"><span class="pr-fh-t"><span class="pr-k">${esc(nomMetier(v.cat).toUpperCase())}${e === "ecarte" ? ` · ${UI.etapes.ecarte.toUpperCase()}` : ""}</span><h2>${esc(v.name)}</h2>${sub ? `<span class="pr-fh-s">${esc(sub)}</span>` : ""}</span>${anneau(sc)}</div>${bar}</section>
       ${dup.length ? `<p class="banner warn">${esc(UI.doublon(dup.map(x => x.name).join(", ")))}</p>` : ""}
-      ${boxProchaine(v)}${pourquoi(v)}${devisCarte(v)}${histo(v)}${contactSec(v)}
+      ${boxProchaine(v)}${paiements(v)}${prevenirFiche(v)}${pourquoi(v)}${devisCarte(v)}${histo(v)}${contactSec(v)}
       <details class="pr-sec pr-plus"><summary>${UI.plusH}</summary>${ctx.ficheDetails(v)}</details>
       ${action}</div>`;
   }
@@ -465,6 +468,125 @@ export function makePrest(ctx) {
   }
   function fermerComparer() { S.ui.prCmp = null; ctx.closeModal(); document.body.classList.remove("qs-open"); }
 
+
+  /* ---------- Lot 3 : réservation (6.6), écran « C'est réservé » (4.6), messages aux autres, suivi et paiements ---------- */
+  const UR = {
+    titre: n => `Réserver ${n} ?`, montant: "Montant (€)", acompte: "Acompte (€)", dateAcompte: "Acompte à verser avant le", confirmer: "Confirmer la réservation", annuler: "Annuler",
+    effets: "Le budget et le planning se mettent à jour tout seuls ; vous pourrez tout annuler d'un geste.", reserve: m => `${m.toUpperCase()} · C'EST RÉSERVÉ`, phraseDef: n => `${n}, c'est réservé.`,
+    fait: "Déjà fait pour vous", engages: x => `${x} engagés`, partBudget: p => `${p} % du budget engagé`, budgetPoste: l => `Poste « ${l} »`,
+    taches: n => `${n} tâche${n > 1 ? "s" : ""} ajoutée${n > 1 ? "s" : ""} au planning`, prevenirT: n => `Prévenir les ${n > 1 ? n + " autres" : "autre"} ?`,
+    prevenirP: noms => `Un mot courtois est prêt pour ${noms}. Ils seront rangés dans « Écartés », pas supprimés.`, redige: "Le coach rédige un mot pour chacun…",
+    relire: "Relire et envoyer", plusTard: "Plus tard", ouvrirMail: "Ouvrir dans Mail", copier: "Copier", previens: "Prévenu, rangé dans Écartés", copie: "Message copié",
+    raison: "Autre prestataire choisi", prochaine: "Prochaine décision", voirFiche: n => `Voir la fiche de ${n}`, annulerRes: "Annuler la réservation", annule: "Réservation annulée",
+    fermer: "Fermer", paiements: "Paiements", prevu: "Prévu au budget", montantL: "Montant", acompteL: "Acompte", soldeL: "Solde", reste: "Reste à payer", paye: "Payé",
+    marquer: "Marquer payé", aVerser: d => (d ? `avant le ${d}` : "date à fixer"), voirBudget: "Voir le budget", prevenirFiche: n => `Prévenir les ${n} autres candidats`,
+    contratT: "Signer le contrat", contratB: "C'est signé", pointT: d => `Faire le point ${d ? `le ${d}` : "un mois avant"}`, pointB: "Préparer avec le coach", contratOk: "Contrat signé",
+  };
+  const tachesDe = v => (S.tasks || []).filter(x => x.vendorId === v.id);
+  function ouvrirReserve(v) {
+    const autre = !multiple(v.cat) && S.vendors.find(x => x.id !== v.id && x.cat === v.cat && etapeOf(x) === "reserve");
+    if (autre) { ctx.toast(UI.dejaReserve(v.cat, autre.name)); return; }
+    const d = (v.devis || [])[0] || {}, montant = dernierPrix(v), ac = +v.acompte || +d.acompte || "", da = v.dateAcompte || d.dateAcompte || "";
+    ctx.layer(`<div class="ov" data-close="1"><form class="modal form" id="pr-res" role="dialog" aria-modal="true" aria-label="${esc(UR.titre(v.name))}"><h3>${esc(UR.titre(v.name))}</h3>
+      <p class="ev-note">${UR.effets}</p>
+      <div class="field"><label for="search-rs-m">${UR.montant}</label><input id="search-rs-m" name="search_m" type="number" inputmode="numeric" min="0" value="${esc(montant ?? "")}"></div>
+      <div class="cols2"><div class="field"><label for="search-rs-a">${UR.acompte}</label><input id="search-rs-a" name="search_a" type="number" inputmode="numeric" min="0" value="${esc(ac)}"></div>
+        <div class="field"><label for="search-rs-d">${UR.dateAcompte}</label><input id="search-rs-d" name="search_d" type="date" value="${esc(da)}"></div></div>
+      <div class="acts"><button type="button" class="btn" data-close="1">${UR.annuler}</button><button type="submit" class="btn primary">${UR.confirmer}</button></div></form></div>`);
+    document.getElementById("pr-res").addEventListener("submit", e => { e.preventDefault(); const f = e.target, n = x => (+x > 0 ? Math.round(+x) : null);
+      reserver(v, { montant: n(f.elements.search_m.value), acompte: n(f.elements.search_a.value), dateAcompte: f.elements.search_d.value || null }); });
+  }
+  async function reserver(v, { montant, acompte, dateAcompte }) {
+    ctx.closeModal();
+    const champs = ["status", "reserveLe", "prix", "acompte", "dateAcompte", "reservation"];
+    const avant = Object.fromEntries(champs.map(k => [k, v[k] ?? null]));
+    const ok = await ctx.patch("vendors", v.id, { status: "reserve", reserveLe: Date.now(), ...(montant ? { prix: montant } : {}), ...(acompte ? { acompte } : {}), ...(dateAcompte ? { dateAcompte } : {}), reservation: { at: Date.now(), vu: false } });
+    if (!ok) return;
+    const eff = { id: v.id, avant, taches: [], line: null, montant };
+    // budget : le poste du métier passe le montant en « engagé » (créé s'il n'existe pas)
+    if (montant) {
+      const line = ctx.budgetLineFor(v.cat);
+      if (line) { eff.line = { id: line.id, avant: { engage: line.engage ?? null } }; await ctx.patch("budget", line.id, { engage: montant }); }
+      else { const id = await ctx.addDoc("budget", { label: nomMetier(v.cat), prevu: null, engage: montant, paye: null, note: "", order: 99 }); if (id) eff.line = { id, cree: true }; }
+    }
+    // planning : contrat, acompte, point un mois avant
+    for (const t of tachesReservation({ ...v, name: v.name }, { date: dateM(), today: today(), acompte, dateAcompte, eur: ctx.eur })) {
+      const id = await ctx.addDoc("tasks", { title: t.title, due: t.due, phase: ctx.phaseFor(t.due), owner: "deux", status: "todo", note: "", order: 999, vendorId: v.id, kind: t.kind });
+      if (id) eff.taches.push({ id, title: t.title });
+    }
+    S.ui.prRes = eff;
+    ctx.toastUndo(UI.reserveOk(v.name), () => annulerReservation(eff));
+    renderReserve();
+    // phrase de l'écran et messages aux autres candidats (un appel IA) ; l'écran se met à jour à la réponse
+    ctx.runAgentNow("reserve", { id: v.id }).then(r => { if (r && r.ok && S.ui.prRes === eff) { eff.reservation = r.reservation; renderReserve(); } }).catch(() => {});
+  }
+  async function annulerReservation(eff) {
+    await ctx.patch("vendors", eff.id, eff.avant);
+    if (eff.line) eff.line.cree ? await ctx.remove("budget", eff.line.id) : await ctx.patch("budget", eff.line.id, eff.line.avant);
+    for (const t of eff.taches) await ctx.remove("tasks", t.id);
+    if (S.ui.prRes === eff) fermerReserve(false);
+  }
+  function blocMessages(v, msgs) {
+    return msgs.map(m => { const x = S.vendors.find(y => y.id === m.id); if (!x) return "";
+      const done = etapeOf(x) === "ecarte", mail = contacts(x).email || "";
+      const href = `mailto:${encodeURIComponent(mail)}?subject=${encodeURIComponent(m.objet)}&body=${encodeURIComponent(m.corps)}`;
+      return `<div class="rs-msg"><b>${esc(x.name)}</b><span class="pr-small">${esc(m.objet)}</span><p>${esc(m.corps)}</p>
+        ${done ? `<span class="ok-t">✓ ${UR.previens}</span>` : `<div class="rs-msg-a"><a class="btn primary" href="${esc(href)}" data-act="prprevenu" data-id="${x.id}">${UR.ouvrirMail}</a><button class="btn" data-act="prcopier" data-id="${x.id}" data-v="${v.id}">${UR.copier}</button></div>`}</div>`; }).join("");
+  }
+  function renderReserve() {
+    const eff = S.ui.prRes; if (!eff) return;
+    const v = S.vendors.find(x => x.id === eff.id); if (!v) return;
+    const res = eff.reservation || v.reservation || {}, c = compteur(S.vendors, A());
+    const autres = candidats(v.cat, S.vendors).filter(x => x.id !== v.id);
+    const totalEng = (S.budget || []).reduce((s, b) => s + (+b.engage || 0), 0), bt = +S.settings.budgetTotal || 0;
+    const pct = bt ? Math.round(totalEng / bt * 100) : null, C = 2 * Math.PI * 22, x = pct == null ? 0 : Math.min(100, pct) / 100 * C;
+    const dots = c.frise.map(f => `<i class="pr-dot ${f.etat}"></i>`).join("");
+    const d = aDecider(S.vendors, A(), ctxRegles());
+    document.body.classList.add("qs-open");
+    document.getElementById("layer").innerHTML = `<div class="cv rs" role="dialog" aria-modal="true" aria-label="${esc(UR.reserve(v.cat))}">
+      <section class="rs-head"><div class="pr-top"><span class="rs-ck" aria-hidden="true">✓</span><button class="pr-round" data-act="prres-close" aria-label="${UR.fermer}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+        <span class="pr-k">${esc(UR.reserve(nomMetier(v.cat)))}</span><p class="rs-phrase">${esc(res.phrase || UR.phraseDef(v.name))}</p>
+        <div class="pr-count"><b class="num">${c.n}</b><span>${UI.reserves(c.n, c.total)}</span></div>
+        <span class="pr-frise" style="grid-template-columns:repeat(${Math.max(1, c.total)},minmax(0,1fr))">${dots}</span></section>
+      <section class="pr-sec"><h3 class="home-h">${UR.fait}</h3><div class="pr-box">
+        ${eff.montant ? `<button class="pr-res" data-act="prres-go" data-v="budget"><span class="rs-ring" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="22" class="tr"/><circle cx="26" cy="26" r="22" class="fg" stroke-dasharray="${x.toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 26 26)"/></svg></span>
+          <span class="pr-rn"><b>${esc(UR.engages(ctx.eur(eff.montant)))}</b><br><span>${esc(pct != null ? UR.partBudget(pct) : UR.budgetPoste(nomMetier(v.cat)))}</span></span>${ctx.CHEV}</button>` : ""}
+        ${eff.taches.length ? `<button class="pr-res" data-act="prres-go" data-v="planning"><span class="pr-ck" aria-hidden="true">✓</span><span class="pr-rn"><b>${UR.taches(eff.taches.length)}</b><br><span>${esc(eff.taches.map(t => t.title.split(" · ")[0]).join(" · "))}</span></span>${ctx.CHEV}</button>` : ""}</div></section>
+      ${autres.length && !eff.plusTard ? `<section class="pr-pe"><span class="pr-lab">${esc(UR.prevenirT(autres.length).toUpperCase())}</span>
+        ${(res.messages || []).length ? (eff.relire ? blocMessages(v, res.messages) : `<p>${esc(UR.prevenirP(autres.map(a => a.name).join(", ")))}</p><div class="pr-pe-a"><button class="btn dark" data-act="prres-relire">${UR.relire}</button><button class="btn" data-act="prres-tard">${UR.plusTard}</button></div>`)
+          : `<p class="ai-pending" role="status">${UR.redige}</p>`}</section>` : ""}
+      ${d ? carteDecider(d, UR.prochaine) : ""}
+      <div class="cv-acts"><button class="btn primary" data-act="prres-fiche">${esc(UR.voirFiche(v.name))}</button><button class="link" data-act="prres-annuler">${UR.annulerRes}</button></div></div>`;
+  }
+  function fermerReserve(vu = true) {
+    const eff = S.ui.prRes; S.ui.prRes = null; ctx.closeModal(); document.body.classList.remove("qs-open");
+    if (vu && eff) ctx.patch("vendors", eff.id, { "reservation.vu": true });
+  }
+  async function prevenu(id) {
+    const x = S.vendors.find(y => y.id === id); if (!x || etapeOf(x) === "ecarte") return;
+    await setEtape(x, "ecarte", { raisonEcart: UR.raison, ecarteLe: Date.now() }, UI.ecarteOk(x.name));
+    setTimeout(() => (S.ui.prRes ? renderReserve() : null), 300);
+  }
+  // Fiche en mode suivi : paiements liés au budget, autres candidats à prévenir
+  function paiements(v) {
+    if (etapeOf(v) !== "reserve") return "";
+    const px = +v.prix || 0, ac = +v.acompte || 0, solde = Math.max(0, px - ac), line = ctx.budgetLineFor(v.cat);
+    const reste = (v.acomptePaye ? 0 : ac) + (v.soldePaye ? 0 : solde);
+    const row = (l, val, extra = "") => `<div class="hb-row"><span class="lab">${l}</span><span class="amt num">${val}</span>${extra}</div>`;
+    const etat = (paye, k, d) => (paye ? `<div class="why ok-t">${UR.paye}</div>` : `<div class="why">${esc(UR.aVerser(d ? dFmt(ctx.pd(d)) : ""))}${S.canWrite ? ` · <button class="link" data-act="prpaye" data-id="${v.id}" data-k="${k}">${UR.marquer}</button>` : ""}</div>`);
+    return `<section class="pr-sec"><h3 class="home-h">${UR.paiements}</h3><div class="pr-card pr-pay">
+      ${line && +line.prevu ? row(UR.prevu, ctx.eur(line.prevu)) : ""}${px ? row(UR.montantL, ctx.eur(px)) : ""}
+      ${ac ? row(UR.acompteL, ctx.eur(ac), etat(v.acomptePaye, "acompte", v.dateAcompte)) : ""}
+      ${px ? row(UR.soldeL, ctx.eur(solde), etat(v.soldePaye, "solde", v.dateSolde)) : ""}
+      ${px ? row(`<b>${UR.reste}</b>`, `<b>${ctx.eur(reste)}</b>`) : ""}
+      <button class="link" data-go="budget">${UR.voirBudget}</button></div></section>`;
+  }
+  function prevenirFiche(v) {
+    if (etapeOf(v) !== "reserve") return "";
+    const msgs = ((v.reservation || {}).messages || []).filter(m => { const x = S.vendors.find(y => y.id === m.id); return x && enLice(x); });
+    return msgs.length ? `<details class="pr-sec pr-card"><summary class="pr-lab">${esc(UR.prevenirFiche(msgs.length).toUpperCase())}</summary>${blocMessages(v, msgs)}</details>` : "";
+  }
+
   /* ---------- Gestes ---------- */
   const show = (view, extra = {}) => { Object.assign(S.f, { pView: view }, extra); ctx.saveF(); ctx.go("prestataires"); window.scrollTo(0, 0); };
   async function setEtape(v, status, extra = {}, msg) {
@@ -502,13 +624,23 @@ export function makePrest(ctx) {
       case "prcaltous": S.f.pCalTous = true; ctx.render(); return true;
       case "prlice": if (v) setEtape(v, aDevis(v) || v.briefEnvoyeLe ? "discussion" : "repere", { raisonEcart: null, ecarteLe: null }, UI.remisOk(v.name)); return true;
       case "precart": if (v) sheetEcart(v); return true;
-      case "prreserve": {
-        if (!v) return true;
-        if (S.ui.prCmp) fermerComparer();
-        const autre = !multiple(v.cat) && S.vendors.find(x => x.id !== v.id && x.cat === v.cat && etapeOf(x) === "reserve");
-        if (autre) { ctx.toast(UI.dejaReserve(v.cat, autre.name)); return true; }
-        setEtape(v, "reserve", { reserveLe: Date.now() }, UI.reserveOk(v.name)); return true;
-      }
+      case "prreserve": { if (!v) return true; if (S.ui.prCmp) fermerComparer(); ouvrirReserve(v); return true; }
+      case "prres-close": fermerReserve(); return true;
+      case "prres-fiche": { const x = S.ui.prRes && S.ui.prRes.id; fermerReserve(); if (x) show("fiche", { pFiche: x }); return true; }
+      case "prres-go": { fermerReserve(); ctx.go(t.dataset.v); return true; }
+      case "prres-relire": S.ui.prRes.relire = true; renderReserve(); return true;
+      case "prres-tard": S.ui.prRes.plusTard = true; renderReserve(); return true;
+      case "prres-annuler": { const eff = S.ui.prRes; if (eff) annulerReservation(eff).then(() => ctx.toast(UR.annule)); return true; }
+      case "prprevenu": prevenu(id); return false; // laisse le lien mailto: s'ouvrir
+      case "prcopier": { const x = S.vendors.find(y => y.id === id), r = S.vendors.find(y => y.id === t.dataset.v), m = ((r && r.reservation) || (S.ui.prRes && S.ui.prRes.reservation) || {}).messages?.find(mm => mm.id === id) || ((S.ui.prRes || {}).reservation || {}).messages?.find(mm => mm.id === id);
+        if (m && navigator.clipboard) navigator.clipboard.writeText(`${m.objet}\n\n${m.corps}`).then(() => ctx.toast(UR.copie)).catch(() => {});
+        if (x) prevenu(id); return true; }
+      case "prpaye": { if (!v) return true; const k = t.dataset.k, champ = k === "solde" ? "soldePaye" : "acomptePaye", tache = (S.tasks || []).find(x => x.vendorId === v.id && x.kind === k && x.status !== "done");
+        ctx.patch("vendors", v.id, { [champ]: true }).then(ok => { if (!ok) return; if (tache) ctx.patch("tasks", tache.id, { status: "done" });
+          ctx.toastUndo(`${k === "solde" ? "Solde" : "Acompte"} payé`, async () => { await ctx.patch("vendors", v.id, { [champ]: false }); if (tache) await ctx.patch("tasks", tache.id, { status: tache.status || "todo" }); }); });
+        return true; }
+      case "prcontrat": { const tache = (S.tasks || []).find(x => x.id === id); if (!tache) return true;
+        ctx.patch("tasks", id, { status: "done" }).then(ok => ok && ctx.toastUndo(UR.contratOk, () => ctx.patch("tasks", id, { status: tache.status || "todo" }))); return true; }
       case "prbrief": {
         if (!v) return true; const k = tuile(v.cat), b = k && ctx.briefFor(k); if (!b) return true;
         ctx.pdfBriefs(b);

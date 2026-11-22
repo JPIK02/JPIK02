@@ -138,6 +138,11 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
     try { return { ok: true, fiche: await runFiche({ url: req.data?.url, nom: req.data?.nom, fichier: req.data?.fichier, metier: req.data?.metier }) }; }
     catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
   }
+  if (job === "reserve") {
+    const { runReserve } = await import("./agents/reserve-agent.js");
+    try { return { ok: true, reservation: await runReserve({ id: String(req.data?.id || "") }) }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
   if (job === "comparer") {
     const { runComparer } = await import("./agents/comparer-agent.js");
     const ids = Array.isArray(req.data?.ids) ? req.data.ids.map(String).slice(0, 3) : [];

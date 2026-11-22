@@ -82,3 +82,17 @@ test("lot 2 : la comparaison gardée n'est refaite que si un candidat ou les env
   assert.equal(cleComparaison("Coiffure & maquillage"), "coiffure-maquillage");
   assert.equal(enviesDuMetier("Photographe", [{ id: "photo.style", v: ["reportage"] }]).length, 1);
 });
+
+test("lot 3 : tâches de la réservation et prochaine étape en mode suivi", async () => {
+  const { tachesReservation, prochaineEtape } = await import("../lib/prestataires.js");
+  const v = { id: "v", name: "Atelier Lumière", status: "reserve", prix: 2400, acompte: 600 };
+  const t = tachesReservation(v, { date: new Date("2028-05-20T12:00:00"), today, acompte: 600, dateAcompte: "2026-12-15" });
+  assert.deepEqual(t.map(x => x.kind), ["contrat", "acompte", "point"]);
+  assert.equal(t[1].due, "2026-12-15"); assert.equal(t[2].due, "2028-04-20");
+  assert.equal(tachesReservation(v, { today }).length, 1, "sans date ni acompte : le contrat seulement");
+  const taches = t.map((x, i) => ({ ...x, id: "t" + i, vendorId: "v", status: "todo" }));
+  assert.equal(prochaineEtape(v, { today, taches }).k, "contrat");
+  assert.equal(prochaineEtape(v, { today, taches: taches.slice(1) }).k, "acompte");
+  assert.equal(prochaineEtape({ ...v, acomptePaye: true }, { today, taches: taches.slice(1) }).k, "solde");
+  assert.equal(prochaineEtape({ ...v, acomptePaye: true, soldePaye: true }, { today }).k, "ajour");
+});

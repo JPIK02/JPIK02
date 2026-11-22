@@ -803,7 +803,8 @@ function vPrestataires(){
 // Onglet « Prestataires » v1 : écrans dans src/prestataires-ui.js, règles dans agents/lib/prestataires.js
 let PR=null;
 const pr=()=>PR||(PR=makePrest({S,esc,toast,toastUndo,go,render,saveF,CHEV,BACK_SVG,tintOf,initials,eur,pd,today,wDate,fold,env,briefFor,pdfBriefs,patch,devisSection,
-  ficheDetails,pendingSugs,openEditor,closeModal,fileForAI,addVendor,kick,acceptSug,runAgentNow,openCompare,runQr,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
+  ficheDetails,pendingSugs,openEditor,closeModal,fileForAI,addVendor,kick,acceptSug,runAgentNow,openCompare,runQr,
+  addDoc,remove,phaseFor,budgetLineFor,setDoc:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
   logo:()=>(document.querySelector(".brand-mark")||{}).outerHTML||"",userEmail:()=>String(S.user&&S.user.email||""),
   prenomDe:by=>{const k=PARTNER[String(by||"").toLowerCase()];return k==="claire"?P1():k==="julien"?P2():""}}));
 
@@ -1448,6 +1449,12 @@ async function fileForAI(file){
   if(/^image\//.test(file.type)){const img=await loadImage(file);return {media_type:"image/jpeg",data:await b64Of(await resizeJpeg(img,1600,.82))}}
   throw new Error("Photo ou PDF uniquement");
 }
+// Réservation (Prestataires, lot 3) : création d'un document avec son id (annulable), période d'une tâche selon son échéance
+async function addDoc(col,data){
+  if(!S.db)return null;
+  try{const ref=await S.db.collection(col).add(Object.assign({createdAt:Date.now()},data));return ref.id}catch(e){writeErr(e);return null}
+}
+const phaseFor=due=>{const d=wDate(),x=due?pd(due):null;if(!d||!x)return (currentPhase()||PHASES[0]).k;return (PHASES.find(p=>p.due(d)>=x)||PHASES[PHASES.length-1]).k};
 // Nouveau prestataire : rend son id (pour ouvrir sa fiche)
 async function addVendor(data){
   if(!S.db){toast("Connexion en cours, réessayez dans un instant");return null}
