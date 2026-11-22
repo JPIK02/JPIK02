@@ -1898,3 +1898,32 @@ div.pr-row{cursor:default}
 .iv-pick{display:flex;flex-direction:column;gap:12px}
 .iv-pickl{max-height:min(52vh,420px);overflow:auto}
 .iv-plus{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--link);font-size:20px;font-weight:500}
+
+/* ---------- Page publique du lien d'adresse (adresse.html) ---------- */
+.ad-body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f-body,"Jost",system-ui,sans-serif)}
+.ad{max-width:560px;margin:0 auto;padding:0 max(16px,env(safe-area-inset-left,0px)) 40px;display:flex;flex-direction:column;gap:18px}
+.ad-load{padding:48px 0;text-align:center;color:var(--muted);font-size:16px}
+.ad-head{background:var(--hero-b);color:var(--hero-fg);margin:0 calc(-1*max(16px,env(safe-area-inset-left,0px)));padding:calc(env(safe-area-inset-top,0px) + 28px) max(16px,env(safe-area-inset-left,0px)) 24px;border-radius:0 0 22px 22px;display:flex;flex-direction:column;gap:8px}
+.ad-k{font-size:12px;letter-spacing:.24em;text-transform:uppercase;font-weight:600;color:var(--hero-gold)}
+.ad-head h1{margin:0;font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:32px;line-height:1.1}
+.ad-head p{margin:0;font-size:15.5px;line-height:1.45;color:var(--hero-muted)}
+.ad-ok{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:16px;background:var(--ok-soft);color:var(--ok)}
+.ad-ok b{font-size:16px}.ad-ok span{font-size:14px;color:var(--ink)}
+.ad-form{display:flex;flex-direction:column;gap:14px}
+.ad-f{display:flex;flex-direction:column;gap:6px;min-width:0}
+.ad-f>span{font-size:13px;font-weight:600;letter-spacing:.04em;color:var(--muted)}
+.ad-f i{font-style:normal;font-weight:400}
+.ad-f input,.ad-f textarea{min-height:48px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px;padding:10px 12px}
+.ad-f textarea{min-height:110px;resize:vertical}
+.ad-f input:focus-visible,.ad-f textarea:focus-visible,.ad-btn:focus-visible{outline:3px solid var(--focus,var(--coral-ui));outline-offset:2px}
+.ad-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media (max-width:420px){.ad-2{grid-template-columns:1fr}}
+.ad-reg{border:1px solid var(--line);border-radius:16px;padding:12px 14px 14px;margin:0;display:flex;flex-direction:column;gap:12px}
+.ad-reg legend{font-weight:600;padding:0 6px}
+.ad-reg p{margin:0;font-size:14px;color:var(--muted)}
+.ad-err{margin:0;min-height:1em;color:var(--bad);font-weight:600;font-size:14.5px}
+.ad-btn{min-height:52px;border:0;border-radius:14px;background:var(--hero-b);color:var(--hero-fg);font:inherit;font-size:17px;font-weight:600;cursor:pointer}
+.ad-btn:disabled{opacity:.6}
+.ad-maj{margin:0;font-size:13px;color:var(--muted);text-align:center}
+.ad-vie{margin:6px 0 0;font-size:12.5px;line-height:1.5;color:var(--muted)}
+.iv-lien{display:flex;flex-direction:column;gap:10px}.iv-lien .home-h{margin:0}.iv-lien .pl-etat{align-self:flex-start}

@@ -1,6 +1,7 @@
 // Assistant IA intégré à Lamaelle : fonction appelable par les deux comptes du couple uniquement.
 // La clé Claude reste côté serveur (variable d'environnement écrite au déploiement depuis les secrets GitHub).
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
+import { gererLien, traiterAdresse } from "./adresse.js";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { initializeApp } from "firebase-admin/app";
@@ -173,4 +174,25 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
   const { runAll } = await import("./agents/main.js");
   const failed = await runAll({ forced: job });
   return { ok: !failed };
+});
+
+/* ---------- Invités : le lien pour les adresses (docs/invites-v1.md, section 4) ----------
+   Seul endroit où des personnes extérieures écrivent : jamais en direct dans Firestore, toujours par cette fonction.
+   `liens/<empreinte du jeton>` (illisible depuis l'app) → foyer ; le jeton ne donne accès qu'aux champs de son foyer. */
+
+// Créer (ou refaire) le lien d'un foyer, ou le révoquer : réservé au couple (logique dans adresse.js, testée)
+export const lienFoyer = onCall({ timeoutSeconds: 30 }, async req => {
+  const email = String(req.auth?.token?.email || "").toLowerCase();
+  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
+  const r = await gererLien(db, { foyerId: req.data?.foyerId, action: req.data?.action });
+  if (r.erreur) throw new HttpsError(r.code || "invalid-argument", r.erreur);
+  return r;
+});
+
+// Page publique : lire son foyer, ou enregistrer son adresse, son e-mail, son téléphone et les régimes
+export const adresseFoyer = onRequest({ timeoutSeconds: 20, maxInstances: 2, cors: false, invoker: "public" }, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ erreur: "méthode" });
+  const r = await traiterAdresse(db, req.body || {}, { noms: coupleNames });
+  return res.status(r.status).json(r.body);
 });

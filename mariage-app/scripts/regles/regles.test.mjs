@@ -23,6 +23,8 @@ await t("Conversation : Julien NE liste PAS les conversations", julien.collectio
 await t("Sauvegardes : Julien NE les lit PAS", julien.doc("sauvegardes/secret-x-0").get(), false);
 await t("Sauvegardes : Claire NE les liste PAS", claire.collection("sauvegardes").get(), false);
 await t("Clé privée des notifications : illisible depuis l'app", julien.doc("private/vapid").get(), false);
+await t("Liens d'adresse : illisibles depuis l'app", julien.doc("liens/abc").get(), false);
+await t("Liens d'adresse : impossibles à créer depuis l'app", claire.doc("liens/abc").set({ foyerId: "f" }), false);
 await t("Un compte non autorisé ne lit rien", intrus.collection("tasks").get(), false);
 await t("Un compte non autorisé ne lit pas d'espace privé", intrus.doc("prive/claire/envies/x").get(), false);
 await t("Sans connexion : rien", env.unauthenticatedContext().firestore().collection("tasks").get(), false);

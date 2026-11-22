@@ -30,7 +30,7 @@ function refresh() {
 self.addEventListener("fetch", e => {
   const req = e.request, url = new URL(req.url);
   if (req.method !== "GET" || url.origin !== location.origin || url.pathname.startsWith("/__/")) return;
-  if (req.mode === "navigate") {
+  if (req.mode === "navigate" && !url.pathname.startsWith("/adresse")) { // la page publique du lien d'adresse n'est jamais servie depuis l'app gardée
     // page : la version gardée tout de suite, mise à jour en arrière-plan ; sans copie, le réseau
     e.respondWith((async () => {
       const hit = await caches.match(PAGE, IGN);

@@ -10,7 +10,7 @@ const UI = {
   cpt: { ae: "adultes + enfants", foyers: "foyers", adresses: "adresses" },
   action: {
     regrouper: (n, f) => [`${n} invités à regrouper en ${f} foyer${f > 1 ? "s" : ""}`, "Un couple ou une famille = une invitation, une adresse, une réponse.", "Voir les foyers proposés"],
-    adresses: n => [`${n} foyer${n > 1 ? "s" : ""} sans adresse`, "Le lien pour que vos invités la saisissent eux-mêmes arrive bientôt. En attendant, complétez-les ici.", "Compléter"],
+    adresses: n => [`${n} foyer${n > 1 ? "s" : ""} sans adresse`, "Envoyez-leur un lien : ils la saisissent eux-mêmes, sans compte.", "Partager le lien"],
     prets: () => ["Prêts pour les save-the-date", "Toutes les adresses sont là.", "Voir la tâche"],
   },
   rechercher: "Chercher un nom ou un cercle", parCercle: "Par cercle", sansCercle: "Sans cercle", aucun: "Aucun invité ne correspond.",
@@ -23,7 +23,14 @@ const UI = {
   deLaListe: "Ajouter quelqu'un de la liste", choisirT: f => `Ajouter à ${f}`, choisirP: "Touchez les personnes qui font partie de ce foyer.", chercherPers: "Chercher une personne",
   deja: f => `aujourd'hui avec ${f}`, seul: "seul", aucunePers: "Personne d'autre sur la liste ne correspond.", fermer: "Fermer", lie: (n, f) => `${n} rejoint ${f}`,
   invitesA: "Invités à", moments: [["ceremonie", "Cérémonie"], ["vin", "Vin d'honneur"], ["diner", "Dîner"]],
-  envoyer: "Pour les envoyer", adresse: "Adresse postale", tel: "Téléphone", email: "E-mail", nomFoyer: "Nom du foyer", nomFoyerPh: "Ex. Famille Rousselot",
+  envoyer: "Pour les envoyer",
+  purgeT: "Six mois après le mariage", purgeP: n => `Comme annoncé à vos invités, leurs adresses, e-mails, téléphones et régimes (${n} foyer${n > 1 ? "s" : ""}) peuvent maintenant être supprimés.`,
+  purgeBtn: "Supprimer ces informations", purgeOk: "Adresses, contacts et régimes supprimés",
+  lienT: "Le lien pour vos invités", lienP: "Ils saisissent eux-mêmes leur adresse, leur e-mail, leur téléphone et leurs régimes, sans compte.",
+  demanderLien: "Demander par lien", partagerLien: "Partager le lien", revoquer: "Révoquer le lien", nouveauLien: "Nouveau lien",
+  lienCree: (c, e) => `Lien créé le ${c} · valable jusqu'au ${e}`, reponseLe: d => `Réponse reçue le ${d}`, lienEnCours: "Création du lien…", lienPret: "Lien prêt : touchez « Partager le lien »",
+  lienCopie: "Lien copié : collez-le dans votre message", lienRevoque: "Lien révoqué : il ne fonctionne plus", lienErreur: e => `Le lien n'a pas pu être créé : ${e}`,
+  message: (f, url, c) => `Bonjour ${f} ! Pour vous envoyer notre faire-part, pourriez-vous nous indiquer votre adresse ici ? Cela prend une minute :\n${url}\n\n${c}`, adresse: "Adresse postale", tel: "Téléphone", email: "E-mail", nomFoyer: "Nom du foyer", nomFoyerPh: "Ex. Famille Rousselot",
   suivi: "Suivi", etapes: { liste: "Sur la liste", std: "Save-the-date", fairepart: "Faire-part", repondu: "Réponse" }, suiviP: "Touchez l'étape atteinte.",
   note: "Note", notePh: "Une précision, un lien de parenté…", retirer: "Retirer de la liste", retirerT: n => `Retirer ${n} de la liste ?`, retirerP: n => `${n} personne${n > 1 ? "s" : ""} et leurs informations. Vous pourrez annuler juste après.`,
   confirmer: "Retirer", annuler: "Annuler", retire: n => `${n} retiré de la liste`, enregistre: "Enregistré", etapeOk: e => `Suivi : ${e}`,
@@ -76,9 +83,24 @@ export function makeInvites(ctx) {
     return `<section class="pr-sec"><h3 class="home-h">${UI.parCercle}</h3><div class="iv-cercles">${cs.map(c => `<button class="iv-c" data-act="ivcercle" data-c="${esc(c.nom)}">
       <span class="iv-avs">${c.personnes.slice(0, 3).map(g => ini(g)).join("")}</span><b class="num">${c.personnes.length}</b><span>${esc(c.nom || UI.sansCercle)}</span></button>`).join("")}</div></section>`;
   }
+  // Durée de conservation (validée le 22/11/2026) : 6 mois après le mariage, suppression proposée, sur confirmation du couple
+  const aPurger = fs => { const d = ctx.wDate(); if (!d || S.settings.dateIndicative) return []; const lim = new Date(d); lim.setMonth(lim.getMonth() + 6);
+    return ctx.today() >= lim ? fs.filter(f => f.adresse || f.tel || f.email || f.personnes.some(g => g.regime)) : []; };
+  function cartePurge(fs) {
+    const l = aPurger(fs); if (!l.length || !S.canWrite) return "";
+    return `<section class="pr-card bu-arb"><span class="ev-tag">${UI.purgeT}</span><p>${esc(UI.purgeP(l.length))}</p><button class="btn primary" data-act="ivpurge">${UI.purgeBtn}</button></section>`;
+  }
+  async function purger() {
+    const l = aPurger(F()), avant = [];
+    for (const f of l) {
+      if (!f.virtuel) { const d = S.foyers.find(x => x.id === f.id) || {}; avant.push(["foyers", f.id, { adresse: d.adresse || "", tel: d.tel || "", email: d.email || "" }]); await ctx.patch("foyers", f.id, { adresse: "", tel: "", email: "" }); }
+      for (const g of f.personnes.filter(g => g.regime)) { avant.push(["guests", g.id, { regime: g.regime }]); await ctx.patch("guests", g.id, { regime: "" }); }
+    }
+    ctx.toastUndo(UI.purgeOk, async () => { for (const [c, id, d] of avant) await ctx.patch(c, id, d); });
+  }
   function vMain() {
     const fs = F();
-    return `<div class="pr bu iv">${head(fs)}${action(fs)}
+    return `<div class="pr bu iv">${head(fs)}${cartePurge(fs)}${action(fs)}
       <label class="sr" for="iv-q">${UI.rechercher}</label><input id="iv-q" class="iv-q" type="search" autocomplete="off" name="search_q" data-ivq="1" placeholder="${UI.rechercher}" value="${esc(S.f.iq || "")}">
       ${(S.f.iq || "").length >= 2 ? recherche(fs) : tuilesCercles(fs)}
       <button class="pr-row bu-pdf" data-go="tables">${SVG('<circle cx="12" cy="12" r="4"/><circle cx="12" cy="4" r="1.5"/><circle cx="12" cy="20" r="1.5"/><circle cx="4" cy="12" r="1.5"/><circle cx="20" cy="12" r="1.5"/>')}<span class="pr-rb"><b>${UI.planT}</b><span>${UI.planS}</span></span>${ctx.CHEV}</button>
@@ -110,11 +132,37 @@ export function makeInvites(ctx) {
         <label class="pl-f"><span>${UI.adresse}</span><textarea class="pl-note iv-adr" data-ivf="adresse" data-id="${esc(f.id)}" autocomplete="off" ${dis}>${esc(f.adresse || "")}</textarea></label>
         <div class="pl-f2"><label class="pl-f"><span>${UI.tel}</span><input data-ivf="tel" data-id="${esc(f.id)}" inputmode="tel" value="${esc(f.tel || "")}" ${dis}></label>
           <label class="pl-f"><span>${UI.email}</span><input data-ivf="email" data-id="${esc(f.id)}" inputmode="email" value="${esc(f.email || "")}" ${dis}></label></div></section>
+      ${blocLien(f)}
       <section class="pr-sec"><h3 class="home-h">${UI.suivi}</h3><ol class="iv-suivi">${SUIVI.map((k, i) => `<li class="${i < et ? "past" : i === et ? "now" : ""}"><button data-act="ivetape" data-id="${esc(f.id)}" data-k="${k}" ${dis} aria-current="${i === et ? "step" : "false"}"><i></i><span>${UI.etapes[k]}</span></button></li>`).join("")}</ol>
         ${S.canWrite ? `<p class="ev-note">${UI.suiviP}</p>` : ""}</section>
       <section class="pr-sec"><h3 class="home-h">${UI.note}</h3><label class="sr" for="iv-note">${UI.note}</label><textarea id="iv-note" class="pl-note" data-ivf="note" data-id="${esc(f.id)}" placeholder="${UI.notePh}" ${dis}>${esc(f.note || "")}</textarea></section>
       ${S.canWrite ? `<button class="link iv-retirer" data-act="ivretirer" data-id="${esc(f.id)}">${UI.retirer}</button>` : ""}</div>`;
   }
+  /* ---------- Le lien pour les adresses (section 4, lot 2) ---------- */
+  const dLong = ms => new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+  const urlLien = tok => `${location.origin}/adresse#t=${tok}`;
+  function blocLien(f) {
+    if (!S.canWrite) return "";
+    const l = f.lien, actif = l && l.token && +l.expire > Date.now(), occupe = S.ui.ivLien === f.id;
+    return `<section class="pr-card iv-lien"><h3 class="home-h">${UI.lienT}</h3>
+      ${actif ? `<p class="ev-note">${esc(UI.lienCree(dLong(l.creeLe), dLong(l.expire)))}</p>${f.lienReponseLe ? `<span class="pl-etat ok">${esc(UI.reponseLe(dLong(f.lienReponseLe)))}</span>` : ""}
+        <div class="pl-acts"><button class="btn primary" data-act="ivpartager" data-id="${esc(f.id)}">${UI.partagerLien}</button><button class="link" data-act="ivrevoquer" data-id="${esc(f.id)}">${UI.revoquer}</button></div>`
+      : `<p class="ev-note">${UI.lienP}</p><button class="btn ${String(f.adresse || "").trim() ? "" : "primary"}" data-act="ivlien" data-id="${esc(f.id)}" ${occupe ? "disabled" : ""}>${occupe ? UI.lienEnCours : l && l.token ? UI.nouveauLien : UI.demanderLien}</button>`}</section>`;
+  }
+  async function partager(f, tok) {
+    const url = urlLien(tok), texte = UI.message(nomFoyer(f), url, ctx.couple());
+    try { if (navigator.share) { await navigator.share({ title: UI.lienT, text: texte }); return; } } catch (e) { if (e && e.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(texte); ctx.toast(UI.lienCopie); } catch (e) { window.prompt(UI.lienCopie, url); }
+  }
+  async function creerLien(id) {
+    if (S.ui.ivLien) return;
+    const fid = await foyerReel(id); if (!fid) return;
+    S.ui.ivLien = fid; ctx.render();
+    // pas de partage automatique : sur iPhone, la feuille de partage doit s'ouvrir juste après un toucher (« Partager le lien » apparaît)
+    try { await ctx.lienFoyer(fid, "creer"); S.ui.ivLien = null; ctx.render(); ctx.toast(UI.lienPret); }
+    catch (e) { S.ui.ivLien = null; ctx.render(); ctx.toast(UI.lienErreur(e.message || "erreur")); }
+  }
+
   // un foyer virtuel (personne seule) devient un vrai foyer à la première information propre au foyer
   async function foyerReel(id) {
     const f = foyer(id); if (!f) return null; if (!f.virtuel) return f.id;
@@ -222,6 +270,10 @@ export function makeInvites(ctx) {
         if (a === "ivplus1") ctx.addDoc("guests", { ...base, name: "+1", plusUn: true, enfant: false, regime: "", table: "" }); else ctx.openEditor("guests", null, base); }); return true;
       case "ivretirer": confirmerRetrait(id); return true;
       case "ivchoisir": ouvrirChoix(id); return true;
+      case "ivlien": creerLien(id); return true;
+      case "ivpurge": purger(); return true;
+      case "ivpartager": { const f = foyer(id); if (f && f.lien && f.lien.token) partager(f, f.lien.token); return true; }
+      case "ivrevoquer": ctx.lienFoyer(id, "revoquer").then(() => ctx.toast(UI.lienRevoque), e => ctx.toast(e.message || "Erreur")); return true;
       case "ivlier": lier(id, t.dataset.g); return true;
       case "ivretirerok": retirer(id); return true;
       case "ivregrouper": regrouper(); return true;

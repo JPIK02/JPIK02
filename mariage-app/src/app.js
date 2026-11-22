@@ -1,7 +1,7 @@
 // Polices Lamaelle hébergées avec l'app (pas de Google Fonts : RGPD) : Jost pour l'interface, Cormorant Garamond italique pour les accroches
 import "@fontsource/jost/300.css";import "@fontsource/jost/400.css";import "@fontsource/jost/500.css";import "@fontsource/jost/600.css";
 import "@fontsource/cormorant-garamond/400-italic.css";import "@fontsource/cormorant-garamond/500-italic.css";
-import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
+import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow,lienFoyer} from "./firebase.js";
 import {QCATS} from "./questions.js"; // ancien questionnaire : archive lisible (synthèse, réponses archivées)
 import {TUILES} from "../agents/lib/envies/catalogue.js";
 import {FR as FR_ENVIES} from "../agents/lib/envies/fr.js";
@@ -678,7 +678,7 @@ function vInvites(){return iv().vInvites()}
 let IV=null;
 const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,render,go,patch,addDoc,remove,toast,toastUndo,openEditor,closeModal,showTask,
   layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
-  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),ancienneListe:()=>vInvitesListe()}));
+  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today}));
 // Ancienne liste détaillée (une ligne par personne, filtres, « Ranger » par groupe ou côté) : déplacée sous « Liste détaillée et rangement »
 function vInvitesListe(){
   const g=S.guests,f=S.f;

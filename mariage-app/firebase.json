@@ -7,6 +7,17 @@
     ],
     "rewrites": [
       {
+        "source": "/api/adresse",
+        "function": {
+          "functionId": "adresseFoyer",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/adresse",
+        "destination": "/adresse.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
