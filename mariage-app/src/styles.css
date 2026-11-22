@@ -1895,3 +1895,6 @@ div.pr-row{cursor:default}
 .iv-pts i.julien,.iv-head .iv-d.julien{background:color-mix(in srgb,var(--julien) 55%,var(--hero-fg))}
 .iv-pts i.commun,.iv-head .iv-d.commun{background:var(--hero-gold)}
 .iv-av.s-claire,.iv-cote.s-claire{background:var(--claire-soft)}.iv-av.s-julien,.iv-cote.s-julien{background:var(--julien-soft)}
+.iv-pick{display:flex;flex-direction:column;gap:12px}
+.iv-pickl{max-height:min(52vh,420px);overflow:auto}
+.iv-plus{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--accent-soft);color:var(--link);font-size:20px;font-weight:500}

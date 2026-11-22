@@ -14,6 +14,7 @@ test("nom d'un foyer", () => {
   assert.equal(nomFoyer({ personnes: [G("a", "Paul Martin"), G("b", "Léa Martin"), G("c", "Tom Martin", { enfant: true })] }), "Famille Martin");
   assert.equal(nomFoyer({ personnes: [G("a", "Alejandra Ruiz"), G("b", "+1", { plusUn: true })] }), "Alejandra Ruiz et son accompagnant");
   assert.equal(nomFoyer({ nom: "Les Rousselot", personnes: [] }), "Les Rousselot");
+  assert.equal(nomFoyer({ personnes: [G("a", "Inès"), G("b", "Hugo"), G("c", "Nina", { enfant: true })] }), "Inès, Hugo et Nina");
 });
 test("comptes : un +1 compte une place", () => {
   assert.deepEqual(compte([G("a", "Paul"), G("b", "+1", { plusUn: true }), G("c", "Tom", { enfant: true })]), { places: 3, adultes: 2, enfants: 1 });

@@ -36,6 +36,7 @@ export function nomFoyer(f) {
   if (noms.length === 1 && (nommes.length > 2 || f.personnes.some(g => g.enfant))) return `Famille ${nomDeFamille(nommes[0].name)}`;
   if (nommes.length === 1) return `${nommes[0].name} et son accompagnant`;
   if (nommes.length === 2) return `${prenom(nommes[0].name)} et ${nommes[1].name}`;
+  if (nommes.length === 3 && !noms.length) return `${nommes[0].name}, ${nommes[1].name} et ${nommes[2].name}`; // prénoms seuls
   return `${nommes[0].name} et ${nommes.length - 1} autres`;
 }
 

@@ -20,6 +20,8 @@ const UI = {
   // foyer
   unFoyer: (a, e) => `Un foyer · ${a} adulte${a > 1 ? "s" : ""}${e ? ` · ${e} enfant${e > 1 ? "s" : ""}` : ""} · une seule invitation`,
   personnes: "Les personnes", adulte: "Adulte", enfant: "Enfant", plusUn: "+1", prenomADemander: "Prénom à demander", ajouterPersonne: "Ajouter une personne au foyer", ajouterPlus1: "Ajouter un +1",
+  deLaListe: "Ajouter quelqu'un de la liste", choisirT: f => `Ajouter à ${f}`, choisirP: "Touchez les personnes qui font partie de ce foyer.", chercherPers: "Chercher une personne",
+  deja: f => `aujourd'hui avec ${f}`, seul: "seul", aucunePers: "Personne d'autre sur la liste ne correspond.", fermer: "Fermer", lie: (n, f) => `${n} rejoint ${f}`,
   invitesA: "Invités à", moments: [["ceremonie", "Cérémonie"], ["vin", "Vin d'honneur"], ["diner", "Dîner"]],
   envoyer: "Pour les envoyer", adresse: "Adresse postale", tel: "Téléphone", email: "E-mail", nomFoyer: "Nom du foyer", nomFoyerPh: "Ex. Famille Rousselot",
   suivi: "Suivi", etapes: { liste: "Sur la liste", std: "Save-the-date", fairepart: "Faire-part", repondu: "Réponse" }, suiviP: "Touchez l'étape atteinte.",
@@ -101,7 +103,7 @@ export function makeInvites(ctx) {
       <h2 class="iv-nom">${esc(nomFoyer(f))}</h2><p class="ev-note">${esc(UI.unFoyer(c.adultes, c.enfants))}</p>
       <section class="pr-sec"><h3 class="home-h">${UI.personnes}</h3><div class="pr-box">${f.personnes.map(g => `<button class="iv-p ${estPlusUn(g) ? "plus" : ""}" data-edit="guests" data-id="${g.id}">${ini(g, f.side)}
           <span class="pr-rb"><b>${estPlusUn(g) && !String(g.name || "").replace(/^\s*\+\s*1\s*/, "").trim() ? UI.plusUn : esc(g.name)}</b><span>${esc([estPlusUn(g) ? UI.prenomADemander : g.enfant ? UI.enfant : UI.adulte, g.regime].filter(Boolean).join(" · "))}</span></span>${ctx.CHEV}</button>`).join("")}</div>
-        ${S.canWrite ? `<div class="pl-acts"><button class="btn sm" data-act="ivajout" data-id="${esc(f.id)}">${UI.ajouterPersonne}</button><button class="btn sm" data-act="ivplus1" data-id="${esc(f.id)}">${UI.ajouterPlus1}</button></div>` : ""}</section>
+        ${S.canWrite ? `<div class="pl-acts"><button class="btn sm" data-act="ivajout" data-id="${esc(f.id)}">${UI.ajouterPersonne}</button><button class="btn sm" data-act="ivplus1" data-id="${esc(f.id)}">${UI.ajouterPlus1}</button><button class="btn sm" data-act="ivchoisir" data-id="${esc(f.id)}">${UI.deLaListe}</button></div>` : ""}</section>
       <section class="pr-sec"><h3 class="home-h">${UI.invitesA}</h3><div class="iv-moments">${UI.moments.map(([k, l]) => `<button class="chip ${momentOn(k) ? "acc" : ""}" data-act="ivmoment" data-id="${esc(f.id)}" data-k="${k}" aria-pressed="${momentOn(k)}" ${dis}>${l}</button>`).join("")}</div></section>
       <section class="pr-card pl-champs"><h3 class="home-h">${UI.envoyer}</h3>
         <label class="pl-f"><span>${UI.nomFoyer}</span><input data-ivf="nom" data-id="${esc(f.id)}" value="${esc(f.nom || "")}" placeholder="${esc(nomFoyer({ ...f, nom: "" }))}" ${dis}></label>
@@ -140,6 +142,37 @@ export function makeInvites(ctx) {
     S.f.iView = S.f.iFrom === "cercle" ? "cercle" : "main"; ctx.saveF(); ctx.render();
     // annulable : on remet les fiches telles quelles (mêmes identifiants)
     ctx.toastUndo(UI.retire(nomFoyer(f)), async () => { for (const [p, d] of docs) await ctx.setRaw(p, d); if (fdoc) { const { id: _i, ...d } = fdoc; await ctx.setRaw(`foyers/${fdoc.id}`, d); } });
+  }
+
+  /* ---------- Ajouter quelqu'un de la liste à un foyer ---------- */
+  function listeChoix(fid) {
+    const f = foyer(fid); if (!f) return "";
+    const q = ctx.fold(S.ui.ivPickQ || ""), dans = new Set(f.personnes.map(g => g.id)), fs = F();
+    const de = g => fs.find(x => x.personnes.some(y => y.id === g.id));
+    const autres = S.guests.filter(g => !dans.has(g.id) && (!q || ctx.fold([g.name, g.group].join(" ")).includes(q)))
+      .sort((a, b) => ((coteDe(b) === f.side) + ((b.group || "") === f.cercle)) - ((coteDe(a) === f.side) + ((a.group || "") === f.cercle)) || String(a.name).localeCompare(b.name));
+    return autres.length ? autres.slice(0, 60).map(g => { const x = de(g), avec = x && x.personnes.length > 1 ? UI.deja(nomFoyer(x)) : "";
+      return `<button class="iv-p" data-act="ivlier" data-id="${esc(fid)}" data-g="${g.id}">${ini(g)}<span class="pr-rb"><b>${esc(g.name || UI.plusUn)}</b><span>${esc([coteNom(coteDe(g)), g.group, avec].filter(Boolean).join(" · "))}</span></span><span class="iv-plus" aria-hidden="true">+</span></button>`; }).join("")
+      : `<p class="ev-note">${UI.aucunePers}</p>`;
+  }
+  function ouvrirChoix(fid) {
+    const f = foyer(fid); if (!f) return; S.ui.ivPickQ = ""; S.ui.ivPick = fid;
+    ctx.layer(`<div class="ov" data-close="1"><div class="modal iv-pick" role="dialog" aria-modal="true" aria-label="${esc(UI.choisirT(nomFoyer(f)))}"><h3 id="iv-pick-h">${esc(UI.choisirT(nomFoyer(f)))}</h3><p class="ev-note">${UI.choisirP}</p>
+      <label class="sr" for="iv-pick-q">${UI.chercherPers}</label><input id="iv-pick-q" class="iv-q" type="search" autocomplete="off" name="search_q" data-ivpick="1" placeholder="${UI.chercherPers}">
+      <div id="iv-pick-list" class="pr-box iv-pickl">${listeChoix(fid)}</div>
+      <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">${UI.fermer}</button></div></div></div></div>`);
+  }
+  const majChoix = () => { const l = document.getElementById("iv-pick-list"), h = document.getElementById("iv-pick-h"), f = S.ui.ivPick && foyer(S.ui.ivPick);
+    if (l && S.ui.ivPick) l.innerHTML = listeChoix(S.ui.ivPick); if (h && f) h.textContent = UI.choisirT(nomFoyer(f)); };
+  async function lier(id, gid) {
+    const g = S.guests.find(x => x.id === gid); if (!g) return;
+    const fid = await foyerReel(id); if (!fid) return;
+    if (S.ui.ivPick === id) S.ui.ivPick = fid;
+    const avant = g.foyerId ?? null, f = S.foyers.find(x => x.id === fid) || {};
+    if (await ctx.patch("guests", gid, { foyerId: fid })) {
+      ctx.toastUndo(UI.lie(g.name || UI.plusUn, nomFoyer(foyer(fid) || { ...f, personnes: [g] })), () => ctx.patch("guests", gid, { foyerId: avant }));
+      ctx.render(); majChoix();
+    }
   }
 
   /* ---------- Regroupement en foyers ---------- */
@@ -188,6 +221,8 @@ export function makeInvites(ctx) {
         const base = { foyerId: fid, side: f.side || "commun", group: f.cercle || "", rsvp: "attente", ceremonie: true, vin: true, diner: true };
         if (a === "ivplus1") ctx.addDoc("guests", { ...base, name: "+1", plusUn: true, enfant: false, regime: "", table: "" }); else ctx.openEditor("guests", null, base); }); return true;
       case "ivretirer": confirmerRetrait(id); return true;
+      case "ivchoisir": ouvrirChoix(id); return true;
+      case "ivlier": lier(id, t.dataset.g); return true;
       case "ivretirerok": retirer(id); return true;
       case "ivregrouper": regrouper(); return true;
     }
@@ -201,6 +236,8 @@ export function makeInvites(ctx) {
     if (d.ivnom != null) { S.ui.ivNoms = { ...(S.ui.ivNoms || {}), [d.ivnom]: el.value }; return true; }
     return false;
   }
-  function input(el) { if (el.dataset && el.dataset.ivq) { S.f.iq = el.value; ctx.saveF(); ctx.render(); const i = document.getElementById("iv-q"); if (i && document.activeElement !== i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return true; } return false; }
+  function input(el) {
+    if (el.dataset && el.dataset.ivpick) { S.ui.ivPickQ = el.value; majChoix(); return true; }
+    if (el.dataset && el.dataset.ivq) { S.f.iq = el.value; ctx.saveF(); ctx.render(); const i = document.getElementById("iv-q"); if (i && document.activeElement !== i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } return true; } return false; }
   return { vInvites, act, change, input, foyers: F, moment: () => momentDe(F()) };
 }
