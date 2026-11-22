@@ -8,6 +8,7 @@ import {FR as FR_ENVIES} from "../agents/lib/envies/fr.js";
 import {OLD2TILE,METIER2TILE} from "../agents/lib/envies/logic.js";
 import {makeEnvies} from "./envies-ui.js";
 import {makePrest} from "./prestataires-ui.js";
+import {makeBudget,METIER_OPTIONS} from "./budget-ui.js";
 import {etapeOf} from "../agents/lib/prestataires.js";
 import {PRIVES,fusion,estPrive,chemin,resumeSecret,questionSecrete,TUILE_SECRETE} from "../agents/lib/secret.js";
 import {levelDone as levelDoneEnvies} from "../agents/lib/envies/logic.js";
@@ -175,9 +176,9 @@ function capacityFrom(n){
 }
 function alerts(){
   const out=[],d=wDate(),tot=num(S.settings.budgetTotal);
-  const prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
+  const {prevu,signe:engage}=budgetChiffres();
   // le titre dit l'écart, la phrase donne les chiffres
-  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:`${eur(engage-tot)} engagés au-delà du budget`,s:`${eur(engage)} engagés pour ${eur(tot)}.`,go:"budget"});
+  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:`${eur(engage-tot)} signés au-delà du budget`,s:`${eur(engage)} signés pour ${eur(tot)}.`,go:"budget"});
   else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:`${eur(prevu-tot)} au-dessus du budget`,s:`${eur(prevu)} prévus pour ${eur(tot)}.`,go:"budget"});
   const guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
   S.vendors.filter(v=>v.status!=="ecarte").forEach(v=>{
@@ -275,7 +276,7 @@ function todoCards(al){
 function todoShort(c){
   const a=c.a||{},v=a.v,pl=(n,s,p)=>`${n} ${n>1?p:s}`;
   switch(c.k){
-    case "budget":return /engag/.test(a.t||"")?[`+${eur(a.over)} engagés`,"Au-delà du budget"]:[`+${eur(a.over)} sur le budget`,"À trouver ou à couper"];
+    case "budget":return /sign/.test(a.t||"")?[`+${eur(a.over)} signés`,"Au-delà du budget"]:[`+${eur(a.over)} sur le budget`,"À trouver ou à couper"];
     case "complet":return [`${v.name} complet ?`,"À vérifier ou à écarter"];
     case "cap":return [`${v.name} trop petit`,"Capacité à vérifier"];
     case "devis":return [`Devis ${v.name} +${eur(a.px-num(a.line.prevu))}`,"À négocier ou comparer"];
@@ -300,7 +301,7 @@ const TV_IC={mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11
 // Visuel d'un point « À faire » selon son type
 function todoVis(c){
   const a=c.a||{};
-  if(c.k==="budget"){const tot=num(S.settings.budgetTotal),sum=k=>S.budget.reduce((s,b)=>s+num(b[k]),0),val=/engag/.test(a.t||"")?sum("engage"):sum("prevu");return ringV(tot?val/tot*100:0)}
+  if(c.k==="budget"){const tot=num(S.settings.budgetTotal),bc=budgetChiffres(),val=/sign/.test(a.t||"")?bc.signe:bc.prevu;return ringV(tot?val/tot*100:0)}
   if(c.k==="rdv"){const d=pd(a.r.date);return `<span class="tv-cal"><small>${esc(d.toLocaleDateString("fr-FR",{month:"short"}))}</small><b class="num">${d.getDate()}</b></span>`}
   if(c.k==="late")return `<span class="tv-num bad"><b class="num">${S.tasks.filter(isLate).length}</b></span>`;
   if(c.k==="sugs")return `<span class="tv-num gold">${SVG(TV_IC.mail)}<b class="num">${a.n}</b></span>`;
@@ -385,7 +386,7 @@ function weddingTiles(){
   const nt=S.tasks.filter(t=>t.status!=="done"&&taskDue(t)&&taskDue(t)>=t0).sort((a,b)=>taskDue(a)-taskDue(b))[0];
   const nr=S.rdv.filter(r=>r.date&&pd(r.date)>=t0).sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")))[0];
   const next=[nt&&{t:nt.title,d:taskDue(nt)},nr&&{t:nr.title,d:pd(nr.date)}].filter(Boolean).sort((a,b)=>a.d-b.d)[0];
-  const tot=num(S.settings.budgetTotal),prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
+  const tot=num(S.settings.budgetTotal),{prevu,signe:engage}=budgetChiffres();
   const ref=tot||prevu,pct=ref?engage/ref*100:0;
   const g=S.guests,ans=g.filter(x=>x.rsvp==="oui"||x.rsvp==="non").length,steps=S.schedule.length,{ready}=briefsState();
   // visuels (décor, masqués aux lecteurs d'écran)
@@ -399,7 +400,7 @@ function weddingTiles(){
   const tile=(o)=>`<button class="wt ${o.empty?"empty":""}" ${o.go} aria-label="${esc(o.aria)}"><span class="wt-vis" aria-hidden="true">${o.vis}</span><span class="wt-big" aria-hidden="true">${o.big}</span><span class="wt-line" aria-hidden="true">${o.empty?`<span class="wt-go">Commencer</span>`:o.line}</span></button>`;
   return `<div class="wt-grid">
     ${tile({empty:!act.length,go:!act.length&&S.canWrite?'data-new="vendors"':'data-go="prestataires"',vis:act.length?`<span class="avs">${avat}</span>`:`<span class="avs"><span class="av"></span><span class="av"></span><span class="av"></span></span>`,big:act.length?`<span class="num">${act.length}</span>`:"Prestataires",line:res?pl(res,"réservé","réservés"):"Prestataires",aria:act.length?`Prestataires : ${act.length} suivis, ${res} réservés`:"Prestataires : commencer"})}
-    ${tile({empty:!ref,go:'data-go="budget"',vis:ringV(pct,52,engage>0),big:`<span class="num">${kEur(prevu||tot)}</span>`,line:engage?`<span class="${pct>100?"over":""}">${Math.round(pct)} % engagé</span>`:"Budget prévu",aria:ref?`Budget : ${eur(prevu||tot)} prévus, ${Math.round(pct)} % engagé`:"Budget : commencer"})}
+    ${tile({empty:!ref,go:'data-go="budget"',vis:ringV(pct,52,engage>0),big:`<span class="num">${kEur(prevu||tot)}</span>`,line:engage?`<span class="${pct>100?"over":""}">${Math.round(pct)} % signé</span>`:"Budget prévu",aria:ref?`Budget : ${eur(prevu||tot)} prévus, ${Math.round(pct)} % signé`:"Budget : commencer"})}
     ${tile({empty:!g.length,go:'data-go="invites"',vis:dots,big:ans?`<span class="num">${ans} / ${g.length}</span>`:`<span class="num">${g.length}</span>`,line:ans?"Invités ont répondu":"Invités · réponses à venir",aria:g.length?`Invités : ${ans} réponses sur ${g.length}`:"Invités : commencer"})}
     ${tile({empty:!S.tasks.length&&!S.rdv.length,go:'data-go="planning"',vis:bars,big:"Planning",line:late?`<span class="over">${late} en retard</span>`:next?`${esc(whenShort(next.d))} · ${esc(next.t)}`:"Rien de daté à venir",aria:`Planning : ${late?`${late} en retard`:next?`prochain, ${next.t}, ${whenShort(next.d)}`:"rien de daté à venir"}`})}
     ${tile({empty:!steps,go:'data-go="jour-j"',vis:frise,big:"Jour J",line:pl(steps,"étape","étapes"),aria:steps?`Jour J : ${pl(steps,"étape","étapes")}`:"Jour J : commencer"})}
@@ -548,7 +549,7 @@ function renderBnav(){
   // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
-  document.body.classList.toggle("on-prest",S.view==="prestataires");
+  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"); // Budget : même modèle de page (en-tête propre)
   {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv))))}
 }
 function renderTabs(){
@@ -656,39 +657,13 @@ function vAgenda(){
 }
 
 /* ---------- Budget ---------- */
-function vBudget(){
-  const tot=num(S.settings.budgetTotal);
-  const rows=S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)||String(a.label).localeCompare(b.label));
-  const sum=k=>rows.reduce((s,b)=>s+num(b[k]),0);
-  const prevu=sum("prevu"),engage=sum("engage"),paye=sum("paye");
-  const marge=tot?tot-Math.max(prevu,engage):null;
-  const resv=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
-  const strip=`<div class="strip">
-    <div class="kpi t1"><div><div class="k">Budget total</div><div class="v num">${tot?eur(tot):"—"}</div><div class="s">${S.canWrite?`<button class="chip acc" data-act="budgettot">${tot?"Modifier":"Le fixer"}</button>`:""}</div></div></div>
-    <div class="kpi t2"><div><div class="k">Prévu</div><div class="v num">${eur(prevu)}</div><div class="s">Somme des postes</div></div></div>
-    <div class="kpi t3"><div><div class="k">Engagé</div><div class="v num">${eur(engage)}</div><div class="s">Payé ${eur(paye)} · reste ${eur(Math.max(0,engage-paye))}</div></div></div>
-    <div class="kpi ${marge!==null&&marge<0?"":"t4"}" style="${marge!==null&&marge<0?"background:var(--bad-soft)":""}"><div><div class="k">Marge</div><div class="v num" style="${marge!==null&&marge<0?"color:var(--bad)":""}">${marge===null?"—":eur(marge)}</div><div class="s">${marge===null?"Selon le budget total":marge<0?"Au-dessus du budget":"Encore disponible"}</div></div></div>
-  </div>`;
-  const gap=resv-engage;
-  const ref=tot||prevu;
-  const yes=S.guests.filter(x=>x.rsvp==="oui").length,guestsBase=yes||num(S.settings.invitesCible)||S.guests.length;
-  const perGuest=guestsBase?(engage||prevu)/guestsBase:0;
-  // Liste (lisible sur téléphone) : poste, part du budget calculée en direct, prévu à droite, engagé/payé en dessous
-  const body=rows.map(b=>{
-    const p=num(b.prevu),e=num(b.engage),pa=num(b.paye),over=e>p&&p>0;
-    const note=budgetNote(b.note),share=ref&&p?`${Math.round(p/ref*100)} % du budget`:"";
-    return `<div class="brow" data-edit="budget" data-id="${b.id}" role="button" tabindex="0">
-      <div class="brow-main"><div class="brow-t">${esc(b.label)}</div>${share||note?`<div class="brow-s">${esc([share,note].filter(Boolean).join(" · "))}</div>`:""}</div>
-      <div class="brow-end"><b class="num">${p?eur(p):'<span class="na">—</span>'}</b>${e||pa?`<span class="num ${over?"over":""}">${e?"engagé "+eur(e):""}${e&&pa?" · ":""}${pa?"payé "+eur(pa):""}</span>`:""}</div></div>`;
-  }).join("");
-  return `<div class="vh"><div><h2>Budget</h2><p>Prévu = enveloppe du poste · Engagé = devis signés · Payé = acomptes et soldes versés.</p></div>
-    <button class="btn primary" data-new="budget" ${S.canWrite?"":"disabled"}>Ajouter un poste</button></div>
-  ${strip}
-  ${payments().length?paymentsPanel():""}
-  ${gap>0?`<div class="banner warn">Les prestataires réservés totalisent ${eur(resv)}, soit ${eur(gap)} de plus que l'engagé du budget. Pensez à reporter les devis signés.</div>`:""}
-  ${rows.length?`<div class="list blist2">${body}<div class="brow total"><div class="brow-main"><div class="brow-t">Total</div>${tot||perGuest?`<div class="brow-s">${[tot?`${eur(prevu)} prévus pour ${eur(tot)} de budget`:"",perGuest?`${eur(perGuest)} par invité`:""].filter(Boolean).join(" · ")}</div>`:""}</div><div class="brow-end"><b class="num ${tot&&prevu>tot?"over":""}">${eur(prevu)}</b>${engage||paye?`<span class="num">engagé ${eur(engage)} · payé ${eur(paye)}</span>`:""}</div></div></div>`
-  :emptyBlock("Aucun poste de budget","Ajoutez vos postes : lieu, traiteur, photographe…")}`;
-}
+// docs/budget-planning-v1.md (lot 1) : la page et un poste ouvert dans src/budget-ui.js, règles dans agents/lib/budget.js
+function vBudget(){return bu().vBudget()}
+let BU=null;
+const bu=()=>BU||(BU=makeBudget({S,esc,eur,tintOf,initials,BACK_SVG,CHEV,today,payments,emptyBlock,saveF,render,go,patch,toastUndo,prenom,
+  vendorsVisibles:()=>S.vendors,metaTuile:k=>env().metaOf(k)}));
+// Chiffres du budget (prévu, signé, payé, par invité) : les mêmes partout (page, accueil, alertes, rapport PDF)
+const budgetChiffres=()=>bu().chiffres();
 
 /* ---------- Guests ---------- */
 function guestFiltered(){
@@ -1389,7 +1364,7 @@ function pdfJourJ(){
 }
 function pdfReport(){
   const st=S.settings,d=wDate(),tot=num(st.budgetTotal),pr=S.profil||{};
-  const sum=k=>S.budget.reduce((a,b)=>a+num(b[k]),0),prevu=sum("prevu"),engage=sum("engage"),paye=sum("paye");
+  const BC=budgetChiffres(),prevu=BC.prevu,engage=BC.signe,paye=BC.paye;
   const done=S.tasks.filter(t=>t.status==="done").length,late=S.tasks.filter(isLate);
   const next=S.tasks.filter(t=>t.status!=="done").sort((a,b)=>{const da=taskDue(a),db=taskDue(b);return (da?+da:9e15)-(db?+db:9e15)||byOrder(a,b)}).slice(0,12);
   const g=S.guests,yes=g.filter(x=>x.rsvp==="oui").length,no=g.filter(x=>x.rsvp==="non").length;
@@ -1398,13 +1373,13 @@ function pdfReport(){
   const al=alerts(),rdv=S.rdv.filter(r=>r.date&&pd(r.date)>=today()).sort((a,b)=>a.date.localeCompare(b.date));
   const n=d?days(today(),d):null;
   const blocks=[
-    {kpis:[["Jour J",n!=null?`J-${n}`:"—",d?fmtD(d):"date à fixer"],["Préparation",`${done}/${S.tasks.length}`,late.length?`${late.length} en retard`:"rien en retard"],["Budget",tot?eur(tot):"—",`${eur(prevu)} prévus · ${eur(engage)} engagés`],["Invités",String(g.length),`${yes} présents · ${g.length-yes-no} en attente`]]},
+    {kpis:[["Jour J",n!=null?`J-${n}`:"—",d?fmtD(d):"date à fixer"],["Préparation",`${done}/${S.tasks.length}`,late.length?`${late.length} en retard`:"rien en retard"],["Budget",tot?eur(tot):"—",`${eur(prevu)} prévus · ${eur(engage)} signés`],["Invités",String(g.length),`${yes} présents · ${g.length-yes-no} en attente`]]},
   ];
   if(pr.resume){blocks.push({h2:"La synthèse du coach"},{p:pr.resume});if(Array.isArray(pr.priorites)&&pr.priorites.length)blocks.push({ul:pr.priorites.slice(0,6).map(x=>x.phrase||"")});
     if(Array.isArray(pr.divergences)&&pr.divergences.length)blocks.push({h3:"Points à aligner entre vous"},{ul:pr.divergences.map(x=>(x.sujet||"")+(x.conseil?" : "+x.conseil:""))})}
   if(al.length)blocks.push({h2:"À regarder"},{alerts:al.map(a=>[a.lvl,a.t,a.s])});
   blocks.push({h2:"Prochaines tâches"},{table:{head:["Tâche","Échéance","Qui"],widths:[null,28,24],body:next.map(t=>{const du=taskDue(t);return [t.title+(t.status==="doing"?" (en cours)":"")+(isLate(t)?" — en retard":""),du?fmtD(du):"—",OWNERS[t.owner||"deux"]]})}});
-  blocks.push({h2:"Budget"},{table:{head:["Poste","Prévu","Engagé","Payé"],widths:[null,26,26,26],right:[1,2,3],body:S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)).map(b=>[b.label+((tot||prevu)&&num(b.prevu)?` (${Math.round(num(b.prevu)/(tot||prevu)*100)} %)`:""),b.prevu?eur(b.prevu):"—",b.engage?eur(b.engage):"—",b.paye?eur(b.paye):"—"]),
+  blocks.push({h2:"Budget"},{table:{head:["Poste","Prévu","Signé","Payé"],widths:[null,26,26,26],right:[1,2,3],body:BC.postes.slice().sort((a,b)=>b.prevu-a.prevu).map(p=>[p.b.label+((tot||prevu)&&p.prevu?` (${Math.round(p.prevu/(tot||prevu)*100)} %)`:""),p.prevu?eur(p.prevu):"—",p.signe?eur(p.signe):"—",p.paye?eur(p.paye):"—"]),
     foot:[`Total${tot?` (budget ${eur(tot)}, marge ${eur(tot-Math.max(prevu,engage))})`:""}`,eur(prevu),eur(engage),eur(paye)]}});
   blocks.push({h2:"Prestataires"});
   cats.forEach(c=>{blocks.push({h3:c},{table:{head:["Prestataire","Note","Avis du coach"],widths:[52,16,null],boldFirst:true,body:S.vendors.filter(v=>v.cat===c).sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1)).map(v=>{const f=v.fit||{};
@@ -1724,7 +1699,8 @@ const SCHEMAS={
     {k:"tenue",label:"Rendez-vous de tenue (secret : l'autre ne voit que « Rendez-vous tenue », la date et l'heure)",type:"check"}]},
   budget:{one:"le poste",fields:[
     {k:"label",label:"Poste",type:"text",req:1},
-    {row:[{k:"prevu",label:"Prévu (€)",type:"number"},{k:"engage",label:"Engagé (€)",type:"number"}]},
+    {k:"metier",label:"Métier (relie le poste à ses prestataires)",type:"select",options:METIER_OPTIONS,def:""},
+    {row:[{k:"prevu",label:"Enveloppe prévue (€)",type:"number"},{k:"engage",label:"Signé (€)",type:"number"}]},
     {row:[{k:"paye",label:"Déjà payé (€)",type:"number"},{k:"order",label:"Ordre d'affichage",type:"number"}]},
     {k:"note",label:"Notes",type:"textarea"}]},
   guests:{one:"l'invité",fields:[
@@ -1868,8 +1844,9 @@ document.addEventListener("click",async e=>{
   if(t.dataset.go&&t.dataset.racine){const k=t.dataset.go;
     if(k==="envies"){env().leaveTile();S.f.envView="main"}
     if(k==="prestataires"){S.f.pView="main";S.f.pSearch=false;S.f.pq=""}
+    if(k==="budget")S.f.bView="main";
     saveF();go(k);window.scrollTo(0,0);return}
-  if(t.dataset.go){go(t.dataset.go);return}
+  if(t.dataset.go){if(t.dataset.go==="budget"&&S.view!=="budget")S.f.bView="main";go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
   // ouvre la page d'une tuile de « Nos envies » (data-bgo : clé de tuile)
   if(t.dataset.bgo||t.dataset.bcat){S.f.envView="tile";S.f.envTile=t.dataset.bgo||t.dataset.bcat;saveF();go("envies");return}
@@ -1879,6 +1856,7 @@ document.addEventListener("click",async e=>{
   if(t.dataset.f){S.f[t.dataset.f]=t.dataset.v;saveF();if(t.dataset.f.startsWith("g")){renderInvitesPart()}else render();return}
   const a=t.dataset.act,id=t.dataset.id;
   if(a&&pr().act(a,t))return; // gestes de « Prestataires » (src/prestataires-ui.js)
+  if(a&&bu().act(a,t))return; // gestes du « Budget » (src/budget-ui.js)
   if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
   if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;await patch("tasks",id,{status:k.status==="done"?"todo":"done"});return}
   if(a==="rsvp"){if(S.canWrite)openRsvp(id);return}
@@ -1983,6 +1961,7 @@ document.addEventListener("input",e=>{if(pr().input(e.target))return;if(env().in
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
   const el=e.target;
+  if(bu().change(el))return; // enveloppe d'un poste saisie directement
   if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
   if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
@@ -1997,6 +1976,7 @@ document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.tar
 document.addEventListener("submit",async e=>{
   const f=e.target;
   if(env().submit(f)){e.preventDefault();return}
+  if(f.dataset.budep){e.preventDefault();bu().submit(f);return} // dépense hors prestataire d'un poste
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
