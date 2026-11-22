@@ -17,7 +17,7 @@ test("tenue secrète : ce qui va dans l'espace privé", () => {
 test("fusion : ma réponse privée prend la place de p.<moi>, mes documents privés s'ajoutent", () => {
   const A = fusion("envies", [{ id: "tenues.style", libre: "commun" }, { id: "lieu.type", v: ["chateau"] }], [{ id: "tenues.style", v: ["boheme"], by: "x" }, { id: "tenues.ou", vu: true }], "claire");
   const st = A.find(d => d.id === "tenues.style");
-  assert.deepEqual(st.p.claire, { v: ["boheme"] }); assert.equal(st.libre, "commun"); assert.equal(st._prive, true);
+  assert.deepEqual(st.p.claire, { v: ["boheme"] }); assert.equal(st.libre, undefined); assert.equal(st._prive, true); // texte commun d'une question secrète : ignoré
   assert.equal(A.find(d => d.id === "tenues.ou").p.claire.vu, true);
   const vs = fusion("vendors", [{ id: "a", cat: "Lieu" }], [{ id: "b", cat: "Tenues" }], "claire");
   assert.deepEqual(vs.map(v => [v.id, !!v._prive]), [["a", false], ["b", true]]);
@@ -43,4 +43,12 @@ test("brief tenue : mes réponses seulement, jamais celles de l'autre ni le budg
   const txt = JSON.stringify(e);
   assert.ok(txt.includes("boheme") && txt.includes("assortis") && txt.includes('"importance":4'));
   assert.ok(!txt.includes("smoking") && !txt.includes("julien") && !txt.includes("3000") && !txt.includes("chateau"));
+});
+test("question secrète : un contenu commun (ancien texte des deux tenues) est ignoré partout", () => {
+  const e = fusion("envies", [{ id: "tenues.style", v: ["a"], libre: "robe X, smoking Y", p: { julien: { v: ["moderne"] } } }, { id: "tenues.temoins", v: ["assortis"] }], [{ id: "tenues.style", v: ["boheme"] }], "claire");
+  const st = e.find(d => d.id === "tenues.style");
+  assert.equal(st.libre, undefined); assert.equal(st.v, undefined); assert.deepEqual(st.p.claire.v, ["boheme"]);
+  assert.deepEqual(e.find(d => d.id === "tenues.temoins").v, ["assortis"]); // les questions communes de la tuile restent
+  const txt = JSON.stringify(enviesTenueDe([{ id: "tenues.style", libre: "robe X, smoking Y" }], [{ id: "tenues.style", v: ["boheme"] }], "claire"));
+  assert.ok(!txt.includes("smoking"));
 });

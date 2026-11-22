@@ -17,7 +17,8 @@ export function enviesForAI(envies = [], brief = [], noms = {}) {
       const d = A[q.id]; if (!d) continue;
       const libelle = FR.questions[q.id].libelle;
       if (q.parPartenaire) {
-        if (hasValue({ libre: d.libre })) reponses.push({ question: libelle, reponse: d.libre });
+        // question secrète (tenue) : seules les réponses de chacun (p) comptent, jamais un texte commun
+        if (!q.secret && hasValue({ libre: d.libre })) reponses.push({ question: libelle, reponse: d.libre });
         for (const [k, nom] of [["claire", noms.p1], ["julien", noms.p2]]) { const a = (d.p || {})[k]; if (hasValue(a)) reponses.push({ question: `${libelle} (${nom || k})`, reponse: answerText(q, a, FR) }); }
       } else if (hasValue(d)) reponses.push({ question: libelle, niveau: q.niveau, reponse: answerText(q, d, FR) });
     }

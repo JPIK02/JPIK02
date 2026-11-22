@@ -28,8 +28,9 @@ export function estPrive(col, data = {}, { montre = false } = {}) {
 /** Fusion de l'espace commun et de mon espace privé, pour l'affichage. Les documents privés portent `_prive`. */
 export function fusion(col, commun = [], prive = [], me) {
   if (col === "envies") {
-    // une réponse privée est la mienne : elle prend la place de p.<moi> sur la question
-    const out = commun.map(d => ({ ...d })), by = Object.fromEntries(out.map(d => [d.id, d]));
+    // une réponse privée est la mienne : elle prend la place de p.<moi> sur la question ;
+    // sur une question secrète, un contenu commun (v, libre, cu, extra) n'est jamais légitime : il est ignoré (il pourrait mêler les deux tenues)
+    const out = commun.map(d => { if (!questionSecrete(d.id)) return { ...d }; const { v, libre, cu, extra, ...reste } = d; return reste; }), by = Object.fromEntries(out.map(d => [d.id, d]));
     for (const p of prive) {
       const { id, by: _b, updatedAt, ...rep } = p;
       if (by[id]) by[id].p = { ...(by[id].p || {}), [me]: rep };
