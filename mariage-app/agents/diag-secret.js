@@ -18,7 +18,6 @@ const h = t => (t ? new Date(+t).toISOString().slice(0, 16).replace("T", " ") : 
 console.log(`Synthèse : demandée ${h(analyse.profilRequestedAt)} · réécrite ${h(profil.updatedAt)}${+analyse.profilRequestedAt > (+profil.updatedAt || 0) ? " → PAS ENCORE" : " → à jour"}`);
 console.log(`Briefs communs : demandés ${h(briefs.requestedAt)} · réécrits ${h(briefs.updatedAt)} · statut ${briefs.status || "—"}${briefs.lastError ? " · erreur au dernier passage" : ""}${+briefs.requestedAt > (+briefs.updatedAt || 0) ? " → PAS ENCORE" : " → à jour"}`);
 // mots de tenue légitimes (code vestimentaire des invités, tenues des témoins : questions communes) : on ne compte que les mots propres aux tenues des mariés
-const maries = /\b(robe de mari[ée]e|ma robe|sa robe|robe de claire|costume de julien|son costume|mon costume|smoking)\b/i;
+const maries = /\b(robe de mari[ée]e|ma robe|sa robe|son costume|mon costume|smoking)\b/i;
 console.log(`Tenue des mariés nommée : synthèse ${maries.test(champs(profil)) ? "oui" : "non"} · fil rouge ${maries.test(champs(briefs.filRouge)) ? "oui" : "non"} · briefs par catégorie ${Object.entries(briefs.categories || {}).filter(([k, v]) => k !== TUILE_SECRETE && maries.test(champs(v))).length}`);
-console.log(`Budget IA du mois dépassé (passages automatiques arrêtés) : à vérifier dans Réglages si rien ne bouge · niveau ${JSON.stringify((ia && ia.niveaux) ? Object.keys(ia.niveaux).length : 0)} réglage(s)`);
 process.exit(0);
