@@ -6,7 +6,8 @@ rules_version = '2';
 //
 // Tenue secrète (docs/nos-envies-v1.md 6.8, docs/prestataires-v1.md 6.9) : chaque partenaire a un espace
 // privé `prive/<claire|julien>/...`, lisible et modifiable par lui seul ; la conversation de chacun avec
-// le coach (`chats/<e-mail>`) aussi. Tout le reste est commun au couple.
+// le coach (`chats/<e-mail>`) aussi. Les sauvegardes d'avant migration (`sauvegardes`, qui peuvent contenir une tenue
+// secrète) et la clé privée des notifications (`private`) ne sont lisibles que par les agents. Tout le reste est commun au couple.
 service cloud.firestore {
   match /databases/{database}/documents {
     function email() {
@@ -25,9 +26,9 @@ service cloud.firestore {
     function partenaire() {
       return email() == 'julienpicquet@gmail.com' ? 'julien' : 'claire';
     }
-    // espace commun : toutes les collections sauf l'espace privé et les conversations
+    // espace commun : toutes les collections sauf l'espace privé, les conversations et ce que seuls les agents lisent
     match /{col}/{document=**} {
-      allow read, write: if isCouple() && col != 'prive' && col != 'chats';
+      allow read, write: if isCouple() && !(col in ['prive', 'chats', 'sauvegardes', 'private']);
     }
     // espace privé : seulement son propriétaire
     match /prive/{qui}/{document=**} {

@@ -73,7 +73,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -987,13 +987,18 @@ function briefsPanel(c){
     <p class="plan-when" style="margin:0 0 12px">${running?"Le coach rédige vos briefs : un fil rouge commun puis un brief par prestataire. Environ deux minutes, vous recevrez une notification."
       :ready?`${esc(b.filRouge.titre||"")}${b.filRouge.titre?" · ":""}rédigés le ${esc(when)}.${stale?" Vos réponses ou vos inspirations ont changé depuis.":""} Le même fil rouge ouvre chaque brief : tous vos prestataires partent de la même vision.`
       :"Le coach compile vos réponses et vos inspirations en un fil rouge commun (ambiance, palette, matières, ce que vous ne voulez pas), puis en un brief par prestataire, avec les questions à leur poser. À envoyer en PDF avant chaque échange."}</p>
-    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
+    ${c===null&&S.briefPrive?`<p class="plan-when" style="margin:0 0 8px"><button class="chip" data-act="briefpdf" data-c="${TUILE_SECRETE}">Ma tenue (secret)</button> Le brief de votre tenue, que ${esc(prenomDe2(autreKey()))} ne voit pas.</p>`:""}
+    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]&&!briefPriveDe(k)).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
       ${failed?`<p class="brief-err">La rédaction a échoué : ${esc(/credit balance/i.test(b.lastError||"")?"le crédit Claude est épuisé (à recharger sur console.anthropic.com).":b.lastError||"erreur inconnue.")} Vous pouvez réessayer.</p>`:""}
       ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
 }
 // Briefs là où l'on contacte les prestataires : dans la fiche (brief du métier) et en tête de la page Prestataires (tous)
 function ficheBrief(qk){
   if(!qk||!BRIEF_LABEL[qk])return "";
+  if(qk===TUILE_SECRETE&&!secretLeve()){const {b,running}=briefTenueState();
+    return `<div class="fsec fiche-brief"><h4>Brief à lui envoyer</h4>${b?`<button class="btn" data-act="briefpdf" data-c="${qk}">Brief de ma tenue (PDF)</button>`
+      :running?`<p class="plan-when" style="margin:0">Le coach rédige le brief de votre tenue : environ une minute.</p>`
+      :S.canWrite?`<p class="plan-when" style="margin:0 0 8px">Le brief résume vos envies de tenue, avec les questions à poser. ${esc(prenomDe2(autreKey()))} ne le verra pas.</p><button class="btn" data-act="brieftenue">Préparer mon brief tenue</button>`:""}</div>`}
   const {b,running,ready}=briefsState(),one=ready&&b.categories[qk];
   return `<div class="fsec fiche-brief"><h4>Brief à lui envoyer</h4>${one?`<button class="btn" data-act="briefpdf" data-c="${qk}">Brief ${esc(BRIEF_LABEL[qk])} (PDF)</button>`
     :running?`<p class="plan-when" style="margin:0">Le coach rédige vos briefs : environ deux minutes.</p>`
@@ -1016,26 +1021,34 @@ function openBriefsMenu(){
 }
 const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
 function briefBlocks(k){
-  const b=S.briefs,x=b.categories[k];if(!x)return [];
+  const x=briefCat(k),prive=!!briefPriveDe(k);if(!x)return [];
   // budget : seulement le « budget cible » que vous avez choisi d'indiquer dans Nos envies (jamais vos lignes de budget)
-  const m=Object.assign({},bMeta(k),env().metaOf(OLD2TILE[k]||k)),bud=num(m.budget);
+  const m=prive?{}:Object.assign({},bMeta(k),env().metaOf(OLD2TILE[k]||k)),bud=num(m.budget);
   const d=wDate(),st=S.settings;
   const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
-  const imgs=S.inspirations.filter(i=>(i.cat===k||inspTile(i)===(OLD2TILE[k]||k))&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  // brief de ma tenue : mes seules photos, à la première personne, sans invités ni budget
+  const imgs=S.inspirations.filter(i=>(i.cat===k||inspTile(i)===(OLD2TILE[k]||k))&&i.thumb&&(!prive||i._prive)).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  const kd=[["Date",d?fmtD(d):"à fixer",d&&st.dateIndicative?"indicative, à confirmer":""],["Lieu",st.lieu||"à définir",st.ville||""]];
+  if(prive)return [{h2:"Brief · Tenue de "+prenom()},{kpis:kd},
+    {p:x.intention},...list("Mes essentiels",x.essentiels),...list("Ma tenue, dans le détail",x.details),...list("Ce que je ne veux pas",x.aEviter),
+    ...list("En accord avec notre mariage",x.liens),...list("Mes questions pour vous",x.questions),
+    ...(imgs.length?[{h3:"Mes inspirations"},{imgs}]:[])];
   return [{h2:"Brief · "+BRIEF_LABEL[k]},
-    {kpis:[["Date",d?fmtD(d):"à fixer",d&&st.dateIndicative?"indicative, à confirmer":""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
+    {kpis:[...kd,["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
     {p:x.intention},...list("Nos essentiels",x.essentiels),...list("L'ambiance, dans le détail",x.details),...list("Ce que nous ne voulons pas",x.aEviter),
     ...list("En accord avec nos autres prestataires",x.liens),...list("Nos questions pour vous",x.questions),
     ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
 }
 function filRougeBlocks(){
-  const f=S.briefs.filRouge||{},list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
+  const f=(S.briefs||{}).filRouge||{},list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
   const imgs=S.inspirations.filter(i=>i.cat==="vision"&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
   return [{h2:"Notre fil rouge"},...(f.titre?[{h3:f.titre}]:[]),{p:f.ambiance||""},...(f.motsCles&&f.motsCles.length?[{tags:f.motsCles}]:[]),
     ...list("Palette",f.palette),...list("Matières et textures",f.matieres),...list("L'expérience de nos invités",f.experience),...list("Ce que nous ne voulons surtout pas",f.aEviter),
     ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
 }
 function pdfBriefs(k){
+  if(briefPriveDe(k)){const fr=(S.briefs||{}).filRouge?filRougeBlocks():[];if(fr.length)fr[0]={h2:"Notre vision d'ensemble du mariage"};
+    return makePdf(`Brief tenue - ${prenom()}.pdf`,{docTitle:"Brief · Tenue de "+prenom(),blocks:[...briefBlocks(k).slice(1),...fr]})}
   const b=S.briefs;if(!b||!b.categories)return;
   if(k==="all"){const ks=Object.keys(BRIEF_LABEL).filter(x=>b.categories[x]);
     return makePdf(`Briefs prestataires - ${COUPLE()}.pdf`,{docTitle:"Nos briefs prestataires",blocks:[...filRougeBlocks(),...ks.flatMap(x=>[{page:true},...briefBlocks(x)])]})}
@@ -1046,20 +1059,28 @@ function pdfBriefs(k){
 /* Onglet « Nos envies » : écrans dans src/envies-ui.js, catalogue et règles dans agents/lib/envies (docs/nos-envies-v1.md) */
 let ENV=null;
 const env=()=>ENV||(ENV=makeEnvies({S,esc,toast,headTop:envHeadTop,secretLeve,leverSecret,autreKey,prenomAutre:()=>prenomDe2(autreKey()),meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
-  briefsReadyCount:()=>{const {b,ready}=briefsState();return ready?Object.keys(b.categories).length:0},briefFor,fitPill,synthHtml,archivedAnswers,moodboard,
+  briefTenue:()=>briefTenueState(),briefsReadyCount:()=>{const {b,ready}=briefsState();return ready?Object.keys(b.categories).length:0},briefFor,fitPill,synthHtml,archivedAnswers,moodboard,
   pickPhoto:pickEnviePhoto,dictate,saveEnvie,render,go,saveF,SR,CHEV,BACK_SVG,runReward,saveDoc:(path,data)=>mergeDoc(path,data)}));
 // Récompense de fin de niveau (agent « recompense » côté serveur) ; si l'appel échoue, le passage suivant des agents la reprend
 async function runReward(tuile,niveau){
   if(!S.canWrite)return;
   await mergeDoc(`recompenses/${tuile}.${niveau}`,{tuile,niveau,status:"demandee",requestedAt:Date.now(),erreur:null});
   // tuile Tenues : la récompense est rédigée dans mon espace privé, à partir de mes seules réponses
-  const pour=tuile===TUILE_SECRETE&&!secretLeve()?MOI():undefined;
+  const pour=tuile===TUILE_SECRETE&&(!secretLeve()||niveau==="details")?MOI():undefined; // le brief tenue reste toujours privé
   runAgentNow("recompense",{tuile,niveau,...(pour?{pour}:{})}).catch(()=>{});
 }
 function vEnvies(){return env().vEnvies()}
 // Brief déjà rédigé (catégories de l'agent briefs) correspondant à une tuile
 const TILE2BRIEF={lieu:"lieu",repas:"traiteur",cocktail:"traiteur",photo:"photo",video:"video",musique:"musique",fleurs:"fleurs",papeterie:"papeterie",tenues:"tenues",beaute:"beaute",ceremonie:"ceremonie",officiant:"ceremonie",invites:"hebergement"};
-function briefFor(k){const {b,ready}=briefsState();if(!ready)return null;if(b.categories[k])return k;const c=TILE2BRIEF[k];return c&&b.categories[c]?c:null}
+function briefFor(k){if((TILE2BRIEF[k]||k)===TUILE_SECRETE&&S.briefPrive)return TUILE_SECRETE;
+  const {b,ready}=briefsState();if(!ready)return null;if(b.categories[k])return k;const c=TILE2BRIEF[k];return c&&b.categories[c]?c:null}
+// tenue secrète : brief de mon espace privé (jamais celui de l'autre, jamais dans meta/briefs)
+const briefPriveDe=k=>k===TUILE_SECRETE&&S.briefPrive?S.briefPrive:null;
+const briefCat=k=>briefPriveDe(k)||(S.briefs&&S.briefs.categories||{})[k];
+function briefTenueState(){const b=S.briefPrive,now=Date.now(),r=+S.ui.briefTenueAt||0;return {b,running:r>(b&&b.updatedAt||0)&&now-r<10*60000}}
+async function demanderBriefTenue(){if(!S.canWrite||briefTenueState().running)return;S.ui.briefTenueAt=Date.now();render();
+  toast(`Le coach rédige le brief de votre tenue : environ une minute. ${prenomDe2(autreKey())} ne le verra pas.`);
+  try{const r=await runAgentNow("brieftenue");if(r&&r.ok===false)throw new Error(r.erreur)}catch(e){S.ui.briefTenueAt=0;toast("Le brief n'a pas pu être rédigé : "+(e.message||"erreur"));render()}}
 function fitPill(v){const fi=v.fit||{},sc=fi.score!=null?Math.round(fi.score):null;return sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none">à analyser</span>`}
 // Réponses des questions archivées lors du passage au nouveau questionnaire (docs/nos-envies-correspondance.md)
 const ARCHIVED=["vision--invites","vision--periode","vision--craintes","traiteur--budgetpp","tenues--budget","alliances--artisan"];
@@ -1886,6 +1907,7 @@ document.addEventListener("click",async e=>{
     S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
   if(a==="briefsmenu"){openBriefsMenu();return}
+  if(a==="brieftenue"){demanderBriefTenue();return}
   if(a==="docsmenu"){openDocsMenu();return}
   if(a==="hebdoopen"){openHebdo();return}
   if(a==="showdate"){const d=wDate();if(d)toast(`${fmtLong(d).replace(/^./,c=>c.toUpperCase())}${S.settings.dateIndicative?" · date indicative":""}`);return}
@@ -2083,6 +2105,8 @@ function boot(){
     PRIVES.forEach(c=>unsubs.push(db.collection(chemin(me,c)).onSnapshot(s=>{SRC.p[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));fusionner(c);
       if(c==="envies"||c==="vendors")publierSecret();later()},()=>{})));
     meta("secret","secret");
+    // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
+    unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });
 }
 boot();

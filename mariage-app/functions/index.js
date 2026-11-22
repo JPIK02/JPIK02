@@ -141,6 +141,13 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
     try { return { ok: true, fiche: await runFiche({ url: req.data?.url, nom: req.data?.nom, fichier: req.data?.fichier, metier: req.data?.metier }) }; }
     catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
   }
+  // Brief de la tenue secrète : rédigé pour la personne qui le demande, dans son espace privé
+  if (job === "brieftenue") {
+    const { runBriefTenue } = await import("./agents/briefs-agent.js");
+    const { withLock } = await import("./agents/lib/lock.js");
+    try { await withLock(`brieftenue-${moi}`, 10 * 60 * 1000, () => runBriefTenue({ pour: sonEspace(moi) })); return { ok: true }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
   if (job === "reserve") {
     const { runReserve } = await import("./agents/reserve-agent.js");
     try { return { ok: true, reservation: await runReserve({ id: String(req.data?.id || ""), prive: sonEspace(req.data?.prive) }) }; }

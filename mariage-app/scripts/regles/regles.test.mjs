@@ -20,6 +20,9 @@ await t("Espace commun : sous-collection lisible", julien.doc("meta/settings").g
 await t("Conversation : Claire lit la sienne", claire.doc("chats/p2@test.fr").get(), true);
 await t("Conversation : Julien NE lit PAS celle de Claire", julien.doc("chats/p2@test.fr").get(), false);
 await t("Conversation : Julien NE liste PAS les conversations", julien.collection("chats").get(), false);
+await t("Sauvegardes : Julien NE les lit PAS", julien.doc("sauvegardes/secret-x-0").get(), false);
+await t("Sauvegardes : Claire NE les liste PAS", claire.collection("sauvegardes").get(), false);
+await t("Clé privée des notifications : illisible depuis l'app", julien.doc("private/vapid").get(), false);
 await t("Un compte non autorisé ne lit rien", intrus.collection("tasks").get(), false);
 await t("Un compte non autorisé ne lit pas d'espace privé", intrus.doc("prive/claire/envies/x").get(), false);
 await t("Sans connexion : rien", env.unauthenticatedContext().firestore().collection("tasks").get(), false);

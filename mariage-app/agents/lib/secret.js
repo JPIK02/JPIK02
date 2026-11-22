@@ -43,6 +43,14 @@ export function fusion(col, commun = [], prive = [], me) {
   return [...base, ...prive.map(d => ({ ...d, _prive: true }))];
 }
 
+/** Envies de la tuile Tenues pour le brief de `pour` : ses réponses privées, les réponses communes de la tuile,
+ *  jamais la réponse de l'autre (p.<autre>) ni le budget cible commun. */
+export function enviesTenueDe(commun = [], prive = [], pour) {
+  const base = commun.filter(d => String(d.id).startsWith(TUILE_SECRETE + ".") || d.id === "_tuile." + TUILE_SECRETE)
+    .map(d => { if (d.id === "_tuile." + TUILE_SECRETE) { const { budget, ...m } = d; return m; } return d; });
+  return fusion("envies", base, prive, pour).map(d => { const { p, ...r } = d; return p && p[pour] ? { ...r, p: { [pour]: p[pour] } } : r; });
+}
+
 /** Ce que l'autre partenaire peut savoir de ma tenue : avancement et prestataires, sans aucun contenu. */
 export function resumeSecret({ envies = [], vendors = [], me, levelDone, montre = false }) {
   const A = Object.fromEntries(envies.map(d => [d.id, d]));

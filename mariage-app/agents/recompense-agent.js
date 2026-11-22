@@ -12,7 +12,7 @@ import { TBY } from "./lib/envies/logic.js";
 import { coupleNames } from "./lib/couple.js";
 import { QUI, chemin, fusion } from "./lib/secret.js";
 import { fitVendors } from "./analyse-agent.js";
-import { runBriefs } from "./briefs-agent.js";
+import { runBriefs, runBriefTenue } from "./briefs-agent.js";
 import { ligneNote, recompensesDues } from "./lib/envies/recompense.js";
 export { ligneNote, recompensesDues };
 
@@ -49,9 +49,9 @@ export async function runRecompense({ tuile, niveau, pour, log = console.log }) 
       const res = await fitVendors(vend, { log, pour });
       out.notes = res.map(x => ({ id: x.id, nom: x.nom, avant: x.avant, apres: x.apres, ligne: ligneNote(x.avant, x.apres, x.fit) }));
     }
-    if (niveau === "details" && !pour) { // brief tenue : jamais dans les briefs communs
-      await runBriefs({ tuiles: [tuile], log });
-      out.brief = true;
+    if (niveau === "details") { // tenue secrète : brief privé de son auteur, jamais dans les briefs communs
+      if (pour) { await runBriefTenue({ pour, log }); out.brief = true; }
+      else { const r = await runBriefs({ tuiles: [tuile], log }); out.brief = !r || !!(r.tuiles || []).length; }
     }
     if (niveau === "pro" && vend.length) {
       const r = await runForOutput({

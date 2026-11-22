@@ -18,6 +18,8 @@ const UI = {
   vos: m => `Vos ${m}`, provisoires: "Notes provisoires : elles s'affinent après l'essentiel.", aucun: m => `Pas encore de ${m} : ajoutez-en depuis l'onglet Prestataires.`,
   ia: "L'analyse est faite par une IA. Elle éclaire votre choix, elle ne décide pas pour vous.",
   brief: m => `Brief ${m}`, briefPret: "Prêt à envoyer", briefBientot: "Prêt dès les détails remplis", envoyer: "Envoyer",
+  briefTenueT: "Brief de ma tenue", briefTenuePret: a => `Prêt à envoyer · ${a} ne le voit pas`, briefTenueEnCours: "Le coach le rédige : environ une minute",
+  briefTenueP: a => `Pour votre boutique, à partir de vos réponses · ${a} ne le verra pas`, briefTenueGo: "Préparer",
   // raison courte sous le mot d'état d'une tuile grisée ou conditionnelle (grille de l'onglet)
   raisonsCourtes: { selonCeremonie: "Selon votre cérémonie", officiantAChoisir: "Selon votre cérémonie", pasLaique: "Pas de cérémonie laïque", procheOfficie: "Un proche officie", vousOfficiez: "Vous officiez", lendemain: "Selon la durée choisie" },
   nSurN: (n, t) => `${n} question${n > 1 ? "s" : ""} sur ${t}`,
@@ -179,7 +181,7 @@ export function makeEnvies(ctx) {
         ${ins.length ? `<div class="ev-ins">${ins.map(x => `<button data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description || "")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"></button>`).join("")}</div>` : ""}
         ${t.metiers.length ? `<p class="ev-note">${esc(UI.nourrissent(m))}</p>` : ""}</section>` : ""}
       ${t.metiers.length ? `<section class="ev-sec"><h3>${esc(UI.vos(m))}</h3>${vend.length ? `<div class="ev-vend">${vend.map(v => `<button class="ev-v" data-fiche="${v.id}"><b>${esc(v.name)}</b>${ctx.fitPill(v)}</button>`).join("")}</div>${essDone ? "" : `<p class="ev-note">${UI.provisoires}</p>`}<p class="ev-note">${UI.ia}</p>` : `<p class="ev-note">${esc(UI.aucun(m))}</p>`}</section>` : ""}
-      ${t.metiers.length ? `<section class="ev-sec ev-brief"><div><b>${esc(UI.brief(m))}</b><span>${brief ? UI.briefPret : UI.briefBientot}</span></div>${brief ? `<button class="btn sm" data-act="briefpdf" data-c="${brief}">${UI.envoyer}</button>` : ""}</section>` : ""}
+      ${t.metiers.length ? (k === "tenues" ? briefTenue(m) : `<section class="ev-sec ev-brief"><div><b>${esc(UI.brief(m))}</b><span>${brief ? UI.briefPret : UI.briefBientot}</span></div>${brief ? `<button class="btn sm" data-act="briefpdf" data-c="${brief}">${UI.envoyer}</button>` : ""}</section>`) : ""}
       <details class="ev-sec ev-prio"><summary>${UI.vosPrio}</summary>
         <div class="field"><span class="lab">${UI.importance}</span><div class="seg" role="group">${UI.IMPORT.map((l, i) => `<button data-act="envmeta" data-k="${k}" data-f="importance" data-v="${i + 1}" aria-pressed="${meta.importance === i + 1}" ${dis}>${l}</button>`).join("")}</div></div>
         <div class="field"><label class="lab" for="search-ev-${k}-budget">${UI.budgetCible}</label><input type="number" min="0" step="50" inputmode="numeric" id="search-ev-${k}-budget" data-evmeta="${k}|budget" value="${esc(meta.budget ?? "")}" ${dis}></div>
@@ -197,6 +199,13 @@ export function makeEnvies(ctx) {
     const autreH = sa.montre ? "" : `<div class="ev-sec-l"><b>${esc(UI.tenueDe(a))}</b><span>${esc(UI.avancement(sa.repondues || 0, sa.niveaux && sa.niveaux.essentiel, sa.prestataires || 0))}</span></div>`;
     return `<section class="ev-sec ev-secret"><p>${ctx.secretLeve() ? esc(UI.montree(a)) : esc(UI.votreSecrete(a))}</p>
       ${!ctx.secretLeve() && S.canWrite ? `<button class="btn sm" data-act="envmontrer">${esc(UI.montrer(a))}</button>` : ""}${autreH}</section>`;
+  }
+  // brief de ma tenue : rédigé dans mon espace privé, l'autre ne le voit pas (le brief de sa tenue est le sien)
+  function briefTenue(m) {
+    const { b, running } = ctx.briefTenue(), a = ctx.prenomAutre();
+    return `<section class="ev-sec ev-brief"><div><b>${esc(UI.briefTenueT)}</b><span>${esc(b ? UI.briefTenuePret(a) : running ? UI.briefTenueEnCours : UI.briefTenueP(a))}</span></div>${b
+      ? `<button class="btn sm" data-act="briefpdf" data-c="tenues">${UI.envoyer}</button>`
+      : S.canWrite && !running ? `<button class="btn sm" data-act="brieftenue">${UI.briefTenueGo}</button>` : ""}</section>`;
   }
 
   /* ---------- Synthèse et inspirations (déplacées, jamais supprimées) ---------- */

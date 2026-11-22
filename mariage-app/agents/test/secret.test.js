@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { estPrive, fusion, resumeSecret, proprietaireTenue, questionSecrete } from "../lib/secret.js";
+import { estPrive, fusion, resumeSecret, proprietaireTenue, enviesTenueDe, questionSecrete } from "../lib/secret.js";
 import { levelDone } from "../lib/envies/logic.js";
 
 test("tenue secrète : ce qui va dans l'espace privé", () => {
@@ -35,4 +35,12 @@ test("règle du couple : robe → Claire, costume → Julien", () => {
   assert.equal(proprietaireTenue("Boutique de robes de mariée"), "claire");
   assert.equal(proprietaireTenue("Tailleur sur mesure, costumes et smokings"), "julien");
   assert.equal(proprietaireTenue("Atelier de retouches"), null);
+});
+test("brief tenue : mes réponses seulement, jamais celles de l'autre ni le budget commun", () => {
+  const commun = [{ id: "tenues.style", p: { julien: { v: ["smoking"] } }, libre: "" }, { id: "tenues.temoins", v: ["assortis"] },
+    { id: "_tuile.tenues", importance: 4, budget: 3000 }, { id: "lieu.type", v: ["chateau"] }];
+  const e = enviesTenueDe(commun, [{ id: "tenues.style", v: ["boheme"] }], "claire");
+  const txt = JSON.stringify(e);
+  assert.ok(txt.includes("boheme") && txt.includes("assortis") && txt.includes('"importance":4'));
+  assert.ok(!txt.includes("smoking") && !txt.includes("julien") && !txt.includes("3000") && !txt.includes("chateau"));
 });
