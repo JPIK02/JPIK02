@@ -303,7 +303,8 @@ const GEAR='<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.
 const couplePhrase=()=>{const pr=S.profil||{},fr=(S.briefs&&S.briefs.filRouge)||{};return String(fr.titre||(String(pr.resume||"").match(/^[^.!?]+[.!?]?/)||[""])[0]).trim().replace(/^[«"\s]+|[»"\s]+$/g,"")};
 function homeCover(){
   const ph=S.photo&&S.photo.data,insp=!ph&&S.inspirations.find(i=>i.cat==="vision"&&i.thumb);
-  const src=ph?`data:image/jpeg;base64,${ph}`:insp?`data:image/jpeg;base64,${insp.thumb}`:"";
+  // grande version si elle existe (photo ajoutée depuis la correction du 22/11/2026), sinon la miniature de 320 px
+  const src=ph?`data:image/jpeg;base64,${S.photo.cover||ph}`:insp?`data:image/jpeg;base64,${insp.thumb}`:"";
   const phrase=couplePhrase(),d=wDate(),n=d?days(today(),d):null,ind=!!S.settings.dateIndicative;
   const logo=(document.querySelector(".brand-mark")||{}).outerHTML||"";
   const count=d?(n>0?`<b class="num">${n}</b> jour${n>1?"s":""}${ind?"*":""}`:n===0?`<b>Jour J</b>`:`<b>Mariés</b>`):"";
@@ -1533,7 +1534,12 @@ async function setCouplePhoto(file){
     const cv=document.createElement("canvas");cv.width=cv.height=S0;
     cv.getContext("2d").drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,S0,S0);
     const blob=await new Promise(ok=>cv.toBlob(ok,"image/jpeg",.85));
-    if(await setDoc("meta/photo",{},{data:await b64Of(blob),updatedAt:Date.now()}))toast("Photo du couple enregistrée");
+    // grande version pour l'ouverture de l'accueil (plein écran, écrans haute densité) : cadrage d'origine, 1600 px au plus,
+    // réduite si besoin pour rester loin de la limite d'un document Firestore (1 Mo)
+    let cover="";
+    for(const [max,q] of [[1600,.84],[1400,.8],[1200,.76],[1000,.72]]){cover=await b64Of(await resizeJpeg(img,max,q));if(cover.length<650000)break}
+    if(cover.length>=650000)cover="";
+    if(await setDoc("meta/photo",{},{data:await b64Of(blob),cover,updatedAt:Date.now()}))toast("Photo du couple enregistrée");
   }catch(e){toast("Impossible de lire cette photo")}
 }
 function pickCouplePhoto(){let i=document.getElementById("couple-file");if(!i){i=document.createElement("input");i.type="file";i.accept="image/*";i.id="couple-file";i.hidden=true;document.body.appendChild(i);i.addEventListener("change",()=>{setCouplePhoto(i.files&&i.files[0]);i.value=""})}i.click()}
@@ -1846,7 +1852,7 @@ document.addEventListener("click",async e=>{
   if(a==="qr"){await runQr(t.dataset.do);return}
   if(a==="uimore"){S.ui.more=!S.ui.more;render();return}
   if(a==="couplephoto"){if(S.canWrite)pickCouplePhoto();return}
-  if(a==="couplephotox"){if(S.canWrite&&await setDoc("meta/photo",{},{data:"",updatedAt:Date.now()}))toast("Photo retirée");return}
+  if(a==="couplephotox"){if(S.canWrite&&await setDoc("meta/photo",{},{data:"",cover:"",updatedAt:Date.now()}))toast("Photo retirée");return}
   if(a==="cmpnone"){S.cmp.ids=[];openCompare(S.cmp.cat);return}
   if(a==="homephoto"){openChat("chat");setTimeout(()=>document.getElementById("chat-file")?.click(),50);return}
   if(a==="chatfile"){document.getElementById("chat-file")?.click();return}
