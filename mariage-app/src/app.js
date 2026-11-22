@@ -11,6 +11,7 @@ import {makePrest} from "./prestataires-ui.js";
 import {makeBudget,METIER_OPTIONS} from "./budget-ui.js";
 import {makePlanning} from "./planning-ui.js";
 import {makeInvites} from "./invites-ui.js";
+import {makePlan} from "./plan-ui.js";
 import {nomFoyer} from "../agents/lib/invites.js";
 import {ETAPES} from "../agents/lib/planning.js";
 import {tuileDe} from "../agents/lib/prestataires.js";
@@ -77,10 +78,10 @@ const PHASES=[
 const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 
 /* ---------- State ---------- */
-const COLS=["tasks","budget","guests","foyers","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
+const COLS=["tasks","budget","guests","foyers","tables","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},relance:{},foyers:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},relance:{},plan:{},placement:{},foyers:[],tables:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -547,8 +548,9 @@ function renderBnav(){
   // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
-  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")); // Budget, Planning : même modèle de page (en-tête propre)
+  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")||(S.view==="tables"&&S.f.tView!=="liste")); // Budget, Planning : même modèle de page (en-tête propre)
   {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer"))))}
+  if(S.view!=="tables")document.body.classList.remove("on-plan-bar"); // tiroir « À placer » du plan de table
 }
 function renderTabs(){
   renderBnav();
@@ -681,6 +683,11 @@ const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,
   setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),setSettings:o=>setDoc("meta/settings",S.settings,Object.assign({},o,{updatedAt:Date.now()})),
   ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today,groupes:()=>GROUPS,runAgentNow,eur,fmtD,
   traiteur:()=>S.vendors.find(v=>v.cat==="Traiteur"&&etapeOf(v)==="reserve")||null}));
+// docs/invites-v1.md (lot 4) : plan de table dans src/plan-ui.js, règles dans agents/lib/plan.js ; l'ancienne vue reste sous « Vue en liste »
+let PT=null;
+const pt=()=>PT||(PT=makePlan({S,esc,BACK_SVG,CHEV,initials,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,makePdf,
+  layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
+  setMeta:(k,o)=>setDoc("meta/"+k,S[k]||{},o),ancienne:()=>vTables()}));
 // Ancienne liste détaillée (une ligne par personne, filtres, « Ranger » par groupe ou côté) : déplacée sous « Liste détaillée et rangement »
 function vInvitesListe(){
   const g=S.guests,f=S.f;
@@ -1637,7 +1644,7 @@ function applyTheme(t){
 function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t)}</b>${esc(s)}</div></div>`}
 
 /* ---------- Render ---------- */
-const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
+const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:()=>pt().vPlan(),envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
 function render(){
   renderHero();renderTabs();queueTop();
   // écran de fin de niveau ouvert : il se met à jour quand la récompense arrive (sauf pendant la correction de la phrase)
@@ -1853,6 +1860,7 @@ document.addEventListener("click",async e=>{
   if(a&&pr().act(a,t))return; // gestes de « Prestataires » (src/prestataires-ui.js)
   if(a&&bu().act(a,t))return; // gestes du « Budget » (src/budget-ui.js)
   if(a&&iv().act(a,t))return; // gestes des « Invités » (src/invites-ui.js)
+  if(a&&pt().act(a,t))return; // plan de table (src/plan-ui.js)
   if(a==="plrdvgo"){S.f.plView="rdv";S.f.plId=t.dataset.id;S.f.plFrom={v:"main"};S.f.plBackLabel="Notre planning";saveF();go("planning");return}
   if(a&&pl().act(a,t))return; // gestes du « Planning » (src/planning-ui.js)
   if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
@@ -1962,6 +1970,7 @@ document.addEventListener("change",async e=>{
   if(bu().change(el))return; // enveloppe d'un poste saisie directement
   if(pl().change(el))return; // champs d'une tâche (échéance, étape, thème, note)
   if(iv().change(el))return; // champs d'un foyer, cible, regroupement
+  if(pt().change(el))return; // nom d'une table
   if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
   if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
@@ -2089,6 +2098,7 @@ function boot(){
     meta("arbitrage","arbitrage"); // pistes du coach pour revenir sous la limite (docs/budget-planning-v1.md, 3.3)
     meta("repartition","repartition"); // répartition proposée par le coach pour un budget vide (3.6)
     meta("relance","relance"); // message de relance des invités (docs/invites-v1.md, 3.3.2)
+    meta("plan","plan"); meta("placement","placement"); // plan de table : personnes à séparer, proposition du coach (3.4)
     // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
     unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });

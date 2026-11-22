@@ -1981,3 +1981,54 @@ div.pr-row{cursor:default}
 .iv-reltxt{min-height:120px}
 .iv-sur{font-family:var(--f-accroche);font-style:italic;font-size:22px;color:var(--hero-muted)}
 .iv-trait .iv-tc b{color:var(--ink)}
+
+/* Plan de table (docs/invites-v1.md, lot 4, 3.4) */
+.pt-ligne{margin:6px 0 0;font-size:16px;color:var(--hero-muted)}
+.pt-brouillon{display:inline-block;margin-left:6px;padding:2px 10px;border-radius:999px;background:var(--hero-line);color:var(--hero-fg);font-size:12.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.pt-note{margin:6px 0 0;font-size:14px;color:var(--hero-muted)}
+.pt-hon{display:grid;margin:14px 0 0}
+.pt-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:12px 0 0}
+.pt-t{display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 8px 12px;border:1px solid var(--line);border-radius:18px;background:var(--surface);color:var(--ink);font:inherit;cursor:pointer;touch-action:manipulation}
+.pt-t>b{font-size:15.5px;font-weight:600;text-align:center}
+.pt-t>span{font-size:13.5px;color:var(--muted)}
+.pt-t.honneur .pt-svg{max-width:220px}
+.pt-t.bad{border:2px solid var(--bad)}
+.pt-t.cible{border-style:dashed;border-color:var(--coral-ui)}
+.pt-t.survol{outline:3px solid var(--coral-ui);outline-offset:2px;background:var(--surface-2)}
+.pt-t:focus-visible{outline:3px solid var(--focus,var(--coral-ui));outline-offset:2px}
+.pt-svg{width:100%;max-width:150px;height:auto}
+.pt-plateau{fill:var(--surface-2);stroke:var(--line);stroke-width:1}
+.pt-s{stroke:var(--surface);stroke-width:1.2;fill:var(--gold-soft)}
+.pt-s.s-claire{fill:var(--claire-soft)}.pt-s.s-julien{fill:var(--julien-soft)}
+.pt-s.libre{fill:none;stroke:var(--muted);stroke-dasharray:2 2}
+.pt-s.trop{stroke:var(--bad);stroke-width:1.8}
+.pt-i{font-size:6.2px;font-weight:600;font-family:inherit;fill:var(--ink);text-anchor:middle;pointer-events:none}
+.pt-al{list-style:none;margin:0;padding:0}
+.pt-al li{padding:10px 12px;margin:0 0 6px;border-left:3px solid var(--bad);background:var(--surface);border-radius:0 10px 10px 0;font-size:15px}
+.pt-tiroir{position:fixed;left:0;right:0;bottom:0;z-index:13;padding:10px max(16px,env(safe-area-inset-left,0px)) 12px;background:var(--surface);border-top:1px solid var(--line);box-shadow:var(--shadow-up)}
+@media (max-width:760px){.pt-tiroir{bottom:calc(72px + env(safe-area-inset-bottom,0px))}}
+.pt.has-tiroir{padding-bottom:220px}
+body.on-plan-bar .fab{bottom:calc(86px + 170px + env(safe-area-inset-bottom,0px))}
+@media (min-width:761px){body.on-plan-bar .fab{bottom:190px}}
+.pt-th{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:14px;color:var(--muted)}
+.pt-th b{color:var(--ink);font-size:15px}
+.pt-sel{color:var(--link);font-weight:600}
+.pt-chips{display:flex;gap:8px;overflow-x:auto;padding:8px 0;scrollbar-width:none;touch-action:pan-x}
+.pt-chips.wrap{flex-wrap:wrap;overflow:visible;touch-action:auto}
+.pt-chip{flex:none;display:inline-flex;align-items:center;gap:6px;padding:4px 12px 4px 4px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:grab;user-select:none;-webkit-user-select:none}
+.pt-chip .iv-av{width:28px;height:28px;font-size:11px}
+.pt-chip.on{border-color:var(--coral-ui);box-shadow:0 0 0 2px var(--coral-ui)}
+.pt-fantome{position:fixed;left:0;top:0;z-index:60;pointer-events:none;box-shadow:var(--shadow-s);opacity:.95}
+body.pt-drag{user-select:none;-webkit-user-select:none}
+.pt-acts{display:flex;gap:8px}.pt-acts .btn.primary{flex:1}
+.pt-reg{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}
+.pt-reg .pl-f{flex:1;min-width:140px}
+.pt-reg select{width:100%;font:inherit;padding:8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.pt-feuille .iv-moments{margin:4px 0 10px}
+.pt-prop{margin:0 0 10px}.pt-prop p{margin:4px 0 8px;color:var(--muted);font-size:15px}
+@media (max-width:760px){body.on-plan-bar .toast{bottom:calc(72px + 200px + env(safe-area-inset-bottom,0px))}}
+@media (min-width:761px){body.on-plan-bar .toast{bottom:210px}}
+.iv-pick .link{min-height:44px;background:none;border:0;padding:0 4px;font:inherit;font-size:14.5px;font-weight:600;color:var(--link);cursor:pointer;text-align:left}
+.iv-pick .link:disabled{color:var(--muted);cursor:default}
+.iv-pick .link.iv-retirer{color:var(--bad)}
+.toast{width:max-content;max-width:calc(100vw - 32px)}

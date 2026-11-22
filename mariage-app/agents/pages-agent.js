@@ -168,3 +168,40 @@ export async function runRelance({ autre = false, log = console.log } = {}) {
   log("[relance] message prêt");
   return doc;
 }
+
+/* ---------- Plan de table : placement proposé par le coach (docs/invites-v1.md, 3.4, 6 et 8) ---------- */
+// Aucun nom envoyé à Claude : identifiants, foyer, cercle, côté, enfant, places déjà fixées à la main. Résultat vérifié (`nettoyerPlacement`),
+// gardé dans meta/placement ; l'app le présente, puis l'applique sur validation, annulable d'un geste. Personne placée à la main : jamais déplacée.
+const OUT_PLACER = {
+  name: "enregistrer_placement", description: "Placement proposé, table par table.",
+  input_schema: { type: "object", properties: {
+    tables: { type: "array", items: { type: "object", properties: {
+      nom: { type: "string", description: "nom exact d'une table existante" },
+      ids: { type: "array", items: { type: "string" }, description: "identifiants des personnes NON fixées à placer à cette table" },
+      pourquoi: { type: "string", description: "une phrase : pourquoi ce regroupement (cercle, côté, familles), sans inventer de nom" } }, required: ["nom", "ids", "pourquoi"] } },
+  }, required: ["tables"] },
+};
+export async function runPlacer({ log = console.log } = {}) {
+  const [guests, foyers, tablesDocs, settings, plan] = await Promise.all([listAll("guests"), listAll("foyers"), listAll("tables"), getMeta("settings"), getMeta("plan")]);
+  const P = await import("./lib/plan.js"), I = await import("./lib/invites.js");
+  const moment = I.momentDe(I.foyersDe(guests, foyers)), gens = P.concernes(guests, { settings, moment }), tables = P.tablesDe(tablesDocs, guests);
+  if (!tables.length) throw new Error("ajoutez d'abord des tables");
+  const separer = Array.isArray(plan.separer) ? plan.separer : [];
+  const data = P.pourCoach({ tables, gens, guests, foyers, separer });
+  const aPlacer = data.personnes.filter(p => !p.fixe).length;
+  if (!aPlacer) return { tables: [], at: Date.now() };
+  const out = await runForOutput({
+    system: SYSTEM,
+    user: `Propose un plan de table pour ${aPlacer} personne(s) à placer (celles dont « fixe » est null ; les autres sont déjà placées à la main, ne les déplace pas, elles occupent des places).\n` +
+      `Règles, dans l'ordre : ne dépasse jamais le nombre de places d'une table ; garde chaque foyer à la même table ; un enfant à côté de ses parents, ou à une table d'enfants (« enfants » vrai) s'il y en a une ; ` +
+      `regroupe par cercle puis par côté ; deux personnes listées dans « separer » jamais à la même table ; la table d'honneur ne reçoit que des personnes déjà fixées. Place tout le monde si les places suffisent.\n` +
+      `Pour chaque table, une phrase qui explique le choix, avec les cercles (jamais de nom de personne : tu n'en as pas).\n` +
+      `<plan>${JSON.stringify(data)}</plan>\nAppelle enregistrer_placement.`,
+    output: OUT_PLACER, feature: "coach", maxTokens: 6000,
+  });
+  const propose = P.nettoyerPlacement(out.tables, { tables, gens, separer });
+  const doc = { tables: propose, at: Date.now(), places: propose.reduce((n, t) => n + t.ids.length, 0), aPlacer };
+  await getDb().doc("meta/placement").set(doc);
+  log(`[placement] ${doc.places} personne(s) placée(s) sur ${aPlacer}`);
+  return doc;
+}
