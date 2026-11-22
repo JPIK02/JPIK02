@@ -9,6 +9,9 @@ import {OLD2TILE,METIER2TILE} from "../agents/lib/envies/logic.js";
 import {makeEnvies} from "./envies-ui.js";
 import {makePrest} from "./prestataires-ui.js";
 import {makeBudget,METIER_OPTIONS} from "./budget-ui.js";
+import {makePlanning} from "./planning-ui.js";
+import {ETAPES} from "../agents/lib/planning.js";
+import {tuileDe} from "../agents/lib/prestataires.js";
 import {etapeOf} from "../agents/lib/prestataires.js";
 import {PRIVES,fusion,estPrive,chemin,resumeSecret,questionSecrete,TUILE_SECRETE} from "../agents/lib/secret.js";
 import {levelDone as levelDoneEnvies} from "../agents/lib/envies/logic.js";
@@ -420,24 +423,16 @@ function vApercu(){
     <section aria-labelledby="h-wm"><h3 class="home-h" id="h-wm">Votre mariage</h3>${weddingTiles()}</section>
   </div>`;
 }
-// Tâche ouverte depuis l'accueil : le planning défile jusqu'à elle et la met en évidence
+// Tâche ouverte depuis l'accueil : sa page dans le planning (docs/budget-planning-v1.md, 4.4)
 function showTask(id){
-  if(S.f.owner!=="all"){S.f.owner="all";saveF()}
-  go("planning");
-  requestAnimationFrame(()=>{const r=document.querySelector(`#main .row[data-task="${CSS.escape(id)}"]`);if(!r)return;
-    r.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});r.classList.add("flash");setTimeout(()=>r.classList.remove("flash"),2600)});
+  if(!S.tasks.some(t=>t.id===id))return go("planning");
+  Object.assign(S.f,{plView:"tache",plId:id,plFrom:{v:"main"},plBackLabel:"Notre planning"});saveF();go("planning");
 }
 /* « Voir les retards » : le planning s'ouvre sur la première tâche en retard, mise en évidence (filtre « Tout » pour ne pas la masquer). */
 function showLate(){
-  if(S.f.owner!=="all"){S.f.owner="all";saveF()}
+  // la section « En retard » est en tête du planning (filtre « Tout » pour n'en masquer aucune)
+  if(S.f.owner!=="all")S.f.owner="all";S.f.plView="main";saveF();
   go("planning");
-  requestAnimationFrame(()=>{
-    const rows=[...document.querySelectorAll("#main .row.late")];
-    if(!rows.length)return;
-    rows[0].scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
-    rows.forEach(r=>r.classList.add("flash"));
-    setTimeout(()=>rows.forEach(r=>r.classList.remove("flash")),2600);
-  });
 }
 async function runQr(dd){
   const [k,...rest]=dd.split(":"),arg=rest.join(":");
@@ -549,8 +544,8 @@ function renderBnav(){
   // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
-  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"); // Budget : même modèle de page (en-tête propre)
-  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv))))}
+  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"); // Budget, Planning : même modèle de page (en-tête propre)
+  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&pl().enTache()))}
 }
 function renderTabs(){
   renderBnav();
@@ -616,40 +611,25 @@ function taskRow(t){
 }
 
 /* ---------- Planning ---------- */
-function vPlanning(){
-  const f=S.f;
-  let ts=S.tasks.slice().sort(byOrder);
-  if(f.owner!=="all")ts=ts.filter(t=>(t.owner||"deux")===f.owner||(f.owner!=="deux"&&(t.owner||"deux")==="deux"));
-  const d=wDate(),cur=currentPhase();
-  const groups=PHASES.map(p=>{
-    const all=ts.filter(t=>t.phase===p.k);
-    const shown=f.hideDone?all.filter(t=>t.status!=="done"):all;
-    if(!all.length)return "";
-    const done=all.filter(t=>t.status==="done").length;
-    const when=d?`avant le ${fmtD(p.due(d))}`:"";
-    return `<section class="phase ${cur&&cur.k===p.k?"current":""}"><div class="phase-h"><div><h3 style="display:inline">${p.label}</h3><span class="when">${esc([p.hint,when].filter(Boolean).join(" · "))}</span>${cur&&cur.k===p.k?' <span class="chip acc" style="margin-left:6px">En cours</span>':""}</div><span class="prog num">${done} / ${all.length}</span></div>
-      <div class="list">${shown.length?shown.map(taskRow).join(""):`<div class="empty">Tout est fait pour cette période.</div>`}</div></section>`;
-  }).join("");
+// docs/budget-planning-v1.md (lot 2) : page, étape, tâche et rendez-vous dans src/planning-ui.js, règles dans agents/lib/planning.js
+function vPlanning(){return pl().vPlanning()}
+// Doublons possibles (signalés, jamais fusionnés sans accord) : bandeau du planning
+function dupBanner(){
   const dups=S.canWrite?similarTasks():[];
-  const dupH=dups.length?`<div class="dups">${dups.slice(0,3).map(x=>`<div class="banner dup"><b>Doublon possible</b><span>« ${esc(x.a.title)} » et « ${esc(x.b.title)} »</span>
+  return dups.length?`<div class="dups">${dups.slice(0,3).map(x=>`<div class="banner dup"><b>Doublon possible</b><span>« ${esc(x.a.title)} » et « ${esc(x.b.title)} »</span>
     <div class="dup-acts"><button class="btn sm primary" data-act="dupmerge" data-a="${x.a.id}" data-b="${x.b.id}">Fusionner</button><button class="btn sm" data-act="dupkeep" data-k="${x.key}">Ce sont deux tâches</button></div></div>`).join("")}</div>`:"";
-  return `${subnav([["planning","Tâches"],["agenda","Agenda"]])}<div class="vh"><div><h2>Rétroplanning</h2><p>${d?"Les échéances se calculent à partir de la date du mariage. Une échéance précise sur une tâche prend le dessus.":"Fixez la date dans Réglages pour voir les échéances."}</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="pdfreport">Rapport PDF</button><button class="btn primary" data-new="tasks" ${S.canWrite?"":"disabled"}>Ajouter une tâche</button></div></div>
-  <div class="filters">
-    <div class="seg" role="group" aria-label="Filtrer par personne">${[["all","Tout"],["claire",P1()],["julien",P2()],["deux","Ensemble"]].map(([k,l])=>`<button data-f="owner" data-v="${k}" aria-pressed="${f.owner===k}">${l}</button>`).join("")}</div>
-    <label class="toggle"><input type="checkbox" id="hide-done" ${f.hideDone?"checked":""}> Masquer les tâches faites</label>
-  </div>
-  ${dupH}${groups||emptyBlock("Aucune tâche pour l'instant","Ajoutez la première avec le bouton ci-dessus.")}
-  <div class="plan-ov ${S.f.overview?"open":""}"><button class="ov-open" data-act="overview" aria-expanded="${!!S.f.overview}"><span><b>Vue d'ensemble</b><span>Jalons et qui fait quoi</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-    ${S.f.overview?`<div class="plan-ov-b">${milestonesPanel()}${whoPanel()}</div>`:""}</div>`;
 }
+let PL=null;
+const pl=()=>PL||(PL=makePlanning({S,esc,eur,BACK_SVG,CHEV,PH,OWNERS,P1,P2,pd,today,wDate,taskDue,isLate,tintOf,initials,saveF,render,go,patch,toastUndo,budgetLineFor,tuileDe,
+  moi:MOI,nomTuile:k=>(FR_ENVIES.tuiles[k]||{}).nom||"",dupH:dupBanner,milestonesPanel,whoPanel}));
 
 /* ---------- Agenda ---------- */
 function vAgenda(){
   const all=S.rdv.slice().sort((a,b)=>String((a.date||"9")+(a.time||"")).localeCompare(String((b.date||"9")+(b.time||""))));
   const t=today(),up=all.filter(r=>!r.date||pd(r.date)>=t),past=all.filter(r=>r.date&&pd(r.date)<t).reverse();
-  const row=r=>{const d=pd(r.date);return `<div class="row click" data-edit="rdv" data-id="${r.id}">${d?dateBox(d,d<t?"":"gold"):`<div class="datebox"><b>?</b><span>date</span></div>`}<div class="main"><div class="t">${esc(r.title)}</div><div class="m">${d?`<span>${esc(fmtLong(d))}</span>`:""}${r.time?`<span class="num">${esc(r.time)}</span>`:""}${r.avec?`<span>avec ${esc(r.avec)}</span>`:""}${r.lieu?`<span>${esc(r.lieu)}</span>`:""}</div></div><div class="end">${r.qui?ownerChip(r.qui):""}${r.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div></div>`};
-  return `${subnav([["planning","Tâches"],["agenda","Agenda"]])}<div class="vh"><div><h2>Agenda</h2><p>Visites de lieux, dégustations, essayages, rendez-vous mairie et notaire.</p></div>
+  const row=r=>{const d=pd(r.date);return `<div class="row click" data-act="plrdvgo" data-id="${r.id}">${d?dateBox(d,d<t?"":"gold"):`<div class="datebox"><b>?</b><span>date</span></div>`}<div class="main"><div class="t">${esc(r.title)}</div><div class="m">${d?`<span>${esc(fmtLong(d))}</span>`:""}${r.time?`<span class="num">${esc(r.time)}</span>`:""}${r.avec?`<span>avec ${esc(r.avec)}</span>`:""}${r.lieu?`<span>${esc(r.lieu)}</span>`:""}</div></div><div class="end">${r.qui&&r.qui!=="deux"?ownerChip(r.qui):""}${r.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div></div>`};
+  // plus d'onglet Agenda (docs/budget-planning-v1.md, 4.1) : tous les rendez-vous, ouverts depuis le planning en attendant la vue calendrier (lot 4)
+  return `<button class="link env-back" data-go="planning">${BACK_SVG}<span>Notre planning</span></button><div class="vh"><div><h2>Tous les rendez-vous</h2><p>Visites de lieux, dégustations, essayages, rendez-vous mairie et notaire.</p></div>
     <button class="btn primary" data-new="rdv" ${S.canWrite?"":"disabled"}>Ajouter un rendez-vous</button></div>
   <h3 class="sec">À venir · ${up.length}</h3>
   ${up.length?`<div class="list">${up.map(row).join("")}</div>`:emptyBlock("Aucun rendez-vous prévu","Ajoutez la prochaine visite ou dégustation.")}
@@ -1687,7 +1667,7 @@ const SCHEMAS={
     {k:"title",label:"Intitulé",type:"text",req:1},
     {k:"owner",label:"Qui s'en occupe",type:"seg",options:Object.entries(OWNERS),def:"deux"},
     {k:"status",label:"Statut",type:"seg",options:Object.entries(STATUS),def:"todo"},
-    {row:[{k:"phase",label:"Période",type:"select",options:PHASES.map(p=>[p.k,p.label]),def:()=>(currentPhase()||PHASES[0]).k},
+    {row:[{k:"phase",label:"Étape",type:"select",options:ETAPES.map((e,i)=>[e.k,`${i+1} · ${e.nom}`]),def:()=>(currentPhase()||PHASES[0]).k},
           {k:"due",label:"Échéance précise",type:"date"}]},
     {k:"note",label:"Notes",type:"textarea"}]},
   rdv:{one:"le rendez-vous",fields:[
@@ -1845,8 +1825,9 @@ document.addEventListener("click",async e=>{
     if(k==="envies"){env().leaveTile();S.f.envView="main"}
     if(k==="prestataires"){S.f.pView="main";S.f.pSearch=false;S.f.pq=""}
     if(k==="budget")S.f.bView="main";
+    if(k==="planning")S.f.plView="main";
     saveF();go(k);window.scrollTo(0,0);return}
-  if(t.dataset.go){if(t.dataset.go==="budget"&&S.view!=="budget")S.f.bView="main";go(t.dataset.go);return}
+  if(t.dataset.go){if(t.dataset.go==="budget"&&S.view!=="budget")S.f.bView="main";if(t.dataset.go==="planning"&&S.view!=="planning"&&S.view!=="agenda")S.f.plView="main";go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
   // ouvre la page d'une tuile de « Nos envies » (data-bgo : clé de tuile)
   if(t.dataset.bgo||t.dataset.bcat){S.f.envView="tile";S.f.envTile=t.dataset.bgo||t.dataset.bcat;saveF();go("envies");return}
@@ -1857,8 +1838,10 @@ document.addEventListener("click",async e=>{
   const a=t.dataset.act,id=t.dataset.id;
   if(a&&pr().act(a,t))return; // gestes de « Prestataires » (src/prestataires-ui.js)
   if(a&&bu().act(a,t))return; // gestes du « Budget » (src/budget-ui.js)
+  if(a==="plrdvgo"){S.f.plView="rdv";S.f.plId=t.dataset.id;S.f.plFrom={v:"main"};S.f.plBackLabel="Notre planning";saveF();go("planning");return}
+  if(a&&pl().act(a,t))return; // gestes du « Planning » (src/planning-ui.js)
   if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
-  if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;await patch("tasks",id,{status:k.status==="done"?"todo":"done"});return}
+  if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;const nx=k.status==="done"?"todo":"done";await patch("tasks",id,{status:nx,doneAt:nx==="done"?Date.now():null});return}
   if(a==="rsvp"){if(S.canWrite)openRsvp(id);return}
   if(a==="setrsvp"){if(!S.canWrite)return;closeModal();const g=S.guests.find(x=>x.id===id);if(g&&(g.rsvp||"attente")!==t.dataset.v&&await patch("guests",id,{rsvp:t.dataset.v}))toast(`${g.name} : ${RSVP[t.dataset.v]}`);return}
   if(a==="gselstart"){S.selMode=!S.selMode;S.sel.clear();render();return}
@@ -1962,6 +1945,7 @@ document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="E
 document.addEventListener("change",async e=>{
   const el=e.target;
   if(bu().change(el))return; // enveloppe d'un poste saisie directement
+  if(pl().change(el))return; // champs d'une tâche (échéance, étape, thème, note)
   if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
   if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
