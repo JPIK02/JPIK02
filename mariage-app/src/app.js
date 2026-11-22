@@ -68,10 +68,10 @@ const PHASES=[
 const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 
 /* ---------- State ---------- */
-const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","inspirations"];
+const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -803,7 +803,7 @@ function vPrestataires(){
 // Onglet « Prestataires » v1 : écrans dans src/prestataires-ui.js, règles dans agents/lib/prestataires.js
 let PR=null;
 const pr=()=>PR||(PR=makePrest({S,esc,toast,toastUndo,go,render,saveF,CHEV,BACK_SVG,tintOf,initials,eur,pd,today,wDate,fold,env,briefFor,pdfBriefs,patch,devisSection,
-  ficheDetails,pendingSugs,openEditor,closeModal,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
+  ficheDetails,pendingSugs,openEditor,closeModal,fileForAI,addVendor,kick,acceptSug,runAgentNow,openCompare,runQr,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
   logo:()=>(document.querySelector(".brand-mark")||{}).outerHTML||"",userEmail:()=>String(S.user&&S.user.email||""),
   prenomDe:by=>{const k=PARTNER[String(by||"").toLowerCase()];return k==="claire"?P1():k==="julien"?P2():""}}));
 
@@ -1442,6 +1442,17 @@ function toggleMic(btn){
 const b64Of=blob=>new Promise((ok,ko)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(",")[1]);fr.onerror=ko;fr.readAsDataURL(blob)});
 async function loadImage(file){const url=URL.createObjectURL(file);try{return await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ko;i.src=url})}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}}
 async function resizeJpeg(img,max,q){const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const cv=document.createElement("canvas");cv.width=Math.round(img.naturalWidth*k);cv.height=Math.round(img.naturalHeight*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);return new Promise(ok=>cv.toBlob(ok,"image/jpeg",q))}
+// Photo (réduite à 1600 px) ou PDF, prêt à être lu par l'IA (fiche préremplie de Prestataires)
+async function fileForAI(file){
+  if(file.type==="application/pdf"){if(file.size>4.5e6)throw new Error("PDF trop lourd (4,5 Mo au plus)");return {media_type:"application/pdf",data:await b64Of(file)}}
+  if(/^image\//.test(file.type)){const img=await loadImage(file);return {media_type:"image/jpeg",data:await b64Of(await resizeJpeg(img,1600,.82))}}
+  throw new Error("Photo ou PDF uniquement");
+}
+// Nouveau prestataire : rend son id (pour ouvrir sa fiche)
+async function addVendor(data){
+  if(!S.db){toast("Connexion en cours, réessayez dans un instant");return null}
+  try{const ref=await S.db.collection("vendors").add(Object.assign({createdAt:Date.now(),updatedAt:Date.now(),by:String(S.user&&S.user.email||""),acomptePaye:false},data));return ref.id}catch(e){writeErr(e);return null}
+}
 async function pickFiles(files){
   const c=S.chat;c.atts=c.atts||[];
   for(const file of [...(files||[])]){

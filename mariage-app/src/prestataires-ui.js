@@ -5,7 +5,7 @@ import { FR } from "../agents/lib/envies/fr.js";
 import { TBY, questionsOf, answerText, tileNom, retard } from "../agents/lib/envies/logic.js";
 import { TILE_ICON } from "./envies-ui.js";
 import { METIERS, AUTRE, tuileDe, multiple, etapeOf, enLice, etatMetier, compteur, meilleurFit, candidats, aDecider, prochaineEtape,
-  mentions, doublons, contacts, historique, calendrier, dernierPrix, aDevis } from "../agents/lib/prestataires.js";
+  mentions, doublons, contacts, historique, calendrier, dernierPrix, aDevis, cleComparaison, empreinte } from "../agents/lib/prestataires.js";
 
 // Textes d'interface (à traduire)
 const UI = {
@@ -21,7 +21,7 @@ const UI = {
   aReserverVers: (m, d) => `${m >= 99 ? "À réserver dès maintenant" : `À réserver vers ${m} mois avant`}${d ? ` · d'ici ${d}` : ""}`,
   cherchez: "Ce que vous cherchez", nosEnvies: t => `Nos envies ${t}`, repondre: "Répondez à l'essentiel pour des notes plus justes · 1 min",
   enLiceH: n => `En lice · ${n}`, classes: "Classés par fit", pourVous: "Pour vous", aVerifier: "À vérifier", prixInconnu: "Prix inconnu",
-  comparerN: n => `Comparer les ${n}`, convaincus: "Pas encore convaincus ?", avecAccord: "Recherche sur internet avec votre accord · sources citées", lancer: "Lancer la recherche",
+  comparerN: () => "Comparer", convaincus: "Pas encore convaincus ?", avecAccord: "Recherche sur internet avec votre accord · sources citées", lancer: "Lancer la recherche",
   brief: m => `Brief ${m}`, envoyeA: (n, t) => (n ? `Envoyé à ${n} sur ${t}` : "Prêt à envoyer"), envoyerA: n => `Envoyer à ${n}`, briefBientot: "Prêt dès les détails remplis",
   ecartesH: n => `Écartés · ${n}`, remettre: "Remettre en lice", aucunCand: m => `Pas encore de ${m}.`,
   ia: "L'analyse est faite par une IA. Elle éclaire votre choix, elle ne décide pas pour vous.",
@@ -332,6 +332,139 @@ export function makePrest(ctx) {
     return vMain();
   }
 
+
+  /* ---------- 4.5 Ajouter un prestataire (feuille) ---------- */
+  // S.ui.prAdd = { m, etape: "choix" | "verif", busy, err, draft }
+  const UA = {
+    titre: "Ajouter un prestataire", deja: "Vous l'avez déjà trouvé", champ: "Collez un lien Instagram ou un site, ou tapez un nom", continuer: "Continuer",
+    carte: "Carte ou flyer", pdf: "Un devis PDF", iaRemplit: "L'IA remplit la fiche (nom, métier, ville, contacts, prix si devis) ; vous vérifiez avant d'enregistrer.",
+    coach: "Le coach cherche pour vous", coachP: "Il cherche sur internet avec votre accord, et cite ses sources.", coachB: m => `Chercher des ${m}`,
+    mails: n => `Repérés dans vos mails · ${n}`, ajouterMail: n => `Ajouter ${n}`, lecture: "Lecture en cours…", verifier: "Vérifiez la fiche",
+    verifP: "Rempli par l'IA à partir de votre source : corrigez ce qui ne va pas. Rien n'est enregistré avant « Enregistrer ».", verifSans: "Complétez ce que vous savez ; le reste viendra plus tard.",
+    champs: { nom: "Nom", metier: "Métier", ville: "Ville", email: "E-mail", tel: "Téléphone", site: "Site", instagram: "Instagram", prix: "Prix du devis (€)" },
+    doublon: "Il existe peut-être déjà : ", ouvrir: "ouvrir sa fiche", quandMeme: "Enregistrer quand même", enregistrer: "Enregistrer", retour: "Retour",
+    ok: n => `${n} ajouté : sa note arrive dans 1 à 2 minutes`, err: "La lecture n'a pas abouti : ", nomRequis: "Le nom est obligatoire",
+  };
+  const estUrl = s => /^(https?:\/\/|www\.)\S+$|^[\w-]+(\.[\w-]+)+(\/\S*)?$/i.test(String(s).trim());
+  const sugsPresta = () => ctx.pendingSugs().filter(s => s.type === "vendor" || s.type === "quote");
+  function ouvrirAjout(m) { S.ui.prAdd = { m: m || (S.f.pView === "metier" ? S.f.pMetier : ""), etape: "choix" }; renderAjout(); }
+  function renderAjout() {
+    const a = S.ui.prAdd; if (!a) return;
+    const metierSel = (id, val) => `<select id="${id}" name="${id}">${METIERS.map(m => `<option value="${esc(m)}" ${m === val ? "selected" : ""}>${esc(nomMetier(m))}</option>`).join("")}</select>`;
+    let corps;
+    if (a.etape === "verif") {
+      const d = a.draft || {}, dup = d.nom ? doublons({ id: "_", name: d.nom, cat: d.metier || a.m || "Lieu", contact: [d.email, d.site, d.instagram].filter(Boolean).join(" ") }, S.vendors) : [];
+      const champ = (k, type = "text") => `<div class="field"><label for="search-pa-${k}">${UA.champs[k]}</label><input id="search-pa-${k}" name="search_${k}" type="${type}" autocomplete="off" value="${esc(d[k] ?? "")}" ${type === "number" ? 'inputmode="numeric" min="0"' : ""}></div>`;
+      corps = `<h3>${UA.verifier}</h3><p class="ev-note">${a.draft && a.draft._ia ? UA.verifP : UA.verifSans}</p>${d.resume ? `<p class="pr-small">${esc(d.resume)}</p>` : ""}
+        <form class="form" id="pr-add-form">${champ("nom")}<div class="field"><label for="search-pa-metier">${UA.champs.metier}</label>${metierSel("search-pa-metier", d.metier || a.m || "Lieu")}</div>
+          <div class="cols2">${champ("ville")}${champ("tel")}</div><div class="cols2">${champ("email")}${champ("site")}</div>${champ("instagram")}${champ("prix", "number")}
+          ${dup.length ? `<p class="banner warn">${UA.doublon}${dup.map(v => `<b>${esc(v.name)}</b> (<button type="button" class="link" data-fiche="${v.id}">${UA.ouvrir}</button>)`).join(", ")}</p>` : ""}
+          <div class="acts"><button type="button" class="btn" data-act="pradd-retour">${UA.retour}</button><button type="submit" class="btn primary">${dup.length ? UA.quandMeme : UA.enregistrer}</button></div></form>`;
+    } else {
+      const sg = sugsPresta();
+      corps = `<h3>${UA.titre}</h3>
+        <section class="pa-card first"><b>${UA.deja}</b><form id="pr-add-q" class="pa-q"><label class="sr" for="search-pa-q">${UA.champ}</label><input id="search-pa-q" name="search_q" autocomplete="off" placeholder="${UA.champ}" ${a.busy ? "disabled" : ""}><button class="btn primary" ${a.busy ? "disabled" : ""}>${UA.continuer}</button></form>
+          <div class="pa-files"><label class="btn ${a.busy ? "disabled" : ""}"><input type="file" accept="image/*" data-pafile="1" hidden ${a.busy ? "disabled" : ""}>${UA.carte}</label><label class="btn ${a.busy ? "disabled" : ""}"><input type="file" accept="application/pdf" data-pafile="1" hidden ${a.busy ? "disabled" : ""}>${UA.pdf}</label></div>
+          ${a.busy ? `<p class="ai-pending" role="status">${UA.lecture}</p>` : a.err ? `<p class="banner warn">${esc(UA.err + a.err)}</p>` : `<p class="pr-small">${UA.iaRemplit}</p>`}</section>
+        <section class="pa-card"><b>${UA.coach}</b><p class="pr-small">${UA.coachP}</p><div class="pa-row"><label class="sr" for="search-pa-cm">${UA.champs.metier}</label>${metierSel("search-pa-cm", a.m || "Lieu")}<button class="btn" data-act="pradd-coach">${UI.lancer}</button></div></section>
+        ${sg.length ? `<section class="pa-card"><b>${UA.mails(sg.length)}</b>${sg.map(s => { const n = (s.payload || {}).name || (s.payload || {}).vendorName || s.from || "";
+          return `<div class="pa-mail"><span class="pr-rb"><b>${esc(n)}</b><span>${esc([(s.payload || {}).cat, s.type === "quote" && (s.payload || {}).prix ? ctx.eur(s.payload.prix) : ""].filter(Boolean).join(" · "))}</span></span><button class="pr-round plus sm" data-act="pradd-mail" data-id="${s.id}" aria-label="${esc(UA.ajouterMail(n))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></div>`; }).join("")}</section>` : ""}`;
+    }
+    ctx.layer(`<div class="ov" data-close="1"><div class="modal pa" role="dialog" aria-modal="true" aria-label="${UA.titre}">${corps}</div></div>`);
+    const f = document.getElementById("pr-add-form");
+    if (f) f.addEventListener("submit", e => { e.preventDefault(); enregistrerAjout(f); });
+    const q = document.getElementById("pr-add-q");
+    if (q) q.addEventListener("submit", e => { e.preventDefault(); const v = (q.elements.search_q.value || "").trim(); if (!v) return; estUrl(v) ? remplir({ url: v }) : (a.draft = { nom: v, metier: a.m || "" }, a.etape = "verif", renderAjout()); });
+    document.querySelectorAll("[data-pafile]").forEach(i => i.addEventListener("change", async () => { const file = i.files && i.files[0]; if (!file) return;
+      try { remplir({ fichier: await ctx.fileForAI(file) }); } catch (e) { a.err = e.message; renderAjout(); } }));
+  }
+  async function remplir(src) {
+    const a = S.ui.prAdd; a.busy = true; a.err = null; renderAjout();
+    try {
+      const r = await ctx.runAgentNow("fiche", { ...src, metier: a.m || undefined });
+      if (!r || !r.ok) throw new Error((r && r.erreur) || "réponse vide");
+      const f = r.fiche || {};
+      a.draft = { _ia: true, _src: src.url ? "lien" : src.fichier && src.fichier.media_type === "application/pdf" ? "pdf" : "photo", _url: src.url,
+        nom: f.nom || "", metier: f.metier || a.m || "", ville: f.ville || "", email: f.email || "", tel: f.tel || "", site: f.site || (src.url && !/instagram\.com/i.test(src.url) ? src.url : ""),
+        instagram: f.instagram || (src.url && /instagram\.com/i.test(src.url) ? src.url : ""), prix: f.prix ?? "", acompte: f.acompte, inclus: f.inclus, resume: f.resume || "" };
+      a.etape = "verif";
+    } catch (e) { a.err = e.message || String(e); }
+    a.busy = false; if (S.ui.prAdd === a) renderAjout();
+  }
+  async function enregistrerAjout(f) {
+    const a = S.ui.prAdd, d = a.draft || {}, val = k => (f.elements["search_" + k] ? f.elements["search_" + k].value.trim() : "");
+    const nom = val("nom"); if (!nom) { ctx.toast(UA.nomRequis); return; }
+    const prix = +val("prix") > 0 ? Math.round(+val("prix")) : null, cat = f.elements["search-pa-metier"].value;
+    // doublon (même nom dans le métier, même site ou e-mail) : signalé une fois avant d'enregistrer, jamais fusionné
+    const vu = { nom, metier: cat, ville: val("ville"), email: val("email"), tel: val("tel"), site: val("site"), instagram: val("instagram"), prix: val("prix") };
+    if (!a.confirme && doublons({ id: "_", name: nom, cat, contact: [vu.email, vu.site, vu.instagram].join(" ") }, S.vendors).length) { a.draft = { ...d, ...vu }; a.confirme = true; renderAjout(); return; }
+    const data = { name: nom, cat, status: "repere", ville: val("ville"), email: val("email"), tel: val("tel"), site: val("site"), instagram: val("instagram"), source: d._ia ? "ia" : "couple", note: d.resume || "" };
+    if (prix) data.prix = prix;
+    if (d._src === "pdf" && prix) { data.status = "discussion"; data.devis = [{ id: `a${Date.now().toString(36)}`, montant: prix, ...(d.acompte ? { acompte: d.acompte } : {}), inclus: d.inclus || [], resume: d.resume || "", recuLe: new Date().toISOString().slice(0, 10), source: "coach" }]; }
+    for (const k of Object.keys(data)) if (data[k] === "") delete data[k];
+    const id = await ctx.addVendor(data); if (!id) return;
+    S.ui.prAdd = null; ctx.closeModal(); ctx.kick("analyse"); ctx.toast(UA.ok(nom));
+    show("fiche", { pFiche: id });
+  }
+
+  /* ---------- 4.4 Comparer (plein écran) ---------- */
+  // S.ui.prCmp = { m, ids, busy, err, data }
+  const UC = { label: "COMPARER", titre: m => `Vos ${pl(m)}`, fermer: "Fermer", choisir: "Choisissez jusqu'à 3 prestataires", fit: "Fit avec vos envies", prix: "Prix", avis: "Avis en ligne",
+    libre: d => (d ? `Libre le ${d}` : "Libre à votre date"), prepare: "Le coach prépare les lignes de vos envies…", phrase: m => `Les lignes reprennent vos envies ${m}. En corail : le meilleur sur la ligne.`,
+    avisCoach: "L'avis du coach", verifier: "À vérifier avant de trancher : ", reserver: n => `Réserver ${n}`, question: "Poser une question au coach", detail: "Comparaison détaillée (capacité, critères, notes de visite)",
+    inconnu: "?", aDemander: "À demander", oui: "Oui", non: "Non", deux: "Choisissez au moins 2 prestataires.", erreur: "La comparaison n'a pas pu être préparée : ", reessayer: "Réessayer" };
+  const enviesAtDe = m => { const k = tuile(m); return (S.envies || []).filter(d => k && (d.id.startsWith(k + ".") || d.id === "_tuile." + k)).reduce((x, d) => Math.max(x, +d.updatedAt || 0), 0); };
+  function ouvrirComparer(m, id) {
+    const cs = candidats(m, S.vendors); if (cs.length < 2) { ctx.toast(UC.deux); return; }
+    const prev = S.ui.prCmp && S.ui.prCmp.m === m ? S.ui.prCmp.ids.filter(x => cs.some(v => v.id === x)) : [];
+    let ids = prev.length >= 2 ? prev : cs.slice(0, 3).map(v => v.id);
+    if (id && !ids.includes(id) && cs.some(v => v.id === id)) ids = [id, ...ids].slice(0, 3);
+    S.ui.prCmp = { m, ids }; document.body.classList.add("qs-open"); chargerComparaison();
+  }
+  function comparaisonGardee() {
+    const c = S.ui.prCmp, doc = (S.comparaisons || []).find(x => x.id === cleComparaison(c.m));
+    return doc && doc.empreinte === empreinte(c.ids, S.vendors, enviesAtDe(c.m)) ? doc : null;
+  }
+  async function chargerComparaison() {
+    const c = S.ui.prCmp; if (!c) return;
+    c.data = comparaisonGardee(); c.err = null;
+    if (!c.data && c.ids.length >= 2) {
+      c.busy = true; renderComparer();
+      try { const r = await ctx.runAgentNow("comparer", { metier: c.m, ids: c.ids }); if (!r || !r.ok) throw new Error((r && r.erreur) || "réponse vide"); if (S.ui.prCmp === c) c.data = r.comparaison; }
+      catch (e) { c.err = e.message || String(e); }
+      c.busy = false;
+    }
+    renderComparer();
+  }
+  function renderComparer() {
+    const c = S.ui.prCmp; if (!c) return;
+    const cs = candidats(c.m, S.vendors), vs = c.ids.map(id => cs.find(v => v.id === id)).filter(Boolean), d = c.data, dm = dateM();
+    const best = (vals, dir) => { const ns = vals.filter(x => x != null); if (ns.length < 2) return -1; const b = dir > 0 ? Math.max(...ns) : Math.min(...ns); return vals.indexOf(b); };
+    const ligne = (label, cells, bi) => `<div class="cv-l"><span class="pr-lab">${esc(label)}</span><div class="cv-cells" style="grid-template-columns:repeat(${vs.length},minmax(0,1fr))">${cells.map((x, i) => `<span class="${i === bi ? "best" : ""}">${x}</span>`).join("")}</div></div>`;
+    const fits = vs.map(score), prix = vs.map(dernierPrix), avis = vs.map(v => v.fit && v.fit.avis && v.fit.avis.note != null ? +v.fit.avis.note : null);
+    let rows = ligne(UC.fit, fits.map(x => (x == null ? UC.inconnu : `<b class="num">${x}</b>/100`)), best(fits, 1))
+      + ligne(UC.prix, prix.map(x => (x == null ? UC.aDemander : `<b class="num">${ctx.eur(x)}</b>`)), best(prix, -1));
+    if (d) {
+      rows += d.lignes.map(l => ligne(l.envie, vs.map(v => (l.valeurs[v.id] == null ? UC.inconnu : esc(l.valeurs[v.id]))), vs.findIndex(v => v.id === l.meilleur))).join("");
+    }
+    rows += ligne(UC.avis, avis.map((x, i) => (x == null ? UC.inconnu : `<b class="num">${String(x).replace(".", ",")}</b>${vs[i].fit.avis.nombre ? ` · ${esc(vs[i].fit.avis.nombre)} avis` : ""}`)), best(avis, 1));
+    if (d) { const dispo = vs.map(v => (d.disponibilite || {})[v.id] || "inconnu"); rows += ligne(UC.libre(dm ? dFmt(dm) : ""), dispo.map(s => (s === "libre" ? UC.oui : s === "pris" ? UC.non : UC.aDemander)), dispo.filter(s => s === "libre").length === 1 ? dispo.indexOf("libre") : -1); }
+    const premier = vs.slice().sort((a, b) => (score(b) ?? -1) - (score(a) ?? -1))[0];
+    const ask = `ask:On compare ${vs.map(v => v.name).join(", ")} pour le métier ${c.m}. ${d && d.avis ? `Ton avis était : ${d.avis.phrase} ` : ""}Qu'en penses-tu, et que faut-il leur demander avant de trancher ?`;
+    document.getElementById("layer").innerHTML = `<div class="cv" role="dialog" aria-modal="true" aria-label="${esc(UC.titre(c.m))}">
+      <div class="cv-top"><button class="pr-round" data-act="prcmp-close" aria-label="${UC.fermer}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button><span class="pr-k">${UC.label}</span></div>
+      <h2 class="cv-h">${esc(UC.titre(c.m))}</h2>
+      ${cs.length > 2 ? `<div class="cv-pick" role="group" aria-label="${UC.choisir}"><span class="pr-small">${UC.choisir}</span><div class="chip-row">${cs.map(v => `<button class="chip ${c.ids.includes(v.id) ? "on" : ""}" data-act="prcmp-toggle" data-id="${v.id}" aria-pressed="${c.ids.includes(v.id)}">${esc(v.name)}</button>`).join("")}</div></div>` : ""}
+      ${vs.length < 2 ? `<p class="ev-note">${UC.deux}</p>` : `<div class="cv-heads" style="grid-template-columns:repeat(${vs.length},minmax(0,1fr))">${vs.map(v => `<button class="cv-hd" data-act="prcmp-fiche" data-id="${v.id}">${ini(v)}<b>${esc(v.name)}</b></button>`).join("")}</div>
+      <div class="cv-t">${rows}</div>
+      ${c.busy ? `<p class="ai-pending" role="status">${UC.prepare}</p>` : c.err ? `<p class="banner warn">${esc(UC.erreur + c.err)} <button class="link" data-act="prcmp-retry">${UC.reessayer}</button></p>` : `<p class="ev-note">${esc(UC.phrase(tuile(c.m) ? nomTuile(tuile(c.m)).toLowerCase() : pl(c.m)))}</p>`}
+      ${d && d.avis && d.avis.phrase ? `<section class="pr-coach"><span class="pr-ck2"><span class="pr-mi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg></span><b>${UC.avisCoach.toUpperCase()}</b></span>
+        <p class="cv-phrase">${esc(d.avis.phrase)}</p>${d.avis.verifier ? `<p>${UC.verifier}${esc(d.avis.verifier)}</p>` : ""}<span class="pr-small">${UI.ia}</span></section>` : ""}
+      <div class="cv-acts">${S.canWrite && premier ? `<button class="btn primary" data-act="prreserve" data-id="${premier.id}">${esc(UC.reserver(premier.name))}</button>` : ""}${S.canWrite ? `<button class="btn" data-act="qr" data-do="${esc(ask)}">${UC.question}</button>` : ""}
+        <button class="link" data-act="prcmp-detail">${UC.detail}</button></div>`}</div>`;
+  }
+  function fermerComparer() { S.ui.prCmp = null; ctx.closeModal(); document.body.classList.remove("qs-open"); }
+
   /* ---------- Gestes ---------- */
   const show = (view, extra = {}) => { Object.assign(S.f, { pView: view }, extra); ctx.saveF(); ctx.go("prestataires"); window.scrollTo(0, 0); };
   async function setEtape(v, status, extra = {}, msg) {
@@ -355,13 +488,23 @@ export function makePrest(ctx) {
       case "prmetier": show("metier", { pMetier: t.dataset.m }); return true;
       case "prback": { const f = S.vendors.find(x => x.id === S.f.pFiche); show(f ? "metier" : "main", f ? { pMetier: f.cat } : {}); return true; }
       case "prsearch": S.f.pSearch = !S.f.pSearch; if (!S.f.pSearch) S.f.pq = ""; ctx.render(); if (S.f.pSearch) document.getElementById("search-pr-q")?.focus(); return true;
-      case "prnew": ctx.openEditor("vendors", null, { cat: t.dataset.m || (S.f.pView === "metier" ? S.f.pMetier : "Lieu"), status: "repere", by: ctx.userEmail() }); return true;
+      case "prnew": ouvrirAjout(t.dataset.m); return true;
+      case "pradd-retour": S.ui.prAdd.etape = "choix"; renderAjout(); return true;
+      case "pradd-coach": { const m = (document.getElementById("search-pa-cm") || {}).value || "Lieu"; S.ui.prAdd = null; ctx.closeModal(); ctx.runQr(askChercher(m)); return true; }
+      case "pradd-mail": (async () => { if (await ctx.acceptSug(id)) { ctx.toast("Ajouté"); renderAjout(); } })(); return true;
+      case "compare": { const m = t.dataset.cat; if (!m || candidats(m, S.vendors).length < 2) return false; ctx.closeModal(); ouvrirComparer(m, t.dataset.id); return true; }
+      case "prcmp-close": fermerComparer(); return true;
+      case "prcmp-toggle": { const c = S.ui.prCmp, x = t.dataset.id; c.ids = c.ids.includes(x) ? c.ids.filter(y => y !== x) : [...c.ids, x].slice(-3); chargerComparaison(); return true; }
+      case "prcmp-retry": chargerComparaison(); return true;
+      case "prcmp-fiche": { const x = t.dataset.id; fermerComparer(); show("fiche", { pFiche: x }); return true; }
+      case "prcmp-detail": { const m = S.ui.prCmp.m, ids = S.ui.prCmp.ids; fermerComparer(); S.cmp.ids = ids.slice(); S.cmp.seeded = m; ctx.openCompare(m); return true; }
       case "prquestions": { const d = document.querySelector(".pr-plus"); if (d) d.open = true; document.getElementById("pr-questions")?.scrollIntoView({ behavior: "smooth", block: "start" }); return true; }
       case "prcaltous": S.f.pCalTous = true; ctx.render(); return true;
       case "prlice": if (v) setEtape(v, aDevis(v) || v.briefEnvoyeLe ? "discussion" : "repere", { raisonEcart: null, ecarteLe: null }, UI.remisOk(v.name)); return true;
       case "precart": if (v) sheetEcart(v); return true;
       case "prreserve": {
         if (!v) return true;
+        if (S.ui.prCmp) fermerComparer();
         const autre = !multiple(v.cat) && S.vendors.find(x => x.id !== v.id && x.cat === v.cat && etapeOf(x) === "reserve");
         if (autre) { ctx.toast(UI.dejaReserve(v.cat, autre.name)); return true; }
         setEtape(v, "reserve", { reserveLe: Date.now() }, UI.reserveOk(v.name)); return true;

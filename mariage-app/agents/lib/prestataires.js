@@ -3,8 +3,9 @@
 // Un prestataire (`vendors/<id>`) : { name, cat (métier), status (étape), ville?, email?, site?, instagram?, contact?, tel?,
 //   prix?, devis[], visitNotes?, visitNotesAt?, fit{score, forces, vigilance, avis{note, nombre, resume, trait}}, briefEnvoyeLe?,
 //   raisonEcart?, ecarteLe?, by?, createdAt, source? }
-import { TUILES, METIERS_MULTIPLES } from "./envies/catalogue.js";
-import { METIER2TILE, TBY, tileGris, retard, momentVenu } from "./envies/logic.js";
+import { TUILES, QUESTIONS, METIERS_MULTIPLES } from "./envies/catalogue.js";
+import { FR } from "./envies/fr.js";
+import { METIER2TILE, TBY, tileGris, retard, momentVenu, answerText, hasValue } from "./envies/logic.js";
 
 export const ETAPES = ["repere", "discussion", "reserve"];               // la frise de la fiche ; « ecarte » est hors frise
 export const AUTRE = "Autre";                                             // métier hors catalogue (prestataires spécifiques)
@@ -143,3 +144,19 @@ export function calendrier(vendors = [], A = {}, { date = null, today = new Date
   const tri = (a, b) => r(b) - r(a);
   return { maintenant: ms.filter(x => r(x) >= 0).sort(tri), ensuite: ms.filter(x => r(x) < 0 && r(x) >= -6).sort(tri), plusTard: ms.filter(x => r(x) < -6).sort(tri) };
 }
+
+/* ---------- Comparateur (4.4) : clé, empreinte (cache) et envies du métier ---------- */
+export const cleComparaison = m => String(m).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
+/** Empreinte des données comparées : change si un candidat, sa note, ses devis, ses notes de visite ou les envies du métier changent. */
+export function empreinte(ids, vendors, enviesAt) {
+  const v = ids.slice().sort().map(id => { const x = vendors.find(y => y.id === id) || {}; return [id, +x.updatedAt || 0, +(x.fit && x.fit.updatedAt) || 0, (x.devis || []).length, +x.visitNotesAt || 0].join(":"); });
+  return `${v.join("|")}#${+enviesAt || 0}`;
+}
+/** Envies de la tuile du métier, en texte (seulement les questions répondues). */
+export function enviesDuMetier(m, envies) {
+  const k = tuileDe(m); if (!k) return [];
+  const A = Object.fromEntries(envies.map(d => [d.id, d]));
+  return QUESTIONS.filter(q => q.tuile === k && !q.parPartenaire && hasValue(A[q.id]))
+    .map(q => ({ question: FR.questions[q.id].libelle, niveau: q.niveau, reponse: answerText(q, A[q.id], FR) }));
+}
+

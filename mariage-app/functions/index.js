@@ -131,6 +131,19 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
     await withLock(`recompense-${tuile}-${niveau}`, 10 * 60 * 1000, () => runRecompense({ tuile, niveau }));
     return { ok: true };
   }
+  // Prestataires (docs/prestataires-v1.md) : fiche préremplie à partir d'un lien, d'une photo ou d'un PDF (rien n'est enregistré ici :
+  // l'app montre les champs au couple, qui vérifie), et comparaison d'un métier sur les envies du couple (gardée tant que rien ne change).
+  if (job === "fiche") {
+    const { runFiche } = await import("./agents/fiche-agent.js");
+    try { return { ok: true, fiche: await runFiche({ url: req.data?.url, nom: req.data?.nom, fichier: req.data?.fichier, metier: req.data?.metier }) }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
+  if (job === "comparer") {
+    const { runComparer } = await import("./agents/comparer-agent.js");
+    const ids = Array.isArray(req.data?.ids) ? req.data.ids.map(String).slice(0, 3) : [];
+    try { return { ok: true, comparaison: await runComparer({ metier: String(req.data?.metier || ""), ids }) }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
   if (!["mail", "analyse", "hebdo", "briefs", "pinterest"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
   const { runAll } = await import("./agents/main.js");
   const failed = await runAll({ forced: job });

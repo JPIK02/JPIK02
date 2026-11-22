@@ -56,3 +56,29 @@ test("calendrier de l'onglet vide", () => {
   assert.ok(c.maintenant.some(x => x.m === "Lieu"));
   assert.ok(calendrier([], {}, {}).sansDate);
 });
+
+test("lot 2 : page publique lue sans danger (adresses internes refusées), texte utile extrait", async () => {
+  const { verifierUrl, adressePrivee, texteDePage, lirePage } = await import("../lib/pagepublique.js");
+  for (const ip of ["127.0.0.1", "10.2.3.4", "192.168.1.1", "169.254.169.254", "172.20.0.1", "::1"]) assert.equal(adressePrivee(ip), true, ip);
+  assert.equal(adressePrivee("93.184.216.34"), false);
+  await assert.rejects(verifierUrl("http://169.254.169.254/latest"), /non publique/);
+  await assert.rejects(verifierUrl("ftp://exemple.fr"), /adresses web/);
+  await assert.rejects(verifierUrl("http://localhost:8080"), /port|publique/);
+  const t = texteDePage(`<html><head><title>Atelier Lumière</title><meta name="description" content="Photographe à Lille"><script>alert(1)</script></head>
+    <body><a href="mailto:hello@atelier.fr">écrire</a><a href="https://instagram.com/atelierlumiere">insta</a><p>Reportage &amp; argentique</p></body></html>`);
+  assert.match(t, /Titre : Atelier Lumière/); assert.match(t, /description : Photographe à Lille/); assert.match(t, /mailto:hello@atelier.fr/);
+  assert.match(t, /Reportage & argentique/); assert.ok(!/alert/.test(t));
+  // redirection vers une adresse interne : refusée
+  const fake = async () => ({ status: 302, headers: { get: () => "http://127.0.0.1/admin" } });
+  await assert.rejects(lirePage("93.184.216.34", { fetchImpl: fake }), /non publique/);
+});
+test("lot 2 : la comparaison gardée n'est refaite que si un candidat ou les envies changent", async () => {
+  const { empreinte, cleComparaison, enviesDuMetier } = await import("../lib/prestataires.js");
+  const vs = [{ id: "a", updatedAt: 1, fit: { updatedAt: 2 } }, { id: "b", updatedAt: 3 }];
+  const e1 = empreinte(["b", "a"], vs, 10);
+  assert.equal(e1, empreinte(["a", "b"], vs, 10), "l'ordre ne compte pas");
+  assert.notEqual(e1, empreinte(["a", "b"], vs, 11), "envies modifiées");
+  assert.notEqual(e1, empreinte(["a", "b"], [{ ...vs[0], devis: [{}] }, vs[1]], 10), "nouveau devis");
+  assert.equal(cleComparaison("Coiffure & maquillage"), "coiffure-maquillage");
+  assert.equal(enviesDuMetier("Photographe", [{ id: "photo.style", v: ["reportage"] }]).length, 1);
+});
