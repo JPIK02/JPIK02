@@ -156,3 +156,27 @@ export function actionCoach(t = {}, { vendors = [], mail = null, depasse = false
   if (lien && lien.metier) return { k: "metier", metier: lien.metier };
   return null;
 }
+
+/** Grille d'un mois, semaines du lundi au dimanche (4.6). @returns [[Date|null ×7], …] */
+export function grilleMois(annee, mois) {
+  const premier = new Date(annee, mois, 1), n = new Date(annee, mois + 1, 0).getDate(), decal = (premier.getDay() + 6) % 7;
+  const cases = [...Array(decal).fill(null), ...Array.from({ length: n }, (_, i) => new Date(annee, mois, i + 1))];
+  while (cases.length % 7) cases.push(null);
+  return Array.from({ length: cases.length / 7 }, (_, i) => cases.slice(i * 7, i * 7 + 7));
+}
+const cleJour = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Rendez-vous « à confirmer » (affiché en pointillés, point doré). */
+export const rdvAConfirmer = r => !!(r && (r.aConfirmer || r.statut === "a-confirmer" || r.status === "a-confirmer"));
+/**
+ * Éléments d'un mois par jour (clé AAAA-MM-JJ) : rendez-vous (corail ou doré s'il est à confirmer) et échéances de tâches non faites (gris).
+ * due(t) : échéance d'une tâche ; dateRdv(r) : date d'un rendez-vous.
+ */
+export function elementsDuMois(annee, mois, tasks = [], rdv = [], { due, dateRdv } = {}) {
+  const out = {}, dans = d => d && d.getFullYear() === annee && d.getMonth() === mois;
+  const add = (d, it) => { const k = cleJour(d); (out[k] = out[k] || []).push(it); };
+  for (const r of rdv) { const d = dateRdv(r); if (dans(d)) add(d, { type: rdvAConfirmer(r) ? "aconfirmer" : "rdv", x: r, d }); }
+  for (const t of tasks) { if (t.status === "done") continue; const d = due(t); if (dans(d)) add(d, { type: "tache", x: t, d }); }
+  for (const k of Object.keys(out)) out[k].sort((a, b) => (a.type === "tache") - (b.type === "tache") || String(a.x.time || "").localeCompare(String(b.x.time || "")));
+  return out;
+}
+export { cleJour };

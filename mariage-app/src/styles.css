@@ -1793,3 +1793,55 @@ div.pr-row{cursor:default}
 .pl-cr{margin:0;font-size:14px}
 .pl-cb{padding:0 0 10px 38px}
 .bu-perte b{font-size:inherit!important;font-weight:600}
+
+/* ---------- Lot 4 : calendrier, budget vide, première ouverture du planning ---------- */
+.pl-mois{display:flex;flex-direction:column;gap:12px}
+.pl-mh{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.pl-mh b{font-size:18px;font-weight:500}
+.pl-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px;text-align:center}
+.pl-jh{font-size:12px;font-weight:600;color:var(--muted);padding:4px 0}
+.pl-j{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;min-height:48px;padding:6px 0 4px;border:0;border-radius:12px;background:none;color:var(--ink);font:inherit;cursor:pointer}
+.pl-j b{font-size:15px;font-weight:500;width:30px;height:30px;line-height:30px;border-radius:50%}
+.pl-j.auj b{box-shadow:inset 0 0 0 1.5px var(--coral-ui)}
+.pl-j.jj b{background:var(--gold-soft)}
+.pl-j.on{background:var(--accent-soft)}
+.pl-j:focus-visible{outline:3px solid var(--focus,var(--coral-ui));outline-offset:1px}
+.pl-dots{display:flex;gap:3px;height:6px}
+.pl-dots i,.pl-leg i{display:inline-block;width:6px;height:6px;border-radius:50%}
+.pl-dots i.rdv,.pl-leg i.rdv{background:var(--coral-ui)}
+.pl-dots i.aconfirmer,.pl-leg i.aconfirmer{background:var(--gold-deco)}
+.pl-dots i.tache,.pl-leg i.tache{background:var(--muted)}
+.pl-leg{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted)}
+.pl-leg>span{display:flex;align-items:center;gap:6px}
+.pl-cl{align-items:flex-start}
+.pl-cl.conf .pr-cal{background:var(--surface)!important;outline:1.5px dashed var(--gold-deco);outline-offset:-1.5px}.pl-cl.conf .pr-cal small,.pl-cl.conf .pr-cal b{color:var(--ink)!important}
+.pl-cl .pl-acts{margin-top:6px}
+.pl-calp .pl-row{padding-left:12px}
+/* budget vide */
+.bu-vide{gap:10px}
+.bu-vt{font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:28px;line-height:1.15;color:var(--hero-fg)}
+.bu-vide p,.pl-introp{margin:0;font-size:14.5px;color:var(--hero-muted);line-height:1.4}
+.bu-vin{display:flex;align-items:center;gap:8px}
+.bu-vin input{flex:1;min-width:0;min-height:56px;border:1px solid var(--hero-edge);border-radius:14px;background:var(--hero-glass);color:var(--hero-fg);font:inherit;font-size:30px;font-weight:500;padding:0 14px}
+.bu-vin input::placeholder{color:var(--hero-muted)}
+.bu-vin span{font-size:26px;color:var(--hero-muted)}
+.bu-chips{display:flex;gap:8px;flex-wrap:wrap}
+.bu-chips .chip{min-height:40px;background:var(--hero-glass-2);color:var(--hero-fg);border:0}
+.bu-chips .chip.acc{background:var(--coral-ui);color:var(--on-strong)}
+.bu-pp{font-size:14px;color:var(--hero-gold)}
+.bu-apercu{display:flex;height:12px;border-radius:6px;overflow:hidden;gap:2px}
+.bu-apercu i,.bu-apl i{display:inline-block;height:100%}
+.bu-apl{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--muted)}
+.bu-apl>span{display:flex;align-items:center;gap:5px}.bu-apl i{width:9px;height:9px;border-radius:3px}
+.a0{background:var(--coral-ui)}.a1{background:var(--gold-deco)}.a2{background:var(--hero-b)}.a3{background:var(--ok)}.a4{background:var(--muted)}
+.bu-rp{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line)}
+.bu-rp:first-child{border-top:0}
+.bu-rp.off{opacity:.55}
+.bu-rp input[type=checkbox]{flex:none;width:22px;height:22px;accent-color:var(--coral-ui)}
+.bu-rpm{width:96px;min-height:44px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font:inherit;font-size:16px;text-align:right;padding:0 8px}
+/* première ouverture du planning */
+.pl-datec{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:14px;background:var(--hero-glass)}
+.pl-datec>span{display:flex;flex-direction:column;gap:2px}
+.pl-datec small{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--hero-gold)}
+.pl-datec b{font-size:18px;font-weight:500;color:var(--hero-fg)}.pl-datec>span>span{font-size:13px;color:var(--hero-muted)}
+.pl-datec .btn{background:var(--hero-glass-2);color:var(--hero-fg);border:0}

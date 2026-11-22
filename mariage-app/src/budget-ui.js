@@ -35,7 +35,15 @@ const UI = {
   autresPistes: "Demander d'autres pistes", nouveauTotal: "Nouveau total", reste: m => `encore ${m} au-dessus`, sous: m => `${m} sous la limite`, pile: "pile à la limite",
   appliquer: n => (n ? `Appliquer ${n} piste${n > 1 ? "s" : ""}` : "Choisir une piste"), appliquerA: "Assumer", applique: n => `${n} enveloppe${n > 1 ? "s" : ""} ajustée${n > 1 ? "s" : ""}`,
   assume: m => `Limite montée à ${m}`, mentionIA: "Pistes proposées par une IA à partir de vos envies et de vos devis. Les montants sont des estimations.",
-  echec: e => `Le coach n'a pas pu proposer de pistes : ${e}`, aucunePiste: "Le coach n'a pas trouvé de piste sûre : assumer, ou revoir un poste vous-même.", rienADepasser: "Vous êtes sous votre limite : rien à arbitrer.",
+  echec: e => `Le coach n'a pas pu proposer de pistes : ${e}`,
+  // budget vide (3.6) et répartition
+  videT: "Combien voulez-vous consacrer à votre mariage ?", videP2: "Un ordre de grandeur suffit : vous l'ajusterez à tout moment.", montantL: "Votre budget en euros",
+  parPers: (n, m) => `Pour ${n} invités, soit ≈ ${m} par personne`, coachRep: "Le coach répartit selon vos envies, pas selon une moyenne : plus pour ce qui compte pour vous, rien pour ce qui n'est « pas pour nous ».",
+  repartir: "Répartir mon budget", estimer: "Aucune idée : estimer avec le coach", moiMeme: "Saisir mes postes moi-même", indiquez: "Indiquez d'abord un montant, même approximatif.",
+  repEnCours: "Le coach répartit votre budget…", repT: "La répartition du coach", repEst: m => `Estimation du coach : ${m}`, repP: "Décochez ou ajustez ce qui ne vous va pas, puis créez vos postes.",
+  creer: n => `Créer ${n} poste${n > 1 ? "s" : ""}`, cree: n => `${n} poste${n > 1 ? "s" : ""} créé${n > 1 ? "s" : ""}`, montantPoste: l => `Montant pour ${l}`,
+  mentionRep: "Proposé par une IA. Les montants sont des estimations.", refaireRep: "Demander une autre répartition", totalRep: m => `Total ${m}`,
+  echecRep: e => `Le coach n'a pas pu répartir : ${e}`, apercu: ["Lieu", "Traiteur", "Photo", "Tenues", "Autres"], aucunePiste: "Le coach n'a pas trouvé de piste sûre : assumer, ou revoir un poste vous-même.", rienADepasser: "Vous êtes sous votre limite : rien à arbitrer.",
 };
 const PL = { Lieu: "lieux", Traiteur: "traiteurs", Photographe: "photographes", "Vidéaste": "vidéastes", Musique: "musiciens", Fleuriste: "fleuristes", Tenues: "boutiques",
   Alliances: "bijoutiers", "Coiffure & maquillage": "coiffeurs et maquilleurs", Papeterie: "papetiers", Transport: "transporteurs", Officiant: "officiants", "Hébergement": "hébergements",
@@ -209,7 +217,67 @@ export function makeBudget(ctx) {
     if (ok) { ctx.toastUndo(UI.applique(ids.length), async () => { for (const id of ids) await ctx.patch("budget", id, { prevu: avant[id] }); }); S.ui.arbSel = []; show("main"); }
   }
 
-  function vBudget() { return S.f.bView === "poste" ? vPoste(S.f.bPoste) : S.f.bView === "arbitrer" ? vArbitrer() : vMain(); }
+  /* ---------- 3.6 Budget vide ---------- */
+  const vide = () => !(+S.settings.budgetTotal > 0) && !S.budget.length;
+  function vVide() {
+    const m = +String(S.ui.buMontant ?? "").replace(/\s/g, "") || 0, n = B().attendus, rep = S.repartition && S.repartition.postes && S.repartition.postes.length ? S.repartition : null;
+    const seg = rep ? rep.postes.slice().sort((a, b) => b.montant - a.montant).slice(0, 5).map(p => [p.label, p.montant]) : UI.apercu.map((l, i) => [l, [30, 35, 10, 10, 15][i]]);
+    const tot = seg.reduce((s2, x) => s2 + x[1], 0) || 1;
+    return `<div class="pr bu">
+      <section class="pr-head bu-head bu-vide"><div class="pr-top"><button class="pr-round" data-go="apercu" aria-label="${UI.retour}">${ctx.BACK_SVG}</button><h2 class="bu-t">${UI.titre}</h2><span></span></div>
+        <b class="bu-vt">${UI.videT}</b><p>${UI.videP2}</p>
+        <label class="sr" for="bu-montant">${UI.montantL}</label><div class="bu-vin"><input id="bu-montant" class="num" inputmode="numeric" data-bumontant="1" placeholder="20 000" value="${m || ""}" ${S.canWrite ? "" : "disabled"}><span>€</span></div>
+        <div class="bu-chips">${[15000, 20000, 30000].map(v => `<button class="chip ${m === v ? "acc" : ""}" data-act="bumontant" data-v="${v}">${eur(v)}</button>`).join("")}</div>
+        ${n && m ? `<span class="bu-pp">${esc(UI.parPers(n, eur(Math.round(m / n))))}</span>` : ""}</section>
+      <section class="pr-card pl-coach">${coachEntete()}<p>${UI.coachRep}</p>
+        <span class="bu-apercu" aria-hidden="true">${seg.map((x, i) => `<i class="a${i}" style="width:${(x[1] / tot * 100).toFixed(1)}%"></i>`).join("")}</span>
+        <span class="bu-apl">${seg.map((x, i) => `<span><i class="a${i}"></i>${esc(x[0])}</span>`).join("")}</span>
+        ${S.ui.repErr ? `<p class="brief-err">${esc(UI.echecRep(S.ui.repErr))}</p>` : ""}
+        ${S.canWrite ? `<button class="btn primary" data-act="burepartir" ${S.ui.repLoading ? "disabled" : ""}>${S.ui.repLoading ? UI.repEnCours : UI.repartir}</button>
+          <button class="btn" data-act="buestimer" ${S.ui.repLoading ? "disabled" : ""}>${UI.estimer}</button>` : ""}</section>
+      ${S.canWrite ? `<button class="link" data-act="bumoimeme">${UI.moiMeme}</button>` : ""}</div>`;
+  }
+  const coachEntete = () => `<span class="pr-ck2"><span class="pr-mi" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3l1.8 4.9L19 9.7l-4.6 2.6L12 21l-2.4-8.7L5 9.7l5.2-1.8z"/></svg></span><b>LE COACH</b></span>`;
+  async function repartir(total) {
+    if (S.ui.repLoading) return;
+    S.ui.repLoading = true; S.ui.repErr = ""; ctx.render();
+    try { const r = await ctx.runAgentNow("repartir", total ? { total } : {}); if (r && r.ok === false) S.ui.repErr = r.erreur || "erreur"; else { S.ui.repSel = null; S.ui.repMontants = {}; S.f.bView = "repartition"; ctx.saveF(); } }
+    catch (e) { S.ui.repErr = e.message || "erreur"; }
+    S.ui.repLoading = false; ctx.render(); window.scrollTo(0, 0);
+  }
+  function vRepartition() {
+    const r = S.repartition || {}, ps = r.postes || [];
+    if (!ps.length) { S.f.bView = "main"; return vMain(); }
+    const sel = S.ui.repSel || ps.map((_, i) => i), mt = S.ui.repMontants || {}, val = i => (mt[i] != null ? mt[i] : ps[i].montant);
+    const tot = sel.reduce((s2, i) => s2 + (+val(i) || 0), 0);
+    return `<div class="ev-page bu-page bu-arbp"><button class="link env-back" data-act="buview" data-v="main">${ctx.BACK_SVG}<span>${UI.titre}</span></button>
+      <h2 class="ev-h2">${UI.repT}</h2>${r.estime ? `<span class="ev-tag">${esc(UI.repEst(eur(r.total)))}</span>` : ""}<p class="ev-note">${UI.repP}</p>
+      <div class="pr-box">${ps.map((p, i) => `<div class="bu-rp ${sel.includes(i) ? "" : "off"}"><input type="checkbox" data-burep="${i}" ${sel.includes(i) ? "checked" : ""} aria-label="${esc(p.label)}">
+        <span class="pr-rb"><b>${esc(p.label)}</b>${p.pourquoi ? `<span>${esc(p.pourquoi)}</span>` : ""}</span>
+        <label class="sr" for="bu-rp-${i}">${esc(UI.montantPoste(p.label))}</label><input id="bu-rp-${i}" class="num bu-rpm" inputmode="numeric" data-burepm="${i}" value="${val(i)}"><span class="bu-eu">€</span></div>`).join("")}</div>
+      <p class="ev-note">${UI.mentionRep}</p>
+      <button class="link" data-act="${r.estime ? "buestimer" : "burepartir"}">${UI.refaireRep}</button>
+      ${S.canWrite ? `<div class="pr-bar bu-arbbar"><div class="bu-arbt"><span>${esc(UI.totalRep(""))}</span><b class="num">${eur(tot)}</b></div>
+        <button class="btn primary" data-act="bucreer" ${sel.length ? "" : "disabled"}>${UI.creer(sel.length)}</button></div>` : ""}</div>`;
+  }
+  async function creerPostes() {
+    const r = S.repartition || {}, ps = r.postes || [], sel = S.ui.repSel || ps.map((_, i) => i), mt = S.ui.repMontants || {};
+    const choisis = sel.map(i => ({ ...ps[i], montant: Math.max(0, Math.round(+(mt[i] != null ? mt[i] : ps[i].montant) || 0)) })).filter(p => p.montant > 0);
+    if (!choisis.length) return;
+    const limAvant = S.settings.budgetTotal ?? null, total = choisis.reduce((s2, p) => s2 + p.montant, 0);
+    const ids = [];
+    for (const [i, p] of choisis.entries()) { const id = await ctx.addDoc("budget", { label: p.label, prevu: p.montant, metier: p.metier || "", order: i + 1, note: "", source: "coach" }); if (id) ids.push(id); }
+    if (!(+S.settings.budgetTotal > 0)) await ctx.setLimite(+String(S.ui.buMontant || "").replace(/\s/g, "") || r.total || total);
+    // annulable : les postes que l'on vient de créer sont retirés, la limite revient (rien d'autre n'est touché)
+    ctx.toastUndo(UI.cree(ids.length), async () => { for (const id of ids) await ctx.remove("budget", id); await ctx.setLimite(limAvant); });
+    S.f.bView = "main"; ctx.saveF(); ctx.render(); window.scrollTo(0, 0);
+  }
+
+  function vBudget() {
+    if (S.f.bView === "repartition") return vRepartition();
+    if (vide() && S.f.bView !== "poste") return vVide();
+    return S.f.bView === "poste" ? vPoste(S.f.bPoste) : S.f.bView === "arbitrer" ? vArbitrer() : vMain();
+  }
   const show = (v, id) => { S.f.bView = v; if (id) S.f.bPoste = id; ctx.saveF(); ctx.render(); window.scrollTo(0, 0); };
   async function setEnveloppe(id, val) {
     const b = S.budget.find(x => x.id === id); if (!b || !S.canWrite) return;
@@ -224,6 +292,12 @@ export function makeBudget(ctx) {
       case "buall": S.f.bAll = !S.f.bAll; ctx.saveF(); ctx.render(); return true;
       case "buautres": demanderPistes(true); return true;
       case "buappliquer": appliquer(); return true;
+      case "bumontant": S.ui.buMontant = +t.dataset.v; ctx.render(); return true;
+      case "burepartir": { const m = +String(S.ui.buMontant || "").replace(/\s/g, "") || +S.settings.budgetTotal || (S.repartition && !S.repartition.estime ? S.repartition.total : 0);
+        if (!m) { ctx.toast(UI.indiquez); const i = document.getElementById("bu-montant"); if (i) i.focus(); return true; } repartir(m); return true; }
+      case "buestimer": repartir(0); return true;
+      case "bucreer": creerPostes(); return true;
+      case "bumoimeme": { const m = +String(S.ui.buMontant || "").replace(/\s/g, ""); (m ? ctx.setLimite(m) : Promise.resolve()).then(() => ctx.openEditor("budget")); return true; }
       case "buenv": { const b = S.budget.find(x => x.id === S.f.bPoste); if (b) setEnveloppe(b.id, (+b.prevu || 0) + (+t.dataset.d)); return true; }
       case "bumetier": S.f.pView = "metier"; S.f.pMetier = t.dataset.m; ctx.saveF(); ctx.go("prestataires"); return true;
       case "budepdel": { const b = S.budget.find(x => x.id === S.f.bPoste); if (!b) return true; const avant = (b.depenses || []).slice(), i = +t.dataset.i;
@@ -235,6 +309,9 @@ export function makeBudget(ctx) {
     if (!el.dataset) return false;
     if (el.dataset.buenv) { setEnveloppe(el.dataset.buenv, String(el.value).replace(/\s/g, "")); return true; }
     if (el.dataset.buarb != null) { const i = +el.dataset.buarb, s2 = new Set(S.ui.arbSel || []); el.checked ? s2.add(i) : s2.delete(i); S.ui.arbSel = [...s2]; ctx.render(); return true; }
+    if (el.dataset.bumontant) { S.ui.buMontant = String(el.value).replace(/[^\d]/g, ""); ctx.render(); return true; }
+    if (el.dataset.burep != null) { const r = S.repartition || {}, i = +el.dataset.burep, s2 = new Set(S.ui.repSel || (r.postes || []).map((_, j) => j)); el.checked ? s2.add(i) : s2.delete(i); S.ui.repSel = [...s2].sort((a, b) => a - b); ctx.render(); return true; }
+    if (el.dataset.burepm != null) { S.ui.repMontants = { ...(S.ui.repMontants || {}), [el.dataset.burepm]: Math.max(0, Math.round(+String(el.value).replace(/[^\d]/g, "") || 0)) }; ctx.render(); return true; }
     if (el.dataset.buassume) { S.ui.arbAssume = el.checked; if (el.checked) S.ui.arbSel = []; ctx.render(); return true; }
     return false;
   }

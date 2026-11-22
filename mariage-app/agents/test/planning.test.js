@@ -69,3 +69,12 @@ test("action du coach sur une tâche : la première qui s'applique", () => {
   assert.equal(actionCoach({ title: "Visite", status: "done" }), null);
   assert.equal(actionCoach({ title: "x" }, { aVenir: { id: "r" } }).k, "preparer");
 });
+import { grilleMois, elementsDuMois } from "../lib/planning.js";
+test("calendrier : semaines du lundi au dimanche, points par jour", () => {
+  const g = grilleMois(2026, 11); // décembre 2026 : commence un mardi
+  assert.equal(g[0][0], null); assert.equal(g[0][1].getDate(), 1); assert.equal(g.flat().filter(Boolean).length, 31); assert.equal(g.every(w => w.length === 7), true);
+  const D = s => new Date(s + "T12:00:00");
+  const e = elementsDuMois(2026, 11, [{ id: "t", due: "2026-12-05" }, { id: "f", due: "2026-12-05", status: "done" }], [{ id: "r", date: "2026-12-05", time: "10:00" }, { id: "c", date: "2026-12-09", aConfirmer: true }, { id: "x", date: "2027-01-02" }], { due: t => D(t.due), dateRdv: r => D(r.date) });
+  assert.deepEqual(Object.keys(e).sort(), ["2026-12-05", "2026-12-09"]);
+  assert.deepEqual(e["2026-12-05"].map(i => i.type), ["rdv", "tache"]); assert.equal(e["2026-12-09"][0].type, "aconfirmer");
+});

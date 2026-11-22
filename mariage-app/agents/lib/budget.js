@@ -131,3 +131,22 @@ export function nettoyerPistes(pistes = [], postes = []) {
 }
 /** Empreinte du budget : les pistes en cache ne valent que tant que limite et enveloppes n'ont pas changé. */
 export const empreinteBudget = (lignes = [], limite = 0) => [num(limite), ...lignes.map(b => `${b.id}:${num(b.prevu)}:${num(b.engage)}`).sort()].join("|");
+
+/**
+ * Répartition proposée par le coach pour un budget vide (3.6), nettoyée : 4 à 16 postes, montants positifs arrondis à 50 €,
+ * métier du catalogue ou aucun ; si un total est donné, les montants sont ramenés exactement à ce total (jamais au-delà).
+ * @returns {total, postes: [{label, metier, montant, pourquoi}]}
+ */
+export function nettoyerRepartition(out = {}, { total = 0 } = {}) {
+  const r50 = x => Math.max(0, Math.round(x / 50) * 50);
+  let postes = (Array.isArray(out.postes) ? out.postes : []).map(p => ({
+    label: String(p.label || "").trim().slice(0, 60), metier: METIERS.includes(p.metier) && p.metier !== AUTRE ? p.metier : null,
+    montant: num(p.montant), pourquoi: String(p.pourquoi || "").trim().slice(0, 160) })).filter(p => p.label && p.montant > 0).slice(0, 16);
+  const cible = num(total) > 0 ? num(total) : num(out.total);
+  if (!postes.length || !(cible > 0)) return { total: 0, postes: [] };
+  const somme = postes.reduce((s, p) => s + p.montant, 0);
+  postes = postes.map(p => ({ ...p, montant: r50(p.montant * cible / somme) }));
+  const ecart = cible - postes.reduce((s, p) => s + p.montant, 0), plus = postes.reduce((m, p, i) => (p.montant > postes[m].montant ? i : m), 0);
+  postes[plus].montant = Math.max(0, postes[plus].montant + ecart); // l'arrondi va sur le plus gros poste : la somme tombe juste
+  return { total: Math.round(cible), postes: postes.filter(p => p.montant > 0) };
+}

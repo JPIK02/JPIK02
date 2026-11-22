@@ -2,7 +2,7 @@
 // Tâches et rendez-vous dans une seule page (plus d'onglet Agenda). Règles dans agents/lib/planning.js (testées) ;
 // tableau des étapes et thèmes validé : docs/planning-migration.md. Aucun appel IA à l'affichage.
 // Lot 3 : actions du coach sur une tâche ; lot 4 : vue calendrier et planning vide.
-import { ETAPES, ETAPE, THEMES, ORDRE_THEMES, themeDe, pourQui, etapeCourante, avancement, prochainement, joursDeRetard, ics, actionCoach } from "../agents/lib/planning.js";
+import { ETAPES, ETAPE, THEMES, ORDRE_THEMES, themeDe, pourQui, etapeCourante, avancement, prochainement, joursDeRetard, ics, actionCoach, grilleMois, elementsDuMois, cleJour } from "../agents/lib/planning.js";
 import { candidats } from "../agents/lib/prestataires.js";
 
 // Textes d'interface (à traduire)
@@ -33,6 +33,13 @@ const UI = {
   redige: "Le coach rédige…", brouillon: "Brouillon à relire", ouvrirMailApp: "Ouvrir dans l'app mail", copier: "Copier", copie: "Copié", refaire: "Refaire",
   creneauxL: "Créneaux proposés", rienEnvoye: "Rien n'est envoyé par l'app : vous relisez et envoyez depuis votre messagerie.", echecCoach: e => `Le coach n'a pas pu rédiger : ${e}`,
   preparerAsk: (t, d, v) => `Prépare notre rendez-vous « ${t} »${v ? ` avec ${v}` : ""}${d ? ` le ${d}` : ""} : rappelle nos envies pour ce métier et donne-nous les questions à poser.`,
+  // calendrier (4.6)
+  calT: "Calendrier", moisPrec: "Mois précédent", moisSuiv: "Mois suivant", jours: ["L", "M", "M", "J", "V", "S", "D"],
+  leg: { rdv: "Rendez-vous", aconfirmer: "À confirmer", tache: "Échéance de tâche" }, rienJour: "Rien ce jour-là.", ailleurs: "Ailleurs ce mois-ci", rienMois: "Rien de prévu ce mois-ci.",
+  aConfirmerT: "à confirmer", listeRdv: "Liste de tous les rendez-vous",
+  // première ouverture (4.8)
+  pretT: "Votre chemin est prêt.", pretP: (n, e) => `${n} tâche${n > 1 ? "s" : ""} en ${e} étapes, construites à partir de votre date.`, dateCarte: "Votre date",
+  changer: "Changer", premieres: "Vos 3 premières tâches", voirChemin: "Voir tout le chemin", ajouterMoi: "Ajouter une tâche à moi", aucunePremiere: "Ajoutez votre première tâche.",
   heure: "Heure", lieu: "Lieu", ajouterTel: "Ajouter à mon téléphone", rdvSecret: "Rendez-vous secret : seuls la date et l'heure sont partagés.",
 };
 const MOIS = ["JANV.", "FÉVR.", "MARS", "AVR.", "MAI", "JUIN", "JUIL.", "AOÛT", "SEPT.", "OCT.", "NOV.", "DÉC."];
@@ -78,7 +85,7 @@ export function makePlanning(ctx) {
   }
   function filtres() {
     return `<div class="pl-filt"><div class="seg" role="group" aria-label="Filtrer par personne">${[["all", UI.tout], ["claire", ctx.P1()], ["julien", ctx.P2()]].map(([k, l]) => `<button data-act="plqui" data-v="${k}" aria-pressed="${qui() === k}">${esc(l)}</button>`).join("")}</div>
-      <button class="pr-round sm pl-calb" data-go="agenda" aria-label="${UI.calendrier}">${SVG(ICAL)}</button></div>`;
+      <button class="pr-round sm pl-calb" data-act="plview" data-v="cal" aria-label="${UI.calT}">${SVG(ICAL)}</button></div>`;
   }
   const rond = t => { const late = ctx.isLate(t); return `<button class="pl-ck ${t.status === "done" ? "done" : late ? "late" : t.status === "doing" ? "doing" : ""}" data-act="pldone" data-id="${t.id}" aria-label="${t.status === "done" ? "Marquer à faire" : "Marquer comme fait"} : ${esc(t.title)}" ${S.canWrite ? "" : "disabled"}></button>`; };
   function ligneTache(t, { ligne } = {}) {
@@ -121,7 +128,7 @@ export function makePlanning(ctx) {
   }
   function vMain() {
     return `<div class="pr bu pl">${head()}${filtres()}${retards()}${ctx.dupH()}${prochains()}${chemin()}
-      <button class="pr-row bu-pdf" data-go="agenda">${SVG(ICAL)}<span class="pr-rb"><b>${UI.rdvTous}</b><span>${UI.rdvTousS}</span></span>${ctx.CHEV}</button>
+      <button class="pr-row bu-pdf" data-act="plview" data-v="cal">${SVG(ICAL)}<span class="pr-rb"><b>${UI.calT}</b><span>${UI.rdvTousS}</span></span>${ctx.CHEV}</button>
       <button class="pr-row bu-pdf" data-act="pdfreport">${SVG('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>')}<span class="pr-rb"><b>${UI.rapport}</b><span>${UI.rapportS}</span></span>${ctx.CHEV}</button>
       <div class="plan-ov ${S.f.overview ? "open" : ""}"><button class="ov-open" data-act="overview" aria-expanded="${!!S.f.overview}"><span><b>${UI.vueEnsemble}</b><span>${UI.vueEnsembleS}</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
         ${S.f.overview ? `<div class="plan-ov-b">${ctx.milestonesPanel()}${ctx.whoPanel()}</div>` : ""}</div></div>`;
@@ -247,12 +254,48 @@ export function makePlanning(ctx) {
       <div class="pl-acts">${d ? `<button class="btn primary" data-act="plics" data-id="${r.id}">${UI.ajouterTel}</button>` : ""}${S.canWrite && !secretAutre ? `<button class="btn" data-edit="rdv" data-id="${r.id}">${UI.toutModifier}</button>` : ""}</div></div>`;
   }
 
+  /* ---------- 4.6 Vue calendrier ---------- */
+  function vCal() {
+    const t0 = today(), cle = S.f.plMois || `${t0.getFullYear()}-${t0.getMonth()}`, [an, mo] = cle.split("-").map(Number);
+    const el = elementsDuMois(an, mo, tasks(), rdvs(), { due: ctx.taskDue, dateRdv }), pre = `${an}-${String(mo + 1).padStart(2, "0")}`, jour = S.f.plJour && S.f.plJour.startsWith(pre) ? S.f.plJour : null;
+    const titre = new Date(an, mo, 1).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }), dm = d0(), kjj = dm ? cleJour(dm) : "";
+    const ligne = i => i.type === "tache"
+      ? `<div class="pl-row">${rond(i.x)}<button class="pr-rb pl-open" data-act="pltache" data-id="${i.x.id}"><b>${esc(i.x.title)}</b><span>${esc(dFmt(i.d))}${ETAPE[i.x.phase] ? ` · ${esc(ETAPE[i.x.phase].nom)}` : ""}</span></button></div>`
+      : `<div class="bu-pay pl-cl ${i.type === "aconfirmer" ? "conf" : ""}">${cal(i.d, "rdv")}<span class="pr-rb"><button class="pr-link pl-open2" data-act="plrdv" data-id="${i.x.id}"><b>${esc(i.x.title)}</b></button><span>${esc([i.x.time, i.x.avec, i.type === "aconfirmer" ? UI.aConfirmerT : ""].filter(Boolean).join(" · "))}</span>
+          <span class="pl-acts">${i.x.date ? `<button class="btn sm" data-act="plics" data-id="${i.x.id}">${UI.ajouterTel}</button>` : ""}${i.d >= t0 ? `<button class="btn sm" data-act="qr" data-do="${esc(askPreparer(i.x))}">${UI.coachBtn.preparer}</button>` : ""}</span></span></div>`;
+    const autres = Object.entries(el).filter(([k]) => k !== jour).sort(([a], [b]) => a.localeCompare(b)).flatMap(([, l]) => l);
+    return `<div class="ev-page pl-tache pl-calp">
+      <button class="link env-back" data-act="plview" data-v="main">${ctx.BACK_SVG}<span>${UI.titre}</span></button><h2 class="ev-h2">${UI.calT}</h2>
+      <section class="pr-card pl-mois"><div class="pl-mh"><button class="pr-round sm pl-calb" data-act="plmois" data-d="-1" aria-label="${UI.moisPrec}">${SVG('<path d="M15 6l-6 6 6 6"/>')}</button>
+          <b>${esc(titre.charAt(0).toUpperCase() + titre.slice(1))}</b><button class="pr-round sm pl-calb" data-act="plmois" data-d="1" aria-label="${UI.moisSuiv}">${SVG('<path d="M9 6l6 6-6 6"/>')}</button></div>
+        <div class="pl-grid">${UI.jours.map(j => `<span class="pl-jh" aria-hidden="true">${j}</span>`).join("")}
+          ${grilleMois(an, mo).flat().map(d => { if (!d) return `<span></span>`; const k = cleJour(d), l = el[k] || [], types = [...new Set(l.map(i => i.type))];
+            return `<button class="pl-j ${k === jour ? "on" : ""} ${k === cleJour(t0) ? "auj" : ""} ${k === kjj ? "jj" : ""}" data-act="pljour" data-k="${k}" aria-pressed="${k === jour}" aria-label="${esc(d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}${l.length ? ` : ${l.length} élément${l.length > 1 ? "s" : ""}` : ""}"><b>${d.getDate()}</b><span class="pl-dots">${types.map(x => `<i class="${x}"></i>`).join("")}</span></button>`; }).join("")}</div>
+        <span class="pl-leg">${["rdv", "aconfirmer", "tache"].map(x => `<span><i class="${x}"></i>${UI.leg[x]}</span>`).join("")}</span></section>
+      ${jour ? `<section class="pr-sec"><h3 class="home-h">${esc(ctx.pd(jour).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }))}</h3>${(el[jour] || []).length ? `<div class="pr-box">${el[jour].map(ligne).join("")}</div>` : `<p class="ev-note">${UI.rienJour}</p>`}</section>` : ""}
+      <section class="pr-sec"><h3 class="home-h">${jour ? UI.ailleurs : esc(titre)}</h3>${autres.length ? `<div class="pr-box">${autres.map(ligne).join("")}</div>` : `<p class="ev-note">${UI.rienMois}</p>`}</section>
+      <button class="link" data-go="agenda">${UI.listeRdv}</button></div>`;
+  }
+
+  /* ---------- 4.8 Première ouverture ---------- */
+  function vIntro() {
+    const d = d0(), ts = S.tasks, premieres = tasks().filter(t => t.status !== "done").sort((a, b) => (ctx.taskDue(a) || 9e15) - (ctx.taskDue(b) || 9e15) || (a.order ?? 999) - (b.order ?? 999)).slice(0, 3);
+    return `<div class="pr bu pl">
+      <section class="pr-head bu-head pl-head"><div class="pr-top"><button class="pr-round" data-go="apercu" aria-label="${UI.retour}">${ctx.BACK_SVG}</button><h2 class="bu-t">${UI.titre}</h2><span></span></div>
+        <b class="bu-vt">${UI.pretT}</b><p class="pl-introp">${esc(UI.pretP(ts.length, ETAPES.length))}</p>
+        <div class="pl-datec"><span><small>${UI.dateCarte}</small><b>${d ? esc(dMois(d).replace(/^./, c => c.toUpperCase())) : UI.dateAFixer}</b>${d && S.settings.dateIndicative ? `<span>${UI.dateIndicative}</span>` : ""}</span><button class="btn sm" data-go="reglages">${UI.changer}</button></div></section>
+      <section class="pr-sec"><h3 class="home-h">${UI.premieres}</h3>${premieres.length ? `<div class="pr-box pl-list">${premieres.map(t => ligneTache(t)).join("")}</div>` : `<p class="ev-note">${UI.aucunePremiere}</p>`}</section>
+      <button class="btn primary" data-act="plintro">${UI.voirChemin}</button>
+      ${S.canWrite ? `<button class="btn" data-act="plajoutmoi">${UI.ajouterMoi}</button>` : ""}</div>`;
+  }
+
   /* ---------- gestes ---------- */
   function vPlanning() {
-    switch (S.f.plView) { case "etape": return vEtape(S.f.plEtape); case "tache": return vTache(S.f.plId); case "rdv": return vRdv(S.f.plId); default: return vMain(); }
+    if (!S.f.plIntroVu && (!S.f.plView || S.f.plView === "main")) return vIntro(); // une seule fois par appareil (4.8)
+    switch (S.f.plView) { case "etape": return vEtape(S.f.plEtape); case "tache": return vTache(S.f.plId); case "rdv": return vRdv(S.f.plId); case "cal": return vCal(); default: return vMain(); }
   }
   const show = (v, o = {}) => {
-    if (v === "tache" || v === "rdv") { S.f.plFrom = { v: S.f.plView || "main", etape: S.f.plEtape }; S.f.plBackLabel = S.f.plView === "etape" && ETAPE[S.f.plEtape] ? ETAPE[S.f.plEtape].nom : UI.titre; }
+    if (v === "tache" || v === "rdv") { S.f.plFrom = { v: S.f.plView || "main", etape: S.f.plEtape }; S.f.plBackLabel = S.f.plView === "etape" && ETAPE[S.f.plEtape] ? ETAPE[S.f.plEtape].nom : S.f.plView === "cal" ? UI.calT : UI.titre; }
     Object.assign(S.f, { plView: v }, o); ctx.saveF(); ctx.render(); window.scrollTo(0, 0);
   };
   async function setTache(id, data, msg) {
@@ -264,6 +307,11 @@ export function makePlanning(ctx) {
     const id = t.dataset.id;
     switch (a) {
       case "plview": show(t.dataset.v); return true;
+      case "plmois": { const t0 = today(), [an, mo] = (S.f.plMois || `${t0.getFullYear()}-${t0.getMonth()}`).split("-").map(Number), d = new Date(an, mo + (+t.dataset.d), 1);
+        S.f.plMois = `${d.getFullYear()}-${d.getMonth()}`; S.f.plJour = null; ctx.saveF(); ctx.render(); return true; }
+      case "pljour": S.f.plJour = S.f.plJour === t.dataset.k ? null : t.dataset.k; ctx.saveF(); ctx.render(); return true;
+      case "plintro": S.f.plIntroVu = true; show("main"); return true;
+      case "plajoutmoi": S.f.plIntroVu = true; ctx.saveF(); ctx.render(); ctx.openEditor("tasks", null, { owner: ctx.moi(), phase: courante() }); return true;
       case "pletape": show("etape", { plEtape: t.dataset.k }); return true;
       case "pltache": show("tache", { plId: id }); return true;
       case "plrdv": show("rdv", { plId: id }); return true;

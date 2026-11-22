@@ -80,3 +80,13 @@ test("pistes d'arbitrage : postes réels, jamais sous le signé, gain recalculé
   assert.deepEqual(p.map(x => [x.titre, x.gain]), [["Menu plus simple", 1400], ["Lieu moins cher", 500]]);
   assert.equal(p[1].changements[0].apres, 3500);
 });
+import { nettoyerRepartition } from "../lib/budget.js";
+test("répartition du budget vide : ramenée exactement au total, métiers du catalogue seulement", () => {
+  const r = nettoyerRepartition({ postes: [{ label: "Lieu", metier: "Lieu", montant: 6000 }, { label: "Traiteur", metier: "Traiteur", montant: 9000 }, { label: "Divers", metier: "Inventé", montant: 1000 }, { label: "", montant: 5 }] }, { total: 20000 });
+  assert.equal(r.postes.reduce((s, p) => s + p.montant, 0), 20000);
+  assert.deepEqual(r.postes.map(p => p.metier), ["Lieu", "Traiteur", null]);
+  assert.ok(r.postes.every(p => p.montant % 50 === 0));
+  const est = nettoyerRepartition({ total: 18000, postes: [{ label: "Lieu", montant: 1 }, { label: "Traiteur", montant: 1 }] });
+  assert.equal(est.total, 18000); assert.deepEqual(est.postes.map(p => p.montant), [9000, 9000]);
+  assert.deepEqual(nettoyerRepartition({ postes: [] }, { total: 1000 }), { total: 0, postes: [] });
+});

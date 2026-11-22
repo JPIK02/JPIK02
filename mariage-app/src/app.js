@@ -78,7 +78,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -620,7 +620,7 @@ function dupBanner(){
 }
 let PL=null;
 const pl=()=>PL||(PL=makePlanning({S,esc,eur,BACK_SVG,CHEV,PH,OWNERS,P1,P2,pd,today,wDate,taskDue,isLate,tintOf,initials,saveF,render,go,patch,toastUndo,budgetLineFor,tuileDe,
-  moi:MOI,nomTuile:k=>(FR_ENVIES.tuiles[k]||{}).nom||"",dupH:dupBanner,milestonesPanel,whoPanel,runAgentNow,toast,budgetDepasse:()=>budgetChiffres().depasse>0}));
+  moi:MOI,nomTuile:k=>(FR_ENVIES.tuiles[k]||{}).nom||"",dupH:dupBanner,milestonesPanel,whoPanel,runAgentNow,toast,openEditor,budgetDepasse:()=>budgetChiffres().depasse>0}));
 
 /* ---------- Agenda ---------- */
 function vAgenda(){
@@ -639,7 +639,7 @@ function vAgenda(){
 // docs/budget-planning-v1.md (lot 1) : la page et un poste ouvert dans src/budget-ui.js, règles dans agents/lib/budget.js
 function vBudget(){return bu().vBudget()}
 let BU=null;
-const bu=()=>BU||(BU=makeBudget({S,esc,eur,tintOf,initials,BACK_SVG,CHEV,today,payments,emptyBlock,saveF,render,go,patch,toastUndo,prenom,runAgentNow,
+const bu=()=>BU||(BU=makeBudget({S,esc,eur,tintOf,initials,BACK_SVG,CHEV,today,payments,emptyBlock,saveF,render,go,patch,toastUndo,toast,prenom,runAgentNow,addDoc,remove,openEditor,
   vendorsVisibles:()=>S.vendors,metaTuile:k=>env().metaOf(k),
   setLimite:v=>setDoc("meta/settings",S.settings,{budgetTotal:v==null||v===""?null:num(v),updatedAt:Date.now()})}));
 // Chiffres du budget (prévu, signé, payé, par invité) : les mêmes partout (page, accueil, alertes, rapport PDF)
@@ -2070,6 +2070,7 @@ function boot(){
       if(c==="envies"||c==="vendors")publierSecret();later()},()=>{})));
     meta("secret","secret");
     meta("arbitrage","arbitrage"); // pistes du coach pour revenir sous la limite (docs/budget-planning-v1.md, 3.3)
+    meta("repartition","repartition"); // répartition proposée par le coach pour un budget vide (3.6)
     // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
     unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });
