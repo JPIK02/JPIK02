@@ -10,6 +10,8 @@ import {makeEnvies} from "./envies-ui.js";
 import {makePrest} from "./prestataires-ui.js";
 import {makeBudget,METIER_OPTIONS} from "./budget-ui.js";
 import {makePlanning} from "./planning-ui.js";
+import {makeInvites} from "./invites-ui.js";
+import {nomFoyer} from "../agents/lib/invites.js";
 import {ETAPES} from "../agents/lib/planning.js";
 import {tuileDe} from "../agents/lib/prestataires.js";
 import {echeancesDe} from "../agents/lib/budget.js";
@@ -75,10 +77,10 @@ const PHASES=[
 const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 
 /* ---------- State ---------- */
-const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
+const COLS=["tasks","budget","guests","foyers","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},foyers:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -545,7 +547,7 @@ function renderBnav(){
   // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
-  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"); // Budget, Planning : même modèle de page (en-tête propre)
+  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")); // Budget, Planning : même modèle de page (en-tête propre)
   {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer"))))}
 }
 function renderTabs(){
@@ -671,7 +673,14 @@ function guestRows(){
     <div class="selbar-row"><span class="lab">Côté</span>${Object.entries(SIDES).map(([k,l])=>`<button class="chip ${k}" data-act="gset" data-k="side" data-v="${k}">${l}</button>`).join("")}</div>`:`<p class="more-note" style="margin:6px 0 0">Touchez les invités à ranger, puis choisissez leur groupe ou leur côté.</p>`}</div>`:"";
   return body+bar;
 }
-function vInvites(){
+// docs/invites-v1.md (lot 1) : page, cercle, foyer, regroupement dans src/invites-ui.js, règles dans agents/lib/invites.js
+function vInvites(){return iv().vInvites()}
+let IV=null;
+const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,render,go,patch,addDoc,remove,toast,toastUndo,openEditor,closeModal,showTask,
+  layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
+  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),ancienneListe:()=>vInvitesListe()}));
+// Ancienne liste détaillée (une ligne par personne, filtres, « Ranger » par groupe ou côté) : déplacée sous « Liste détaillée et rangement »
+function vInvitesListe(){
   const g=S.guests,f=S.f;
   const yes=g.filter(x=>x.rsvp==="oui").length,no=g.filter(x=>x.rsvp==="non").length;
   const cible=num(S.settings.invitesCible);
@@ -681,7 +690,7 @@ function vInvites(){
     <div class="kpi t3"><div><div class="k">Au dîner</div><div class="v num">${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length}</div><div class="s">Présents et en attente</div></div></div>
     <div class="kpi t2"><div><div class="k">${esc(P1())} · ${esc(P2())} · Commun</div><div class="v num" style="font-size:26px">${g.filter(x=>x.side==="claire").length} · ${g.filter(x=>x.side==="julien").length} · ${g.filter(x=>x.side==="commun"||!x.side).length}</div><div class="s">Répartition par côté</div></div></div>
   </div>`;
-  return `${subnav([["invites","Liste"],["tables","Plan de table"]])}<div class="vh"><div><h2>Invités</h2><p>Touchez la réponse d'un invité pour la changer. « Ranger » classe plusieurs invités d'un coup par groupe ou par côté.</p></div>
+  return `<button class="link env-back" data-act="ivview" data-v="main">${BACK_SVG}<span>Nos invités</span></button><div class="vh"><div><h2>Liste détaillée</h2><p>Touchez la réponse d'un invité pour la changer. « Ranger » classe plusieurs invités d'un coup par cercle ou par côté.</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${g.length&&S.canWrite?`<button class="btn" data-act="gselstart" aria-pressed="${S.selMode}">Ranger</button>`:""}<button class="btn primary" data-new="guests" ${S.canWrite?"":"disabled"}>Ajouter</button></div></div>
   ${strip}
   <div class="filters">
@@ -1632,7 +1641,7 @@ function render(){
   if(env().finOpen()&&!(document.activeElement&&document.activeElement.id==="search-qs-phrase"))env().renderQ();
   const main=document.getElementById("main");
   const ae=document.activeElement,aid=ae&&main.contains(ae)?ae.id:null,sel=aid&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null;
-  if(aid&&aid!=="gq"&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&/^(text|number|email|date|time|search)$/.test(ae.type)))){S.pending=true;return}
+  if(aid&&aid!=="gq"&&aid!=="iv-q"&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&/^(text|number|email|date|time|search)$/.test(ae.type)))){S.pending=true;return}
   S.pending=false;
   let pre="";
   document.body.classList.toggle("noauth",S.mode==="login"||S.mode==="locked");
@@ -1808,8 +1817,9 @@ function openBulk(){
 }
 
 async function exportCSV(){
-  const cols=[["name","Nom"],["side","Côté"],["group","Groupe"],["rsvp","Réponse"],["ceremonie","Cérémonie"],["vin","Vin d'honneur"],["diner","Dîner"],["enfant","Enfant"],["table","Table"],["regime","Régime"],["contact","Contact"],["note","Notes"]];
-  const val=(g,k)=>k==="side"?SIDES[g.side]||"":k==="rsvp"?RSVP[g.rsvp||"attente"]:["ceremonie","vin","diner"].includes(k)?(g[k]===false?"non":"oui"):k==="enfant"?(g.enfant?"oui":""):(g[k]??"");
+  const fy=Object.fromEntries(iv().foyers().flatMap(f=>f.personnes.map(g=>[g.id,f.personnes.length>1||f.nom?nomFoyer(f):""])));
+  const cols=[["name","Nom"],["_foyer","Foyer"],["side","Côté"],["group","Cercle"],["rsvp","Réponse"],["ceremonie","Cérémonie"],["vin","Vin d'honneur"],["diner","Dîner"],["enfant","Enfant"],["table","Table"],["regime","Régime"],["contact","Contact"],["note","Notes"]];
+  const val=(g,k)=>k==="_foyer"?fy[g.id]||"":k==="side"?SIDES[g.side]||"":k==="rsvp"?RSVP[g.rsvp||"attente"]:["ceremonie","vin","diner"].includes(k)?(g[k]===false?"non":"oui"):k==="enfant"?(g.enfant?"oui":""):(g[k]??"");
   const q=s=>`"${String(s).replace(/"/g,'""')}"`;
   const csv="﻿"+[cols.map(c=>q(c[1])).join(";"),...S.guests.slice().sort((a,b)=>String(a.name).localeCompare(b.name)).map(g=>cols.map(([k])=>q(val(g,k))).join(";"))].join("\r\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="invites-mariage.csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
@@ -1826,8 +1836,9 @@ document.addEventListener("click",async e=>{
     if(k==="prestataires"){S.f.pView="main";S.f.pSearch=false;S.f.pq=""}
     if(k==="budget")S.f.bView="main";
     if(k==="planning")S.f.plView="main";
+    if(k==="invites")S.f.iView="main";
     saveF();go(k);window.scrollTo(0,0);return}
-  if(t.dataset.go){if(t.dataset.go==="budget"&&S.view!=="budget")S.f.bView="main";if(t.dataset.go==="planning"&&S.view!=="planning"&&S.view!=="agenda")S.f.plView="main";go(t.dataset.go);return}
+  if(t.dataset.go){if(t.dataset.go==="budget"&&S.view!=="budget")S.f.bView="main";if(t.dataset.go==="invites"&&S.view!=="invites")S.f.iView="main";if(t.dataset.go==="planning"&&S.view!=="planning"&&S.view!=="agenda")S.f.plView="main";go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
   // ouvre la page d'une tuile de « Nos envies » (data-bgo : clé de tuile)
   if(t.dataset.bgo||t.dataset.bcat){S.f.envView="tile";S.f.envTile=t.dataset.bgo||t.dataset.bcat;saveF();go("envies");return}
@@ -1838,6 +1849,7 @@ document.addEventListener("click",async e=>{
   const a=t.dataset.act,id=t.dataset.id;
   if(a&&pr().act(a,t))return; // gestes de « Prestataires » (src/prestataires-ui.js)
   if(a&&bu().act(a,t))return; // gestes du « Budget » (src/budget-ui.js)
+  if(a&&iv().act(a,t))return; // gestes des « Invités » (src/invites-ui.js)
   if(a==="plrdvgo"){S.f.plView="rdv";S.f.plId=t.dataset.id;S.f.plFrom={v:"main"};S.f.plBackLabel="Notre planning";saveF();go("planning");return}
   if(a&&pl().act(a,t))return; // gestes du « Planning » (src/planning-ui.js)
   if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
@@ -1939,13 +1951,14 @@ function renderInvitesPart(){
   document.querySelectorAll('[data-f^="g"]').forEach(b=>b.setAttribute("aria-pressed",S.f[b.dataset.f]===b.dataset.v));
   if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
-document.addEventListener("input",e=>{if(pr().input(e.target))return;if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
+document.addEventListener("input",e=>{if(pr().input(e.target))return;if(iv().input(e.target))return;if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
   if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,180,Math.round((window.visualViewport?.height||innerHeight)*.3))+"px"}});
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
   const el=e.target;
   if(bu().change(el))return; // enveloppe d'un poste saisie directement
   if(pl().change(el))return; // champs d'une tâche (échéance, étape, thème, note)
+  if(iv().change(el))return; // champs d'un foyer, cible, regroupement
   if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
   if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
