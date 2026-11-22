@@ -150,10 +150,11 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
     catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
   }
   // Le coach dans les pages Budget et Planning (docs/budget-planning-v1.md, lot 3) : sur action seulement
-  if (job === "arbitrer" || job === "reponse" || job === "creneaux" || job === "repartir") {
+  if (job === "arbitrer" || job === "reponse" || job === "creneaux" || job === "repartir" || job === "relance") {
     const A = await import("./agents/pages-agent.js");
     try {
       if (job === "arbitrer") return { ok: true, arbitrage: await A.runArbitrer({ autres: !!req.data?.autres }) };
+      if (job === "relance") return { ok: true, relance: await A.runRelance({ autre: !!req.data?.autre }) };
       if (job === "repartir") return { ok: true, repartition: await A.runRepartir({ total: Math.max(0, Math.min(1e7, +req.data?.total || 0)) }) };
       const tacheId = String(req.data?.id || "");
       return { ok: true, brouillon: await (job === "reponse" ? A.runReponse({ tacheId }) : A.runCreneaux({ tacheId })) };

@@ -1944,3 +1944,40 @@ div.pr-row{cursor:default}
 .ad-brand span{font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:22px;color:var(--hero-fg);letter-spacing:.01em}
 .ad-sign{display:flex;align-items:center;justify-content:center;gap:8px;margin:4px 0 0;font-size:12.5px;color:var(--muted)}
 .ad-sign .ad-sym{flex:none;width:22px;height:22px;border-radius:50%;background:var(--hero-b);padding:2px}
+
+/* Invités lot 3 : les réponses (docs/invites-v1.md, 3.3) */
+.iv-pts i.r-oui,.iv-head .iv-d.r-oui{background:var(--coral-ui)}
+.iv-pts i.r-non,.iv-head .iv-d.r-non{background:color-mix(in srgb,var(--hero-muted) 60%,transparent)}
+.iv-pts i.r-sans,.iv-head .iv-d.r-sans{background:transparent;box-shadow:inset 0 0 0 1.5px var(--hero-fg)}
+.iv-pts i.r-pasEnvoye,.iv-head .iv-d.r-pasEnvoye{background:transparent;box-shadow:inset 0 0 0 1.5px var(--hero-muted);opacity:.6}
+.iv-limb{border:0;background:none;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+.iv-limb:disabled{text-decoration:none;cursor:default}
+.iv-lim{font:inherit;font-size:15px;padding:4px 6px;border-radius:8px;border:1px solid var(--hero-muted);background:transparent;color:var(--hero-fg);color-scheme:dark;max-width:100%}
+.iv-rel .iv-membres{margin:4px 0 12px}
+.iv-trait .iv-tc{margin:10px 0;color:var(--ink)}
+.iv-trait .iv-tc>div{background:var(--surface-2);border-radius:12px;padding:10px}
+.iv-trait .iv-tc span{color:var(--muted)}
+.iv-reg{list-style:none;margin:0 0 12px;padding:0;border-top:1px solid var(--line)}
+.iv-reg li{display:flex;justify-content:space-between;gap:12px;padding:9px 2px;border-bottom:1px solid var(--line);font-size:15px}
+.iv-trait .bu-ck{margin:4px 0 10px}
+.iv-pm{padding:6px 12px}
+.iv-pmr{display:grid;grid-template-columns:minmax(90px,30%) 1fr auto;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line);font-size:15px}
+.iv-pmr:first-child{border-top:0}
+.iv-bar{display:flex;height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden}
+.iv-bar i{display:block;height:100%;background:var(--coral-ui)}
+.iv-bar i.inv{background:color-mix(in srgb,var(--muted) 30%,transparent)}
+.iv-rp{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-top:1px solid var(--line)}
+.iv-rp:first-child{border-top:0}
+.iv-rpn{display:flex;align-items:center;gap:10px}
+.iv-rseg{width:100%}
+.iv-rseg{flex-wrap:nowrap}
+.iv-rseg button{flex:1;padding:7px 4px;white-space:nowrap;font-size:14px;justify-content:center}
+.iv-rseg button.on{background:var(--surface);color:var(--link);box-shadow:var(--shadow-s)}
+.iv-abs{margin:0}
+.iv-relr{cursor:default}
+.iv-relr .link{flex:none}
+.iv-envr{cursor:pointer}
+.iv-envr input{flex:none;width:20px;height:20px;accent-color:var(--coral-ui)}
+.iv-reltxt{min-height:120px}
+.iv-sur{font-family:var(--f-accroche);font-style:italic;font-size:22px;color:var(--hero-muted)}
+.iv-trait .iv-tc b{color:var(--ink)}

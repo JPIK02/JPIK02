@@ -80,7 +80,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","foyers","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},foyers:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},relance:{},foyers:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -678,7 +678,9 @@ function vInvites(){return iv().vInvites()}
 let IV=null;
 const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,render,go,patch,addDoc,remove,toast,toastUndo,openEditor,closeModal,showTask,
   layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
-  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today,groupes:()=>GROUPS}));
+  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),setSettings:o=>setDoc("meta/settings",S.settings,Object.assign({},o,{updatedAt:Date.now()})),
+  ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today,groupes:()=>GROUPS,runAgentNow,eur,fmtD,
+  traiteur:()=>S.vendors.find(v=>v.cat==="Traiteur"&&etapeOf(v)==="reserve")||null}));
 // Ancienne liste détaillée (une ligne par personne, filtres, « Ranger » par groupe ou côté) : déplacée sous « Liste détaillée et rangement »
 function vInvitesListe(){
   const g=S.guests,f=S.f;
@@ -1224,6 +1226,7 @@ async function acceptSug(id,quiet){
     const g=findGuest(p.name);
     const upd={};if(p.rsvp)upd.rsvp=p.rsvp;if(p.regime)upd.regime=p.regime;
     ok=g?await patch("guests",g.id,upd):await save("guests",null,Object.assign({name:p.name||s.from||"Invité",side:"commun",group:"",rsvp:p.rsvp||"attente",regime:p.regime||"",ceremonie:true,vin:true,diner:true,enfant:false},stamp));
+    if(ok&&g&&p.rsvp)iv().apresReponse(g.id,p.rsvp); // réponse rattachée au foyer : son étape suit (docs/invites-v1.md, 6)
   }
   if(ok){await patch("inbox",id,{status:"accepted",decidedAt:Date.now()});if(!quiet)toast("Ajouté")}
   return ok;
@@ -1855,7 +1858,7 @@ document.addEventListener("click",async e=>{
   if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
   if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;const nx=k.status==="done"?"todo":"done";await patch("tasks",id,{status:nx,doneAt:nx==="done"?Date.now():null});return}
   if(a==="rsvp"){if(S.canWrite)openRsvp(id);return}
-  if(a==="setrsvp"){if(!S.canWrite)return;closeModal();const g=S.guests.find(x=>x.id===id);if(g&&(g.rsvp||"attente")!==t.dataset.v&&await patch("guests",id,{rsvp:t.dataset.v}))toast(`${g.name} : ${RSVP[t.dataset.v]}`);return}
+  if(a==="setrsvp"){if(!S.canWrite)return;closeModal();const g=S.guests.find(x=>x.id===id);if(g&&(g.rsvp||"attente")!==t.dataset.v&&await patch("guests",id,{rsvp:t.dataset.v})){toast(`${g.name} : ${RSVP[t.dataset.v]}`);iv().apresReponse(id,t.dataset.v)}return}
   if(a==="gselstart"){S.selMode=!S.selMode;S.sel.clear();render();return}
   if(a==="gselend"){S.selMode=false;S.sel.clear();render();return}
   if(a==="gsel"){S.sel.has(id)?S.sel.delete(id):S.sel.add(id);renderInvitesPart();return}
@@ -2085,6 +2088,7 @@ function boot(){
     meta("secret","secret");
     meta("arbitrage","arbitrage"); // pistes du coach pour revenir sous la limite (docs/budget-planning-v1.md, 3.3)
     meta("repartition","repartition"); // répartition proposée par le coach pour un budget vide (3.6)
+    meta("relance","relance"); // message de relance des invités (docs/invites-v1.md, 3.3.2)
     // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
     unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });

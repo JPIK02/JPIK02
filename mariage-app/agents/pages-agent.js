@@ -137,3 +137,34 @@ export async function runRepartir({ total = 0, log = console.log } = {}) {
   log(`[répartir] ${r.postes.length} poste(s)${estimer ? " (total estimé)" : ""}`);
   return doc;
 }
+
+/* ---------- Invités : message de relance (docs/invites-v1.md, 3.3.2 et 8) ---------- */
+// Un seul modèle pour tous les foyers, avec « {foyer} » à la place du nom : aucun nom d'invité n'est envoyé à Claude.
+// Gardé dans meta/relance tant que la date limite et les prénoms du couple ne changent pas ; l'app le partage (SMS, WhatsApp, mail), jamais d'envoi.
+const OUT_RELANCE = {
+  name: "enregistrer_relance", description: "Message de relance pour les invités qui n'ont pas encore répondu.",
+  input_schema: { type: "object", properties: { corps: { type: "string", description: "2 à 4 phrases, commence par « Bonjour {foyer} », signé des prénoms du couple" } }, required: ["corps"] },
+};
+export async function runRelance({ autre = false, log = console.log } = {}) {
+  const [settings, cache] = await Promise.all([getMeta("settings"), getMeta("relance")]);
+  const { dateLimite } = await import("./lib/invites.js");
+  const noms = coupleNames(settings), lim = dateLimite(settings);
+  const limite = lim ? new Date(lim.date + "T12:00:00").toLocaleDateString("fr-FR", { day: "numeric", month: "long" }) : "";
+  const emp = [noms.p1, noms.p2, lim && lim.date, settings.date].join("|");
+  if (!autre && cache.empreinte === emp && cache.corps) { log("[relance] message gardé"); return cache; }
+  const out = await runForOutput({
+    system: SYSTEM,
+    user: `Rédige un message court et chaleureux pour relancer des invités qui n'ont pas encore répondu au faire-part de mariage, à envoyer par SMS, WhatsApp ou mail. ` +
+      `Écris « {foyer} » à la place de leur nom (il sera remplacé). ${limite ? `Rappelle gentiment la date limite de réponse : le ${limite}. ` : ""}Pas de reproche, pas d'emoji en excès, tutoiement interdit (vouvoiement collectif). ` +
+      `Signe « ${noms.p1} et ${noms.p2} ».${settings.date ? ` Date du mariage : ${settings.date}${settings.dateIndicative ? " (indicative)" : ""}.` : ""}` +
+      `${autre && cache.corps ? ` Propose une autre formulation que : ${JSON.stringify(cache.corps)}.` : ""}\nAppelle enregistrer_relance.`,
+    output: OUT_RELANCE, feature: "coach", maxTokens: 800,
+  });
+  let corps = String(out.corps || "").trim().slice(0, 1200);
+  if (!corps) throw new Error("message vide");
+  if (!corps.includes("{foyer}")) corps = `Bonjour {foyer} !\n\n${corps}`;
+  const doc = { corps, empreinte: emp, at: Date.now() };
+  await getDb().doc("meta/relance").set(doc);
+  log("[relance] message prêt");
+  return doc;
+}

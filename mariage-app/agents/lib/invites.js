@@ -108,3 +108,97 @@ export function carteAction(foyers = [], guests = []) {
   if (sansAdresse.length) return { k: "adresses", n: sansAdresse.length, premier: sansAdresse[0].id };
   return foyers.length ? { k: "prets" } : null;
 }
+
+/* ---------- Lot 3 : les réponses (3.3, 5.3, 6) ---------- */
+/** Moments par défaut (5.3) : les trois drapeaux historiques des fiches (`ceremonie`, `vin`, `diner`, invité sauf `false`). */
+export const MOMENTS_DEFAUT = [{ k: "ceremonie", nom: "Cérémonie" }, { k: "vin", nom: "Vin d'honneur" }, { k: "diner", nom: "Dîner" }];
+const HISTORIQUES = new Set(MOMENTS_DEFAUT.map(m => m.k));
+/** Moments du mariage : `settings.moments` (renommés, ajoutés, retirés par le couple), sinon les trois par défaut. */
+export function momentsDe(settings = {}) {
+  const l = Array.isArray(settings.moments) ? settings.moments.filter(m => m && m.k && String(m.nom || "").trim()) : [];
+  return l.length ? l.map(m => ({ k: String(m.k), nom: String(m.nom).trim() })) : MOMENTS_DEFAUT.map(m => ({ ...m }));
+}
+/** Invité à un moment : un moment historique sauf drapeau `false` ; un moment ajouté seulement si coché (`true`). */
+export const inviteA = (g, k) => (HISTORIQUES.has(k) ? g[k] !== false : g[k] === true);
+/** Vient à un moment : a répondu oui, est invité à ce moment et ne l'a pas décliné (`absentA`). */
+export const vientA = (g, k) => g.rsvp === "oui" && inviteA(g, k) && !(g.absentA && g.absentA[k]);
+export const envoye = f => !!f && (f.etape === "fairepart" || f.etape === "repondu");
+export const repondu = g => g.rsvp === "oui" || g.rsvp === "non";
+
+/** Étape d'un foyer après une réponse : tous ont répondu → « repondu » ; sinon « fairepart » (une réponse suppose l'invitation reçue). */
+export function etapeApresReponse(f, personnes = f.personnes || []) {
+  if (personnes.length && personnes.every(repondu)) return "repondu";
+  if (f.etape === "repondu" || personnes.some(repondu)) return "fairepart";
+  return f.etape || "liste";
+}
+
+/** Bilan des réponses (en-tête du moment 2) : personnes qui viennent, ne viennent pas, sans réponse (faire-part envoyé), pas encore invitées. */
+export function reponses(foyers = []) {
+  const r = { oui: 0, non: 0, sans: 0, pasEnvoye: 0, total: 0 };
+  for (const f of foyers) for (const g of f.personnes) { r.total++; if (g.rsvp === "oui") r.oui++; else if (g.rsvp === "non") r.non++; else if (envoye(f)) r.sans++; else r.pasEnvoye++; }
+  return r;
+}
+/** Statut d'un foyer pour les listes du moment 2. */
+export function statutFoyer(f) {
+  if (!envoye(f) && !f.personnes.some(repondu)) return "pasenvoye";
+  const oui = f.personnes.filter(g => g.rsvp === "oui").length;
+  if (f.personnes.some(g => !repondu(g))) return oui ? "partiel" : "sans";
+  return oui ? "oui" : "non";
+}
+
+const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Date limite de réponse (6) : réglage du couple, sinon proposée 2 mois avant le mariage ; null sans date. */
+export function dateLimite(settings = {}) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(settings.dateLimiteReponse || "")) return { date: settings.dateLimiteReponse, proposee: false };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(settings.date || "")) return null;
+  const d = new Date(settings.date + "T12:00:00"); d.setMonth(d.getMonth() - 2);
+  return { date: iso(d), proposee: true };
+}
+
+const JOUR = 864e5;
+/**
+ * « À relancer » (3.3.2, 6) : foyers au faire-part envoyé avec quelqu'un sans réponse, dès 15 jours avant la date limite ;
+ * un foyer relancé (`relanceLe`) ne revient qu'après 7 jours.
+ */
+export function aRelancer(foyers = [], { limite = null, today = new Date() } = {}) {
+  if (!limite) return [];
+  const t = +today, lim = +new Date(limite + "T23:59:59");
+  if (t < lim - 15 * JOUR) return [];
+  return foyers.filter(f => envoye(f) && f.personnes.some(g => !repondu(g)) && !(+f.relanceLe && t - +f.relanceLe < 7 * JOUR));
+}
+
+/** Régimes comptés sans nom (5.8) : « Végétarien » ×2, « Sans gluten » ×1 ; textes voisins réunis (casse, accents, pluriel). */
+export function regimesComptes(personnes = []) {
+  const m = new Map();
+  for (const g of personnes) for (const brut of String(g.regime || "").split(/[,;/+]|\bet\b/i)) {
+    const t = brut.trim().replace(/\s+/g, " ").replace(/[.]+$/, ""); if (!t) continue;
+    const k = fold(t).replace(/(ne|e)?s?$/, "");
+    if (!m.has(k)) m.set(k, { label: t[0].toUpperCase() + t.slice(1), n: 0, noms: [] });
+    const x = m.get(k); x.n++; x.noms.push(g.name);
+  }
+  return [...m.values()].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label));
+}
+/** Récapitulatif traiteur (3.3.3), calculé sans IA : les personnes qui viennent au dîner (ou au moment donné). */
+export function recapTraiteur(guests = [], k = "diner") {
+  const l = guests.filter(g => vientA(g, k)), c = compte(l);
+  return { ...c, regimes: regimesComptes(l), avecRegime: l.filter(g => String(g.regime || "").trim()).length };
+}
+/** Texte du récapitulatif (brouillon de mail) : sans nom, sauf si le couple choisit de les ajouter. */
+export function texteTraiteur(r, { couple = "", date = "", moment = "Dîner", noms = false } = {}) {
+  const lignes = [`Bonjour,`, ``, `Voici le récapitulatif des repas pour notre mariage${date ? ` du ${date}` : ""} (${moment.toLowerCase()}) :`,
+    `- ${r.adultes} adulte${r.adultes > 1 ? "s" : ""}`, `- ${r.enfants} enfant${r.enfants > 1 ? "s" : ""}`, `Soit ${r.places} couvert${r.places > 1 ? "s" : ""}.`];
+  if (r.regimes.length) { lignes.push(``, `Régimes et allergies :`); for (const x of r.regimes) lignes.push(`- ${x.label} : ${x.n}${noms ? ` (${x.noms.join(", ")})` : ""}`); }
+  else lignes.push(``, `Aucun régime particulier signalé à ce jour.`);
+  lignes.push(``, `Nous vous préviendrons si ces chiffres changent.`, ``, couple ? `Bien à vous,\n${couple}` : `Bien à vous`);
+  return lignes.join("\n");
+}
+
+/** « Par moment » (3.3.4) : invités et présents de chaque moment. */
+export const parMoment = (guests = [], moments = MOMENTS_DEFAUT) =>
+  moments.map(m => ({ ...m, invites: guests.filter(g => inviteA(g, m.k)).length, presents: guests.filter(g => vientA(g, m.k)).length }));
+
+/** Message de relance d'un foyer : le texte du coach (« {foyer} » remplacé), sinon un texte fixe. */
+export function messageRelance(modele, foyerNom, { couple = "", limite = "" } = {}) {
+  const base = String(modele || "").trim() || `Bonjour {foyer} ! Nous espérons que vous allez bien. Pourriez-vous nous dire si vous serez des nôtres${limite ? ` avant le ${limite}` : ""} ? Cela nous aide beaucoup pour l'organisation.\n\n${couple}`;
+  return base.includes("{foyer}") ? base.replaceAll("{foyer}", foyerNom) : `Bonjour ${foyerNom} !\n\n${base}`;
+}
