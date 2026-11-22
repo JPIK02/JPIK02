@@ -15,7 +15,9 @@ export const PHASES = {
 };
 export const VCATS = ["Lieu", "Traiteur", "Photographe", "Vidéaste", "Musique", "Fleuriste", "Tenues", "Alliances",
   "Coiffure & maquillage", "Papeterie", "Transport", "Officiant", "Hébergement", "Animation enfants", "Autre"];
-const VSTAT = ["repere", "contacte", "devis", "reserve", "ecarte"];
+// Étapes des prestataires (docs/prestataires-v1.md, 6.1) ; anciens statuts acceptés et lus « En discussion »
+const VSTAT = ["repere", "discussion", "reserve", "ecarte"];
+const etape = s => (s === "contacte" || s === "devis" ? "discussion" : oneOf(s, VSTAT));
 const STATUS = ["todo", "doing", "done"], OWNERS = ["deux", "claire", "julien"];
 const RSVP = ["attente", "oui", "non"], SIDES = ["commun", "claire", "julien"];
 
@@ -236,12 +238,12 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
     },
     async ajouter_prestataire(i) {
       const nom = str(i.nom, 160); if (!nom) throw new Error("nom manquant");
-      const { op, id } = await create("vendors", clean({ name: nom, cat: oneOf(i.categorie, VCATS) || "Autre", status: oneOf(i.statut, VSTAT) || "repere", prix: num(i.prix) ?? null, contact: str(i.contact, 300) || "", tel: str(i.tel, 60) || "", note: str(i.note, 3000) || "", acompte: null, acomptePaye: false, dateAcompte: "", dateSolde: "", soldePaye: false, source: "assistant" }));
+      const { op, id } = await create("vendors", clean({ name: nom, cat: oneOf(i.categorie, VCATS) || "Autre", status: etape(i.statut) || "repere", prix: num(i.prix) ?? null, contact: str(i.contact, 300) || "", tel: str(i.tel, 60) || "", note: str(i.note, 3000) || "", acompte: null, acomptePaye: false, dateAcompte: "", dateSolde: "", soldePaye: false, source: "assistant" }));
       return { result: { ok: true, id }, action: { label: `Prestataire ajouté : ${nom}`, ops: [op] } };
     },
     async modifier_prestataire(i) {
       const v = await need("vendors", i.id);
-      const upd = clean({ status: oneOf(i.statut, VSTAT), prix: num(i.prix), acompte: num(i.acompte), dateAcompte: isDate(i.date_acompte) ? i.date_acompte : undefined, dateSolde: isDate(i.date_solde) ? i.date_solde : undefined,
+      const upd = clean({ status: etape(i.statut), ...(i.statut === "ecarte" ? { ecarteLe: Date.now() } : {}), prix: num(i.prix), acompte: num(i.acompte), dateAcompte: isDate(i.date_acompte) ? i.date_acompte : undefined, dateSolde: isDate(i.date_solde) ? i.date_solde : undefined,
         acomptePaye: typeof i.acompte_paye === "boolean" ? i.acompte_paye : undefined, soldePaye: typeof i.solde_paye === "boolean" ? i.solde_paye : undefined,
         contact: str(i.contact, 300), tel: str(i.tel, 60), note: str(i.note, 3000), visitNotes: str(i.notes_visite, 3000) });
       if (upd.visitNotes) upd.fitRequestedAt = Date.now();
@@ -255,8 +257,8 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
       const ops = [];
       if (!v) {
         const nom = str(i.nom, 200); if (!nom) throw new Error("donne l'id du prestataire, ou son nom et sa catégorie");
-        const c = await create("vendors", { name: nom, cat: oneOf(i.categorie, VCATS) || "Autre", status: "devis", acomptePaye: false, note: "", source: "coach" });
-        id = c.id; ops.push(c.op); v = { name: nom, status: "devis", devis: [] };
+        const c = await create("vendors", { name: nom, cat: oneOf(i.categorie, VCATS) || "Autre", status: "discussion", acomptePaye: false, note: "", source: "coach" });
+        id = c.id; ops.push(c.op); v = { name: nom, status: "discussion", devis: [] };
       }
       const list = (a, n = 200) => (Array.isArray(a) ? a.map(x => str(x, n)).filter(Boolean).slice(0, 15) : []);
       const entry = clean({
@@ -266,7 +268,7 @@ export function makeTools(db, { qcats = [], now = new Date(), thumbs = [], autho
         conditions: str(i.conditions, 500), resume: str(i.resume, 600), fichier: str(i.fichier, 200), recuLe: new Date().toISOString().slice(0, 10), source: "coach", par: author || undefined,
       });
       const upd = clean({ devis: [entry, ...(v.devis || [])].slice(0, 12), prix: montant, acompte: entry.acompte, dateAcompte: entry.dateAcompte, dateSolde: entry.dateSolde,
-        status: ["repere", "contacte"].includes(v.status) ? "devis" : undefined, updatedAt: Date.now() }); // updatedAt : la note de fit sera recalculée
+        status: !v.status || v.status === "repere" ? "discussion" : undefined, updatedAt: Date.now() }); // updatedAt : la note de fit sera recalculée
       ops.push(await write(`vendors/${id}`, upd));
       return { result: { ok: true, id, devisPrecedents: (v.devis || []).length }, action: { label: `Devis enregistré : ${v.name} (${montant} €)`, ops } };
     },

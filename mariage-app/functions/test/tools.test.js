@@ -114,7 +114,7 @@ test("enregistrer_devis : ajouté à l'historique de la fiche, prix mis à jour,
   assert.equal(db.data["vendors/v1"].devis.length, 2); assert.equal(db.data["vendors/v1"].devis[0].montant, 4300);
   const n = await exec("enregistrer_devis", { nom: "Fleurs Martin", categorie: "Fleuriste", montant: 900 });
   assert.equal(JSON.parse(n.content).ok, true);
-  assert.equal(Object.values(db.data).find(x => x.name === "Fleurs Martin").status, "devis");
+  assert.equal(Object.values(db.data).find(x => x.name === "Fleurs Martin").status, "discussion", "un devis reçu : En discussion");
 });
 
 test("envie repérée au passage : proposée (à confirmer), jamais sur une question déjà répondue, visible par le coach", async () => {

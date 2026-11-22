@@ -2,6 +2,8 @@
 // Catalogue « Nos envies » v1.3 : 19 tuiles, questions par niveau, identifiants stables (données, sans texte).
 export const FAMILLES = ["coeur", "table", "souvenirs", "ambiance", "vous", "invites", "aide"];
 export const NIVEAUX = ["essentiel", "details", "pro"];
+// Métiers où l'on peut réserver plusieurs prestataires (docs/prestataires-v1.md, 6.1)
+export const METIERS_MULTIPLES = ["Hébergement", "Transport", "Coiffure & maquillage"];
 export const TUILES = [
  {
   "k": "mariage",

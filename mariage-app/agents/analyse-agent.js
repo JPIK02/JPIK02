@@ -48,6 +48,7 @@ const FIT_OUT = {
         note: { type: "number", description: "sur 5, seulement si trouvée" },
         nombre: { type: "number" },
         resume: { type: "string" },
+        trait: { type: "string", description: "un trait qui revient souvent dans les avis, en quelques mots (ex. « discret, très à l'écoute »), seulement s'il revient vraiment" },
         sources: { type: "array", items: { type: "object", properties: { titre: { type: "string" }, url: { type: "string" } }, required: ["url"] } },
       } },
     },

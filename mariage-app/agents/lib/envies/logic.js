@@ -100,6 +100,11 @@ export function jauge(A, me, pays) {
 }
 /** « À explorer maintenant » (section 6.3) : { tuile, niveau, raison } ou null.
  *  ctx : { date (Date|null), today (Date), reserved (Set de métiers réservés), priorites ([clés de tuiles]), pays } */
+/** Calendrier partagé (Nos envies « À explorer », Prestataires « À décider ») : mois restants avant la date,
+ *  et retard d'une tuile sur son « Remonte à » (positif : le moment est venu ; plus grand : plus en retard). */
+export const moisRestants = (date, today = new Date()) => (date - today) / (30.44 * 864e5);
+export const retard = (t, date, today) => (date ? t.remonte - moisRestants(date, today) : null);
+export const momentVenu = (t, date, today) => !!date && retard(t, date, today) >= 0;
 export function explore(A, me, ctx) {
   const { date, today = new Date(), reserved = new Set(), priorites = [], pays } = ctx || {};
   const actives = TUILES.filter(t => !tileGris(t.k, A).gris && (t.k !== "lendemain" || lendemainUtile(A)));
@@ -107,8 +112,8 @@ export function explore(A, me, ctx) {
   const todoE = actives.filter(t => !levelDone(t.k, "essentiel", A, me, pays));
   if (todoE.length) {
     if (!date) return { tuile: todoE[0].k, niveau: "essentiel", raison: "ordre" };
-    const months = (date - today) / (30.44 * 864e5);
-    const due = todoE.filter(t => t.remonte >= months && !isReserved(t));
+    const months = moisRestants(date, today);
+    const due = todoE.filter(t => momentVenu(t, date, today) && !isReserved(t));
     if (due.length) {
       const lieu = due.find(t => t.k === "lieu");
       if (lieu) return { tuile: "lieu", niveau: "essentiel", raison: "moment" };

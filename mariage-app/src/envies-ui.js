@@ -46,7 +46,7 @@ const METIER_PL = { Lieu: "lieux", Traiteur: "traiteurs", Photographe: "photogra
   Tenues: "boutiques de tenues", Alliances: "bijoutiers", "Coiffure & maquillage": "coiffeurs et maquilleurs", Papeterie: "papetiers", Transport: "transporteurs",
   Officiant: "officiants", "Hébergement": "hébergements", "Animation enfants": "animateurs", Bar: "bars", "Pâtissier": "pâtissiers", "Wedding planner": "wedding planners", "Agence de voyage": "agences de voyage" };
 // Icône au trait de chaque tuile (zone d'image sans photo) : 24 × 24, trait en --coral-ui (styles.css, .ev-ic)
-const TILE_ICON = {
+export const TILE_ICON = {
   mariage: '<circle cx="9" cy="12" r="5"/><circle cx="15" cy="12" r="5"/>',
   lieu: '<path d="M4 20V9l4-3 4 3 4-3 4 3v11z"/><path d="M10 20v-5h4v5M3 20h18"/>',
   ceremonie: '<path d="M5 20v-9a7 7 0 0 1 14 0v9M3 20h18M9 20v-7a3 3 0 0 1 6 0v7"/>',
@@ -165,7 +165,7 @@ export function makeEnvies(ctx) {
     const brief = ctx.briefFor(k);
     const essDone = levelDone(k, "essentiel", A(), me(), pays());
     return `<div class="ev-page">
-      <div class="ev-cover">${placeholder(k, "cover")}<button class="ev-back" data-act="envview" data-v="main" aria-label="${UI.retour}">${ctx.BACK_SVG}</button>
+      <div class="ev-cover">${placeholder(k, "cov")}<button class="ev-back" data-act="envview" data-v="main" aria-label="${UI.retour}">${ctx.BACK_SVG}</button>
         <div class="ev-cover-b"><h2>${esc(tName(k))}</h2><span>${UI.remonte(t.remonte)}${t.metiers.length ? ` · ${UI.suivis(vend.length, m)}` : ""}</span></div></div>
       ${G.gris ? `<div class="ev-gris"><b>${UI.pasPourNous}</b><span>${esc(UI.raisons[G.raison] || "")}</span>${S.canWrite ? `<button class="btn sm" data-act="envactif" data-k="${k}">${UI.reactiver}</button>` : ""}</div>` : ""}
       ${(() => { const r = recOf(k, "essentiel"); return r && r.phrase ? `<section class="ev-sec ev-compris"><span class="qs-k">${UI.comprisTile}</span><p>${esc(r.phrase)}</p></section>` : ""; })()}

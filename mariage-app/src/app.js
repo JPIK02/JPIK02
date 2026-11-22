@@ -7,6 +7,8 @@ import {TUILES} from "../agents/lib/envies/catalogue.js";
 import {FR as FR_ENVIES} from "../agents/lib/envies/fr.js";
 import {OLD2TILE,METIER2TILE} from "../agents/lib/envies/logic.js";
 import {makeEnvies} from "./envies-ui.js";
+import {makePrest} from "./prestataires-ui.js";
+import {etapeOf} from "../agents/lib/prestataires.js";
 import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
@@ -39,9 +41,11 @@ const STATUS={todo:"À faire",doing:"En cours",done:"Fait"};
 const SIDES={get claire(){return P1()},get julien(){return P2()},commun:"Commun"};
 const RSVP={attente:"En attente",oui:"Présent",non:"Absent"};
 const RSVP_CLS={attente:"warn",oui:"ok",non:"bad"};
-const VSTAT={repere:"Repéré",contacte:"Contacté",devis:"Devis reçu",reserve:"Réservé",ecarte:"Écarté"};
-const VSTAT_CLS={repere:"",contacte:"acc",devis:"warn",reserve:"ok",ecarte:"bad"};
-const VSTAT_RANK={ecarte:0,repere:1,contacte:2,devis:3,reserve:4};
+// Étapes (docs/prestataires-v1.md, 6.1) : Repéré, En discussion, Réservé, Écarté ; anciens statuts (contacte, devis) lus « En discussion »
+const VSTAT={repere:"Repéré",discussion:"En discussion",reserve:"Réservé",ecarte:"Écarté",contacte:"En discussion",devis:"En discussion"};
+const VSTAT_EDIT=["repere","discussion","reserve","ecarte"];
+const VSTAT_CLS={repere:"",discussion:"acc",contacte:"acc",devis:"acc",reserve:"ok",ecarte:"bad"};
+const VSTAT_RANK={ecarte:0,repere:1,discussion:2,contacte:2,devis:2,reserve:4};
 const VCATS=["Lieu","Traiteur","Bar","Pâtissier","Photographe","Vidéaste","Musique","Fleuriste","Tenues","Alliances","Coiffure & maquillage","Papeterie","Transport","Officiant","Hébergement","Animation enfants","Wedding planner","Agence de voyage","Autre"];
 const KEY_VCATS=["Lieu","Traiteur","Photographe","Musique","Fleuriste","Tenues"];
 const GROUPS=["Famille","Amis","Collègues","Voisins","Autre"];
@@ -493,6 +497,9 @@ function renderBnav(){
   document.body.classList.toggle("on-home",S.view==="apercu");
   // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
+  // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
+  document.body.classList.toggle("on-prest",S.view==="prestataires");
+  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv))))}
 }
 function renderTabs(){
   renderBnav();
@@ -791,35 +798,14 @@ function analyseBar(ctx){
 
 /* ---------- Annuaire ---------- */
 function vPrestataires(){
-  const f=S.f;
-  let vs=S.vendors.slice();
-  const vv=["actifs","reserve","ecarte","tous"].includes(f.vView)?f.vView:"actifs";
-  vs=vs.filter(v=>vv==="tous"||(vv==="actifs"?v.status!=="ecarte":v.status===vv));
-  const allCats=VCATS.filter(c=>S.vendors.some(v=>v.cat===c));
-  if(f.vCat&&f.vCat!=="all"&&allCats.includes(f.vCat))vs=vs.filter(v=>v.cat===f.vCat);
-  const cats=VCATS.filter(c=>vs.some(v=>v.cat===c));
-  const engaged=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
-  // seulement les prestataires réservés : l'acompte d'un simple devis n'est pas encore dû
-  const toPay=S.vendors.filter(v=>v.status==="reserve"&&num(v.acompte)&&!v.acomptePaye).length;
-  const sc=v=>v.status==="ecarte"?-2:(v.fit&&v.fit.score!=null?v.fit.score:-1);
-  const groups=cats.map(c=>{
-    const list=vs.filter(v=>v.cat===c).sort((a,b)=>sc(b)-sc(a)||VSTAT_RANK[b.status]-VSTAT_RANK[a.status]);
-    const tk=METIER2TILE[c],st=tk?env().stateOf(tk):null,m=tk?env().metaOf(tk):{};
-    const cmp=S.vendors.filter(v=>v.cat===c&&v.status!=="ecarte").length>=2;
-    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${cmp?`<button class="chip acc" data-act="compare" data-cat="${esc(c)}">Comparer</button>`:""}${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${st?`<button class="chip ${["brief","complet"].includes(st)?"ok":st==="esquissee"?"warn":""}" data-bgo="${tk}">Nos envies · ${esc(env().etat(st))}</button>`:""}</div></div>
-    <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};const sc=fi.score!=null?Math.round(fi.score):null;return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">
-      <div class="vr-head">${list.length>1?`<span class="rank num">${i+1}.</span>`:""}<span class="t">${esc(v.name)}</span>${sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none" title="Pas encore analysé">à analyser</span>`}</div>
-      <div class="vr-tags"><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${v.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div>
-      ${fi.verdict?`<div class="verdict">${esc(fi.verdict)}</div>`:""}
-      <div class="m">${v.prix?`<span class="num">${eur(v.prix)}</span>`:""}${av.note?`<span class="stars">★ ${esc(String(av.note).replace(".",","))}${av.nombre?` <span style="color:var(--muted);font-weight:500">(${esc(av.nombre)} avis)</span>`:""}</span>`:""}${num(v.acompte)?(v.status==="reserve"?`<span class="${v.acomptePaye?"":"over"}">Acompte ${eur(v.acompte)} ${v.acomptePaye?"versé":"à verser"}</span>`:`<span>Acompte demandé ${eur(v.acompte)}</span>`):""}${v.tel?`<span class="num">${esc(v.tel)}</span>`:""}</div></div>`}).join("")}</div></section>`;
-  }).join("");
-  return `<div class="vh"><div><h2>Annuaire des prestataires</h2><p>${S.vendors.length} prestataire${S.vendors.length>1?"s":""} · ${S.vendors.filter(v=>v.status==="reserve").length} réservé${S.vendors.filter(v=>v.status==="reserve").length>1?"s":""} pour ${eur(engaged)}${toPay?` · <span class="over">${toPay} acompte${toPay>1?"s":""} à verser</span>`:""}. Classés par note de fit dans chaque catégorie.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="briefsmenu">Briefs à envoyer</button><button class="btn" data-new="vendors" ${S.canWrite?"":"disabled"}>Ajouter un prestataire</button></div></div>
-  ${analyseBar("annuaire")}
-  <div class="filters"><div class="seg" role="group" aria-label="Afficher">${[["actifs","En cours"],["reserve","Réservés"],["ecarte","Écartés"],["tous","Tous"]].map(([k,l])=>`<button data-f="vView" data-v="${k}" aria-pressed="${vv===k}">${l}</button>`).join("")}</div>
-    ${allCats.length>1?`<div class="chip-row" role="group" aria-label="Catégorie">${[["all","Toutes"],...allCats.map(c=>[c,c])].map(([k,l])=>`<button class="chip ${(f.vCat||"all")===k?"on":""}" data-f="vCat" data-v="${esc(k)}" aria-pressed="${(f.vCat||"all")===k}">${esc(l)}</button>`).join("")}</div>`:""}</div>
-  ${groups||emptyBlock(S.vendors.length?"Aucun prestataire avec ce statut":"Aucun prestataire pour l'instant","Notez chaque piste dès le premier contact, ou laissez l'assistant e-mails les ajouter.")}`;
+  return pr().vPrest(); // docs/prestataires-v1.md : onglet, page métier, fiche, écartés, onglet vide (src/prestataires-ui.js)
 }
+// Onglet « Prestataires » v1 : écrans dans src/prestataires-ui.js, règles dans agents/lib/prestataires.js
+let PR=null;
+const pr=()=>PR||(PR=makePrest({S,esc,toast,toastUndo,go,render,saveF,CHEV,BACK_SVG,tintOf,initials,eur,pd,today,wDate,fold,env,briefFor,pdfBriefs,patch,devisSection,
+  ficheDetails,pendingSugs,openEditor,closeModal,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
+  logo:()=>(document.querySelector(".brand-mark")||{}).outerHTML||"",userEmail:()=>String(S.user&&S.user.email||""),
+  prenomDe:by=>{const k=PARTNER[String(by||"").toLowerCase()];return k==="claire"?P1():k==="julien"?P2():""}}));
 
 /* ---------- Comparateur ---------- */
 // Valeur d'une ligne « Libellé : valeur » des notes (capacité, couchages… importés du fichier Excel)
@@ -894,32 +880,33 @@ function devisSection(v){
       return `<div class="hb-row"><span class="lab">${fmtD(pd(x.recuLe))}${x.source==="mail"?" · mail":""}${x.resume?` — ${esc(x.resume.slice(0,90))}${x.resume.length>90?"…":""}`:""}</span><span class="amt num">${eur(x.montant)}${dd?` <small class="${dd<0?"ok":"bad"}">${dd<0?"−":"+"}${eur(Math.abs(dd))}</small>`:""}</span></div>`}).join("")}</details>`:""}
     <div style="margin-top:10px">${add}</div></div>`;
 }
-function openFiche(id){
-  const v=S.vendors.find(x=>x.id===id);if(!v)return;
+// Fiche d'un prestataire : page de l'onglet Prestataires (prestataires-ui.js) ; tous les appels existants (accueil, comparateur, coach) y mènent
+function openFiche(id){closeModal();pr().openFiche(id)}
+// « Tous les détails » de la fiche : le contenu de l'ancienne fiche, gardé en entier (déplacer, jamais supprimer)
+function ficheDetails(v){
   const fi=v.fit||{},av=fi.avis||{};
   const tk=METIER2TILE[v.cat];
   const L=(t)=>Array.isArray(t)&&t.length?`<ul class="blist">${t.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:"";
   const crit=Array.isArray(fi.criteres)&&fi.criteres.length?`<div class="fsec"><h4>Détail de la note</h4><div class="crit">${fi.criteres.map(c=>`<div class="hb-row"><span class="lab">${esc(c.label)}</span><span class="amt num">${Math.round(num(c.note))}/100</span><div class="hb-track"><i class="eng" style="width:${Math.max(0,Math.min(100,num(c.note)))}%;background:var(--${num(c.note)>=75?"ok":num(c.note)>=55?"gold":"bad"})"></i></div>${c.pourquoi?`<div class="why">${esc(c.pourquoi)}</div>`:""}</div>`).join("")}</div></div>`:"";
   const offre=[["Montant",v.prix?eur(v.prix):""],["Acompte",num(v.acompte)?eur(v.acompte)+(v.acomptePaye?" · versé":v.dateAcompte?" · avant le "+fmtD(pd(v.dateAcompte)):""):""],["Solde avant le",v.dateSolde?fmtD(pd(v.dateSolde)):""],["Contact",v.contact||""],["Téléphone",v.tel||""]].filter(x=>x[1]);
   const srcs=Array.isArray(av.sources)?av.sources.filter(s=>s&&/^https?:\/\//.test(s.url||"")):[];
-  const layer=document.getElementById("layer");
-  layer.innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Fiche ${esc(v.name)}" style="max-width:680px">
-    <div class="fiche-top">${fitBadge(v,true)}<div style="min-width:0"><h3>${esc(v.name)}</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">${esc(v.cat||"")}</span><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${fi.confiance?`<span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span>`:""}</div></div></div>
-    ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'annuaire, ou attendez le passage de demain matin.${tk&&!env().essentielFait(tk)?" Répondez aussi à l'essentiel de « "+esc(tileName(tk))+" » dans Nos envies pour une note plus juste.":""}</div>`}
+  return `<div class="pr-details">
+    ${fi.confiance?`<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span></div>`:""}
+    ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'onglet Prestataires (Outils), ou attendez le passage de demain matin.${tk&&!env().essentielFait(tk)?" Répondez aussi à l'essentiel de « "+esc(tileName(tk))+" » dans Nos envies pour une note plus juste.":""}</div>`}
     ${offre.length?`<div class="fsec"><h4>L'offre</h4><div class="kv">${offre.map(([k,val])=>`<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div>${v.note?`<p style="font-size:14px;color:var(--muted);margin:10px 0 0;white-space:pre-line;overflow-wrap:anywhere">${esc(v.note)}</p>`:""}</div>`:""}
-    ${devisSection(v)}
+    ${(v.devis||[]).length?"":devisSection(v)}
     ${crit}
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
     <div class="fsec"><h4>Notes de visite</h4>${v.visitNotes?`<p class="vnotes">${esc(v.visitNotes)}</p>`:`<p class="plan-when" style="margin:0 0 8px">Après une visite ou un échange, notez vos impressions : l'IA recalcule la note avec ces informations de première main.</p>`}
       ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (1 à 2 minutes).</p>`:""}
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
-    ${v.questionsAPoser&&(v.questionsAPoser.questions||[]).length?`<div class="fsec"><h4>Vos questions à poser</h4><p class="plan-when" style="margin:0 0 6px">Préparées à partir de vos réponses de Nos envies (${esc(tileName(v.questionsAPoser.tuile))}).</p>${L(v.questionsAPoser.questions)}</div>`:""}
-    ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
+    ${v.questionsAPoser&&(v.questionsAPoser.questions||[]).length?`<div class="fsec" id="pr-questions"><h4>Vos questions à poser</h4><p class="plan-when" style="margin:0 0 6px">Préparées à partir de vos réponses de Nos envies (${esc(tileName(v.questionsAPoser.tuile))}).</p>${L(v.questionsAPoser.questions)}</div>`:""}
+    ${fi.questions&&fi.questions.length?`<div class="fsec" ${v.questionsAPoser&&(v.questionsAPoser.questions||[]).length?"":'id="pr-questions"'}><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
     ${ficheBrief(tk&&briefFor(tk)||TILE2BRIEF[tk])}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div>${S.vendors.filter(x=>x.cat===v.cat).length>=2?`<button type="button" class="btn" data-act="compare" data-cat="${esc(v.cat)}" data-id="${v.id}">Comparer</button>`:""}<button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
-  </div></div>`;
+  </div>`;
 }
 
 /* ---------- Nos envies ---------- */
@@ -1179,9 +1166,9 @@ async function acceptSug(id,quiet){
     if(p.prix!=null)data.prix=num(p.prix);if(p.acompte!=null)data.acompte=num(p.acompte);if(p.dateAcompte)data.dateAcompte=p.dateAcompte;if(p.dateSolde)data.dateSolde=p.dateSolde;
     // un devis reçu rejoint l'historique des devis de la fiche (le plus récent en premier)
     const entry=s.type==="quote"&&p.prix!=null?devisFromMail(s,p):null;
-    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&VSTAT_RANK[v.status]<3)upd.status="devis";
+    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&etapeOf(v)==="repere")upd.status="discussion"; // un devis reçu : « En discussion »
       if(entry){upd.devis=[entry,...(v.devis||[]).filter(d=>d.id!==entry.id)].slice(0,12);upd.updatedAt=Date.now()}ok=await patch("vendors",v.id,upd)}
-    else ok=await save("vendors",null,Object.assign({status:s.type==="quote"?"devis":"contacte",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,entry?{devis:[entry]}:{},stamp));
+    else ok=await save("vendors",null,Object.assign({status:"discussion",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,entry?{devis:[entry]}:{},stamp));
   }else if(s.type==="task"){
     ok=await save("tasks",null,Object.assign({title:p.title||s.subject||"Tâche",phase:PH[p.phase]?p.phase:(currentPhase()||PHASES[0]).k,owner:OWNERS[p.owner]?p.owner:"deux",status:"todo",due:p.due||"",note:p.note||s.summary||"",order:999},stamp));
   }else if(s.type==="payment"){
@@ -1650,12 +1637,14 @@ const SCHEMAS={
   vendors:{one:"le prestataire",fields:[
     {k:"name",label:"Nom",type:"text",req:1},
     {row:[{k:"cat",label:"Catégorie",type:"select",options:VCATS.map(c=>[c,c]),def:"Lieu"},
-          {k:"status",label:"Statut",type:"select",options:Object.entries(VSTAT),def:"repere"}]},
+          {k:"status",label:"Étape",type:"select",options:VSTAT_EDIT.map(k=>[k,VSTAT[k]]),def:"repere"}]},
+    {row:[{k:"ville",label:"Ville",type:"text"},{k:"email",label:"E-mail",type:"text"}]},
+    {row:[{k:"site",label:"Site",type:"text"},{k:"instagram",label:"Instagram",type:"text"}]},
     {row:[{k:"prix",label:"Montant du devis (€)",type:"number"},{k:"acompte",label:"Acompte (€)",type:"number"}]},
     {row:[{k:"dateAcompte",label:"Acompte à verser avant le",type:"date"},{k:"dateSolde",label:"Solde à verser avant le",type:"date"}]},
     {k:"acomptePaye",label:"Acompte versé",type:"check"},
     {k:"soldePaye",label:"Solde versé",type:"check"},
-    {row:[{k:"contact",label:"Contact (nom, e-mail, site)",type:"text"},{k:"tel",label:"Téléphone",type:"text"}]},
+    {row:[{k:"contact",label:"Contact (nom, autres infos)",type:"text"},{k:"tel",label:"Téléphone",type:"text"}]},
     {k:"note",label:"Notes",type:"textarea"},
     {k:"visitNotes",label:"Notes de visite ou d'échange (l'IA en tient compte et recalcule la note)",type:"textarea"}]},
   schedule:{one:"le moment",fields:[
@@ -1677,9 +1666,9 @@ function fieldHTML(f,v){
   return `<div class="field"><label for="${id}">${f.label}</label><input ${t} ${f.type==="email"?"":'autocomplete="off"'} id="${id}" name="${f.k}" value="${esc(v??"")}" ${f.req?"required":""} ${f.list?`list="${id}-l"`:""} ${dis}>${f.list?`<datalist id="${id}-l">${f.list.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`:""}</div>`;
 }
 
-function openEditor(col,id){
+function openEditor(col,id,preset){
   const sc=SCHEMAS[col];if(!sc)return;
-  const cur=id?(S[col].find(x=>x.id===id)||{}):{};
+  const cur=id?(S[col].find(x=>x.id===id)||{}):Object.assign({},preset||{}); // preset : valeurs d'un nouvel élément (ex. métier d'une page Prestataires)
   const isNew=!id;
   const evObj={ceremonie:cur.ceremonie,vin:cur.vin,diner:cur.diner};
   const body=sc.fields.map(f=>f.row?`<div class="cols2">${f.row.map(x=>fieldHTML(x,cur[x.k])).join("")}</div>`:fieldHTML(f,f.k==="_ev"?evObj:cur[f.k])).join("");
@@ -1705,7 +1694,8 @@ function openEditor(col,id){
     delete out._ev;delete out.template;
     if(col==="tasks"&&isNew){const same=S.tasks.filter(t=>t.phase===out.phase);out.order=same.reduce((m,t)=>Math.max(m,t.order||0),0)+1}
     if(col==="vendors")out.updatedAt=Date.now();
-    if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim())out.fitRequestedAt=Date.now();
+    if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim()){out.fitRequestedAt=Date.now();out.visitNotesAt=Date.now()}
+    if(col==="vendors"&&isNew&&!out.by)out.by=String(S.user&&S.user.email||"");
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
     const ok=await save(col,id,out);
@@ -1781,6 +1771,7 @@ document.addEventListener("click",async e=>{
   if(t.dataset.edit){openEditor(t.dataset.edit,t.dataset.id);return}
   if(t.dataset.f){S.f[t.dataset.f]=t.dataset.v;saveF();if(t.dataset.f.startsWith("g")){renderInvitesPart()}else render();return}
   const a=t.dataset.act,id=t.dataset.id;
+  if(a&&pr().act(a,t))return; // gestes de « Prestataires » (src/prestataires-ui.js)
   if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
   if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;await patch("tasks",id,{status:k.status==="done"?"todo":"done"});return}
   if(a==="rsvp"){if(S.canWrite)openRsvp(id);return}
@@ -1879,7 +1870,7 @@ function renderInvitesPart(){
   document.querySelectorAll('[data-f^="g"]').forEach(b=>b.setAttribute("aria-pressed",S.f[b.dataset.f]===b.dataset.v));
   if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
-document.addEventListener("input",e=>{if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
+document.addEventListener("input",e=>{if(pr().input(e.target))return;if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
   if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,180,Math.round((window.visualViewport?.height||innerHeight)*.3))+"px"}});
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{

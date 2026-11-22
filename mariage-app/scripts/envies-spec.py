@@ -293,6 +293,7 @@ for i, (k, fam, rem, met, nom, pq) in enumerate(TUILES):
         fr_q[qd["id"]] = tx
     assert counts["E"] <= 3 and counts["D"] <= 5 and counts["P"] <= 4, (k, counts)
 
+METIERS_MULTIPLES = ["Hébergement", "Transport", "Coiffure & maquillage"]
 # Nom d'une tuile hors de France (le texte d'interface ne porte jamais de mention de pays)
 NOM_HORS_FR = {"cocktail": {"nomHorsFR": "Cocktail"}}
 fr = {
@@ -318,6 +319,8 @@ with open(os.path.join(out, "catalogue.js"), "w") as f:
     f.write(head + "// Catalogue « Nos envies » v1.3 : 19 tuiles, questions par niveau, identifiants stables (données, sans texte).\n")
     f.write("export const FAMILLES = " + json.dumps([k for k, _ in FAMILLES], ensure_ascii=False) + ";\n")
     f.write("export const NIVEAUX = [\"essentiel\", \"details\", \"pro\"];\n")
+    f.write("// Métiers où l'on peut réserver plusieurs prestataires (docs/prestataires-v1.md, 6.1)\n")
+    f.write("export const METIERS_MULTIPLES = " + json.dumps(METIERS_MULTIPLES, ensure_ascii=False) + ";\n")
     f.write("export const TUILES = " + json.dumps(cat_tuiles, ensure_ascii=False, indent=1) + ";\n")
     f.write("export const QUESTIONS = " + json.dumps(cat_q, ensure_ascii=False, indent=1) + ";\n")
 with open(os.path.join(out, "fr.js"), "w") as f:
