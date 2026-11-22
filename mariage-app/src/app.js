@@ -492,7 +492,7 @@ const ICON={envies:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c
 const BNAV=[["apercu","Accueil"],["envies","Nos envies"],["prestataires","Prestataires"]];
 function renderBnav(){
   const sug=pendingSugs().length,cur=PARENT_VIEW[S.view]||S.view;
-  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
+  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" data-racine="1" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
   document.body.classList.add("compact");
   document.body.classList.toggle("on-home",S.view==="apercu");
   // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
@@ -505,7 +505,7 @@ function renderTabs(){
   renderBnav();
   const late=S.tasks.filter(isLate).length,sug=pendingSugs().length;
   setHTML(document.getElementById("tabs"),VIEWS.map(([k,l])=>
-    `<button class="tab" data-go="${k}" ${(PARENT_VIEW[S.view]||S.view)===k?'aria-current="page"':""}>${l}${k==="planning"&&late?`<span class="badge num" title="En retard">${late}</span>`:""}${k==="assistant"&&sug?`<span class="badge gold num" title="À valider">${sug}</span>`:""}</button>`).join(""));
+    `<button class="tab" data-go="${k}" data-racine="1" ${(PARENT_VIEW[S.view]||S.view)===k?'aria-current="page"':""}>${l}${k==="planning"&&late?`<span class="badge num" title="En retard">${late}</span>`:""}${k==="assistant"&&sug?`<span class="badge gold num" title="À valider">${sug}</span>`:""}</button>`).join(""));
 }
 
 /* ---------- Dashboard ---------- */
@@ -1780,6 +1780,11 @@ document.addEventListener("click",async e=>{
   const t=e.target.closest("[data-go],[data-new],[data-edit],[data-act],[data-f],[data-close],[data-who],[data-fiche],[data-bgo],[data-bcat],[data-bchip],[data-bimp]");
   if(!t)return;
   if(t.dataset.close){if(e.target===t||t.tagName==="BUTTON")closeModal();return}
+  // onglet de la barre (bas ou haut) : retour à la première page de l'onglet (Nos envies : l'onglet ; Prestataires : l'onglet, pas une fiche)
+  if(t.dataset.go&&t.dataset.racine){const k=t.dataset.go;
+    if(k==="envies"){env().leaveTile();S.f.envView="main"}
+    if(k==="prestataires"){S.f.pView="main";S.f.pSearch=false;S.f.pq=""}
+    saveF();go(k);window.scrollTo(0,0);return}
   if(t.dataset.go){go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
   // ouvre la page d'une tuile de « Nos envies » (data-bgo : clé de tuile)
