@@ -219,39 +219,67 @@ export function makePlan(ctx) {
   }
 
   /* ---------- glisser-déposer (doigt ou souris) : une personne du tiroir vers une table ---------- */
+  // Au doigt : un geste vers le haut ou un appui de 0,25 s prend la personne ; un geste horizontal fait défiler le tiroir.
+  // À la souris : tout mouvement prend la personne. Le défilement de la page est bloqué pendant le glisser (touchmove, iPhone compris).
   let drag = null;
   const sousLeDoigt = (x, y) => { const el = document.elementFromPoint(x, y); return el && el.closest && el.closest(".pt-t"); };
+  function prendre() {
+    if (!drag || drag.el) return; clearTimeout(drag.tm);
+    drag.el = drag.c.cloneNode(true); drag.el.classList.add("pt-fantome"); document.body.appendChild(drag.el); document.body.classList.add("pt-drag");
+    drag.el.style.transform = `translate(${drag.px - 40}px, ${drag.py - 24}px)`;
+    try { navigator.vibrate && navigator.vibrate(10); } catch {}
+  }
   document.addEventListener("pointerdown", e => {
     const c = e.target.closest && e.target.closest(".pt-tiroir .pt-chip"); if (!c || !S.canWrite || e.button > 0) return;
-    drag = { gid: c.dataset.gid, x: e.clientX, y: e.clientY, el: null, c, cible: null };
+    drag = { gid: c.dataset.gid, x: e.clientX, y: e.clientY, px: e.clientX, py: e.clientY, el: null, c, cible: null, doigt: e.pointerType !== "mouse" };
+    if (drag.doigt) drag.tm = setTimeout(prendre, 250);
   });
-  document.addEventListener("pointermove", e => {
+  // décision « défiler le tiroir ou prendre la personne » : vrai si le geste est (encore) horizontal
+  const horizontal = (dx, dy) => Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy);
+  function bouger(x, y) {
     if (!drag) return;
-    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    const dx = x - drag.x, dy = y - drag.y; drag.px = x; drag.py = y;
     if (!drag.el) {
-      if (Math.abs(dy) < 10 || Math.abs(dx) > Math.abs(dy)) { if (Math.abs(dx) > 10) drag = null; return; } // geste horizontal : on laisse défiler
-      drag.el = drag.c.cloneNode(true); drag.el.classList.add("pt-fantome"); document.body.appendChild(drag.el); document.body.classList.add("pt-drag");
+      if (!drag.doigt) { if (Math.hypot(dx, dy) < 6) return; prendre(); }
+      else if (horizontal(dx, dy)) { clearTimeout(drag.tm); drag = null; return; }
+      else if (Math.abs(dy) < 8) return;
+      else prendre();
     }
-    e.preventDefault();
-    drag.el.style.transform = `translate(${e.clientX - 40}px, ${e.clientY - 24}px)`;
+    drag.el.style.transform = `translate(${x - 40}px, ${y - 24}px)`;
     // près du tiroir ou du haut de l'écran : la page défile pour atteindre les tables cachées
     const tir = document.querySelector(".pt-tiroir"), bas = tir ? tir.getBoundingClientRect().top : innerHeight;
-    drag.vit = e.clientY > bas - 70 ? 12 : e.clientY < 90 ? -12 : 0; drag.px = e.clientX; drag.py = e.clientY;
+    // (vers le bas seulement une fois le doigt sorti du tiroir : sinon la page part dès qu'on prend la personne)
+    if (y < bas - 90) drag.sorti = true;
+    drag.vit = drag.sorti && y > bas - 70 ? 12 : y < 90 ? -12 : 0;
     if (drag.vit && !drag.raf) { const pas = () => { if (!drag || !drag.vit) { if (drag) drag.raf = null; return; } scrollBy(0, drag.vit); survol(drag.px, drag.py); drag.raf = requestAnimationFrame(pas); }; drag.raf = requestAnimationFrame(pas); }
-    survol(e.clientX, e.clientY);
+    survol(x, y);
+  }
+  document.addEventListener("pointermove", e => { if (drag) { bouger(e.clientX, e.clientY); if (drag && drag.el) e.preventDefault(); } }, { passive: false });
+  // iPhone : seul un touchmove annulé empêche la page de défiler (et donc d'interrompre le glisser)
+  document.addEventListener("touchmove", e => {
+    if (!drag || !drag.doigt) return; const t = e.touches[0]; if (!t) return;
+    if (!drag.el && horizontal(t.clientX - drag.x, t.clientY - drag.y)) { clearTimeout(drag.tm); drag = null; return; }
+    if (drag.el || !horizontal(t.clientX - drag.x, t.clientY - drag.y)) { if (e.cancelable) e.preventDefault(); }
+    if (drag.el) bouger(t.clientX, t.clientY);
   }, { passive: false });
+  document.addEventListener("contextmenu", e => { if (e.target.closest && e.target.closest(".pt-tiroir .pt-chip")) e.preventDefault(); });
   function survol(x, y) {
     if (!drag) return;
     const t = sousLeDoigt(x, y);
     if (t !== drag.cible) { if (drag.cible) drag.cible.classList.remove("survol"); if (t) t.classList.add("survol"); drag.cible = t; }
   }
-  const fin = () => {
-    if (!drag) return; const d = drag; drag = null; if (d.raf) cancelAnimationFrame(d.raf);
+  const lacher = (poser) => {
+    if (!drag) return; const d = drag; drag = null; clearTimeout(d.tm); if (d.raf) cancelAnimationFrame(d.raf);
     if (!d.el) return; d.el.remove(); document.body.classList.remove("pt-drag");
-    if (d.cible) { d.cible.classList.remove("survol"); placer(d.gid, d.cible.dataset.tnom); }
-    window.__ptSansClic = Date.now(); // le clic qui suit un glisser n'est pas un toucher
+    if (d.cible) { d.cible.classList.remove("survol"); if (poser) placer(d.gid, d.cible.dataset.tnom); }
+    // le clic qui suit un vrai glisser n'est pas un toucher (un appui long sur place reste un toucher : la personne est choisie)
+    if (d.cible || Math.hypot(d.px - d.x, d.py - d.y) > 8) window.__ptSansClic = Date.now();
   };
-  document.addEventListener("pointerup", fin); document.addEventListener("pointercancel", () => { if (drag && drag.el) { drag.el.remove(); document.body.classList.remove("pt-drag"); if (drag.cible) drag.cible.classList.remove("survol"); } drag = null; });
+  document.addEventListener("pointerup", () => lacher(true));
+  document.addEventListener("touchend", () => lacher(true));
+  // le navigateur peut interrompre le pointeur (défilement) : au doigt, on continue avec touchmove/touchend
+  document.addEventListener("pointercancel", () => { if (drag && !drag.doigt) lacher(false); });
+  document.addEventListener("touchcancel", () => lacher(false));
 
   /* ---------- gestes ---------- */
   const show = (v) => { S.f.tView = v; ctx.saveF(); ctx.render(); window.scrollTo(0, 0); };
