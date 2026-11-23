@@ -2032,3 +2032,20 @@ body.pt-drag{user-select:none;-webkit-user-select:none}
 .iv-pick .link:disabled{color:var(--muted);cursor:default}
 .iv-pick .link.iv-retirer{color:var(--bad)}
 .toast{width:max-content;max-width:calc(100vw - 32px)}
+
+/* Invités lot 5 : liste vide, coller une liste (docs/invites-v1.md, 3.5) */
+.iv-vt{margin:8px 0 6px;font-family:var(--f-accroche);font-style:italic;font-weight:500;font-size:30px;line-height:1.15;color:var(--hero-fg)}
+.iv-vp{margin:0 0 14px;font-size:15px;color:var(--hero-muted)}
+.iv-tailles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0 6px}
+.iv-taille{min-height:52px;border-radius:14px;border:1.5px solid var(--hero-line);background:transparent;color:var(--hero-fg);font:inherit;font-size:19px;font-weight:600;cursor:pointer}
+.iv-taille.on{background:var(--hero-fg);color:var(--hero-a);border-color:var(--hero-fg)}
+.iv-taille:focus-visible{outline:3px solid var(--coral-ui);outline-offset:2px}
+.iv-vr>svg{flex:none;width:26px;height:26px;fill:none;stroke:var(--coral-ui);stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.iv-encart{margin:16px 0;padding:12px 14px;border-radius:14px;background:var(--surface);border:1px solid var(--line)}
+.iv-fic{position:relative;align-self:flex-start;margin:4px 0;cursor:pointer}
+.iv-fic input{position:absolute;inset:0;opacity:0;width:100%;cursor:pointer}
+.iv-fic:focus-within{outline:3px solid var(--coral-ui);outline-offset:2px}
+.iv-coltxt{min-height:150px}
+.iv-pcote{font-size:14px;color:var(--muted)}
+.iv-pcote select{font:inherit;font-size:14px;padding:4px 6px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.bu-piste input.iv-nin{flex:none;width:100%;height:auto;min-height:40px;margin:0 0 8px}

@@ -102,3 +102,41 @@ test("par moment et message de relance", () => {
   assert.equal(messageRelance("Coucou {foyer}, réponse ?", "Famille X"), "Coucou Famille X, réponse ?");
   assert.ok(messageRelance("", "Léa", { couple: "P et Q", limite: "1er mai" }).startsWith("Bonjour Léa !"));
 });
+
+import { nettoyerFoyersProposes, lireCsv, texteTableur } from "../lib/invites.js";
+import { lireXlsx } from "../lib/xlsx.js";
+import { deflateRawSync, crc32 } from "node:zlib";
+test("foyers proposés vérifiés : rien d'inventé, +1, déjà sur la liste", () => {
+  const texte = "Famille Martin : Paul, Léa et Tom (5 ans)\nAlejandra Ruiz +1\nMarc Petit";
+  const r = nettoyerFoyersProposes([
+    { nom: "Famille Martin", cote: "julien", cercle: "Famille", personnes: [{ nom: "Paul Martin" }, { nom: "Léa Martin" }, { nom: "Tom Martin", enfant: true }, { nom: "Inventé Dupont" }] },
+    { personnes: [{ nom: "Alejandra Ruiz" }, { plusUn: true }] }, { personnes: [{ nom: "Marc Petit" }] }, { personnes: [{ plusUn: true }] }, { cote: "x", personnes: [{ nom: "paul martin" }] },
+  ], { texte, existants: [{ name: "Marc Petit" }], side: "claire" });
+  assert.equal(r.length, 3);
+  assert.deepEqual(r[0].personnes.map(p => p.name), ["Paul Martin", "Léa Martin", "Tom Martin"]); assert.ok(r[0].personnes[2].enfant); assert.equal(r[0].side, "julien");
+  assert.deepEqual(r[1].personnes.map(p => [p.name, p.plusUn]), [["Alejandra Ruiz", false], ["+1", true]]); assert.equal(r[1].side, "claire");
+  assert.ok(r[2].personnes[0].dejaLa);
+});
+test("CSV : séparateur deviné, guillemets", () => {
+  assert.deepEqual(lireCsv('Nom;Cercle\n"Martin; Paul";Famille\r\nLéa;"Amis ""proches"""\n'), [["Nom", "Cercle"], ["Martin; Paul", "Famille"], ["Léa", 'Amis "proches"']]);
+  assert.deepEqual(lireCsv("a,b\n1,2"), [["a", "b"], ["1", "2"]]);
+  assert.equal(texteTableur([["Paul", "", "Famille"], ["", ""]]), "Paul · Famille");
+});
+// petit écrivain de zip pour fabriquer un classeur de test (entrées compressées comme Excel)
+function zip(entrees) {
+  const loc = [], cen = []; let off = 0;
+  for (const [nom, txt] of Object.entries(entrees)) {
+    const n = Buffer.from(nom), d = Buffer.from(txt), c = deflateRawSync(d), crc = crc32(d);
+    const h = Buffer.alloc(30); h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(8, 8); h.writeUInt32LE(crc, 14); h.writeUInt32LE(c.length, 18); h.writeUInt32LE(d.length, 22); h.writeUInt16LE(n.length, 26);
+    const ce = Buffer.alloc(46); ce.writeUInt32LE(0x02014b50, 0); ce.writeUInt16LE(20, 4); ce.writeUInt16LE(20, 6); ce.writeUInt16LE(8, 10); ce.writeUInt32LE(crc, 16); ce.writeUInt32LE(c.length, 20); ce.writeUInt32LE(d.length, 24); ce.writeUInt16LE(n.length, 28); ce.writeUInt32LE(off, 42);
+    loc.push(h, n, c); cen.push(ce, n); off += 30 + n.length + c.length;
+  }
+  const cd = Buffer.concat(cen), e = Buffer.alloc(22); e.writeUInt32LE(0x06054b50, 0); e.writeUInt16LE(cen.length / 2, 8); e.writeUInt16LE(cen.length / 2, 10); e.writeUInt32LE(cd.length, 12); e.writeUInt32LE(off, 16);
+  return Buffer.concat([...loc, cd, e]);
+}
+test("Excel : première feuille, textes partagés et en ligne", async () => {
+  const buf = zip({ "[Content_Types].xml": "<Types/>", "xl/sharedStrings.xml": '<sst><si><t>Nom</t></si><si><t>Cercle</t></si><si><t>Paul &amp; Léa Martin</t></si><si><r><t>Fa</t></r><r><t>mille</t></r></si></sst>',
+    "xl/worksheets/sheet1.xml": '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="C2"><v>3</v></c><c r="B2" t="s"><v>3</v></c></row><row r="3"><c r="A3" t="inlineStr"><is><t>Zoé</t></is></c></row></sheetData></worksheet>' });
+  assert.deepEqual(await lireXlsx(buf), [["Nom", "Cercle"], ["Paul & Léa Martin", "Famille", "3"], ["Zoé"]]);
+  await assert.rejects(() => lireXlsx(Buffer.from("pas un zip")));
+});

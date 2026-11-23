@@ -3,7 +3,8 @@
 // Lot 2 : lien des adresses. Lot 3 : moment 2 « Qui vient ? » (3.3 : réponses, relance, récapitulatif traiteur, par moment), réponse par personne
 // sur la page d'un foyer, faire-part marqués envoyés, moments du mariage. Aucun appel IA à l'affichage. Lots suivants : plan de table (4), liste vide (5).
 import { foyersDe, nomFoyer, compte, momentDe, points, cercles, proposerFoyers, carteAction, estPlusUn, coteDe, SUIVI,
-  momentsDe, inviteA, vientA, envoye, repondu, etapeApresReponse, reponses, statutFoyer, dateLimite, aRelancer, recapTraiteur, texteTraiteur, parMoment, messageRelance } from "../agents/lib/invites.js";
+  momentsDe, inviteA, vientA, envoye, repondu, etapeApresReponse, reponses, statutFoyer, dateLimite, aRelancer, recapTraiteur, texteTraiteur, parMoment, messageRelance,
+  nettoyerFoyersProposes, lireCsv, texteTableur } from "../agents/lib/invites.js";
 
 // Textes d'interface (à traduire)
 const UI = {
@@ -46,6 +47,19 @@ const UI = {
   planS2: (p, n, t) => `${p} placé${p > 1 ? "s" : ""} sur ${n} · ${t} table${t > 1 ? "s" : ""}`,
   reponseT: "Réponse", vient: "Vient", vientPas: "Ne vient pas", sansRep: "Sans réponse", toutVient: "Tout le foyer vient", personneVient: "Personne ne vient",
   repOk: (n, r) => `${n} : ${r}`, absentA: "Touchez un moment auquel cette personne ne vient pas.",
+  // lot 5 : liste vide, coller une liste, un tableur
+  videT: "Qui voulez-vous à vos côtés ?", videP: "Un ordre de grandeur suffit pour commencer : il guide le choix du lieu, du traiteur et le budget par invité.",
+  combien: "Combien, environ ?", combienP: "Modifiable plus tard.", tailles: [[30, "30"], [60, "60"], [100, "100"], [150, "150+"]], cibleOk: n => `Cible : ${n} invités`,
+  ajouterProches: "Ajouter vos proches", vCollerT: "Coller une liste", vCollerP: "Depuis vos notes ou un message : le coach reconnaît les couples et les familles.",
+  vUnT: "Un par un", vUnP: "Un foyer à la fois : un couple, une famille, une personne seule.", vTabT: "Un tableur", vTabP: "Un fichier CSV ou Excel (.xlsx).",
+  encart: (a, b) => `Chacun ajoute son côté depuis son téléphone (${a} et ${b}) ; les amis communs vont dans « Commun ».`,
+  colT: "Coller une liste", colP: "Une personne, un couple ou une famille par ligne, comme vous l'écririez. Ex. « Paul et Léa Martin, et leur fils Tom (6 ans) ».",
+  colTxt: "La liste", colPh: "Famille Martin : Paul, Léa et Tom (6 ans)\nAlejandra Ruiz +1\nMarc Petit", colCote: "Côté par défaut", colCercle: "Cercle par défaut (facultatif)",
+  colFichier: "Importer un tableur (CSV ou Excel)", colLu: n => `${n} ligne${n > 1 ? "s" : ""} lue${n > 1 ? "s" : ""} : relisez, puis demandez les foyers`, colErrF: e => `Le fichier n'a pas pu être lu : ${e}`,
+  colGo: "Proposer des foyers", colBusy: "Le coach lit la liste…", colErr: e => `La liste n'a pas pu être lue : ${e}`, colVide: "Collez au moins un nom.",
+  colSans: "Ajouter une personne par ligne, sans regrouper", colPrive: "La liste est envoyée au coach (IA) seulement pour la lire ; rien n'est gardé de son côté.",
+  propT: "Les foyers proposés", propP: "Décochez ce qui ne va pas, renommez si besoin. Rien n'est ajouté avant votre validation.", propRien: "Le coach n'a reconnu aucun nom dans cette liste.",
+  dejaListe: "déjà sur la liste", enfantM: "enfant", ajouterN: (f, p) => `Ajouter ${f} foyer${f > 1 ? "s" : ""} · ${p} personne${p > 1 ? "s" : ""}`, ajoutes: (f, p) => `${f} foyer${f > 1 ? "s" : ""}, ${p} personne${p > 1 ? "s" : ""} ajoutés`, recommencer: "Recommencer",
   plusPersonne: "Plus personne à relancer pour l'instant.", messageCopie: "Message copié : collez-le dans votre message", enregistrer: "Enregistrer", sansAdresse: "sans adresse",
   envoiLien: "Marquer des faire-part envoyés", envoiT: "Faire-part envoyés", envoiP: "Cochez les foyers à qui le faire-part est parti. La page passe aux réponses dès le premier.",
   envoiBtn: n => `Marquer ${n} faire-part envoyé${n > 1 ? "s" : ""}`, envoiOk: n => `${n} faire-part marqué${n > 1 ? "s" : ""} envoyé${n > 1 ? "s" : ""}`, rienAEnvoyer: "Tous les faire-part sont marqués envoyés.",
@@ -126,13 +140,94 @@ export function makeInvites(ctx) {
   }
   function vMain() {
     const fs = F();
+    if (!S.guests.length) return vVide();
     if (momentDe(fs) === 2) return vMain2(fs);
     return `<div class="pr bu iv">${head(fs)}${cartePurge(fs)}${action(fs)}
       <label class="sr" for="iv-q">${UI.rechercher}</label><input id="iv-q" class="iv-q" type="search" autocomplete="off" name="search_q" data-ivq="1" placeholder="${UI.rechercher}" value="${esc(S.f.iq || "")}">
       ${(S.f.iq || "").length >= 2 ? recherche(fs) : tuilesCercles(fs)}
       <button class="pr-row bu-pdf" data-go="tables">${SVG('<circle cx="12" cy="12" r="4"/><circle cx="12" cy="4" r="1.5"/><circle cx="12" cy="20" r="1.5"/><circle cx="4" cy="12" r="1.5"/><circle cx="20" cy="12" r="1.5"/>')}<span class="pr-rb"><b>${UI.planT}</b><span>${UI.planS}</span></span>${ctx.CHEV}</button>
-      <div class="iv-bas">${S.canWrite ? `<button class="link" data-act="bulk">${UI.coller}</button>` : ""}${S.guests.length ? `<button class="link" data-act="csv">${UI.exporter}</button>` : ""}<button class="link" data-act="ivview" data-v="liste">${UI.liste}</button>
+      <div class="iv-bas">${S.canWrite ? `<button class="link" data-act="ivcoller">${UI.coller}</button>` : ""}${S.guests.length ? `<button class="link" data-act="csv">${UI.exporter}</button>` : ""}<button class="link" data-act="ivview" data-v="liste">${UI.liste}</button>
       ${S.canWrite && fs.length ? `<button class="link" data-act="ivview" data-v="envoi">${UI.envoiLien}</button>` : ""}</div></div>`;
+  }
+
+  /* ---------- 3.5 Liste vide ---------- */
+  function vVide() {
+    const cible = +S.settings.invitesCible || 0, ligneV = (act, t, p, ic) => `<button class="pr-row iv-vr" data-act="${act}" ${S.canWrite ? "" : "disabled"}>${SVG(ic)}<span class="pr-rb"><b>${t}</b><span>${p}</span></span>${ctx.CHEV}</button>`;
+    return `<div class="pr bu iv iv-vide"><section class="pr-head bu-head iv-head">
+      <div class="pr-top"><button class="pr-round" data-go="apercu" aria-label="${UI.retour}">${ctx.BACK_SVG}</button><h2 class="bu-t">${UI.titre}</h2><span></span></div>
+      <h3 class="iv-vt">${UI.videT}</h3><p class="iv-vp">${UI.videP}</p>
+      <div class="bu-k">${UI.combien}</div>
+      <div class="iv-tailles" role="group" aria-label="${UI.combien}">${UI.tailles.map(([n, l]) => `<button class="iv-taille ${cible === n ? "on" : ""}" data-act="ivtaille" data-n="${n}" aria-pressed="${cible === n}" ${S.canWrite ? "" : "disabled"}>${l}</button>`).join("")}</div>
+      <p class="iv-vp">${UI.combienP}</p></section>
+      <section class="pr-sec"><h3 class="home-h">${UI.ajouterProches}</h3><div class="pr-list">
+        ${ligneV("ivcoller", UI.vCollerT, UI.vCollerP, '<path d="M9 4h6v3H9zM7 5H5v15h14V5h-2"/><path d="M8 11h8M8 15h5"/>')}
+        ${ligneV("ivnouveau", UI.vUnT, UI.vUnP, '<circle cx="12" cy="8" r="3.5"/><path d="M5 20c1-4 4-6 7-6s6 2 7 6"/>')}
+        ${ligneV("ivtableur", UI.vTabT, UI.vTabP, '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 10h16M4 15h16M10 4v16"/>')}</div></section>
+      <p class="ev-note iv-encart">${esc(UI.encart(ctx.P1(), ctx.P2()))}</p></div>`;
+  }
+
+  /* ---------- Coller une liste, un tableur : foyers proposés par le coach (3.5, 8) ---------- */
+  function ouvrirColler(tableur = false) {
+    const moi = ctx.moi(), cs = [...new Set([...ctx.groupes(), ...S.guests.map(g => g.group).filter(Boolean)])];
+    ctx.layer(`<div class="ov" data-close="1"><div class="modal iv-pick" role="dialog" aria-modal="true" aria-label="${UI.colT}"><h3>${UI.colT}</h3><p class="ev-note">${UI.colP}</p>
+      <label class="pl-f"><span>${UI.colTxt}</span><textarea id="iv-col-txt" class="pl-note iv-coltxt" data-ivcoltxt="1" rows="8" autocomplete="off" placeholder="${esc(UI.colPh)}">${esc(S.ui.ivColTxt || "")}</textarea></label>
+      <label class="btn sm iv-fic"><input type="file" id="iv-fic" data-ivfichier="1" accept=".csv,.txt,.tsv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">${UI.colFichier}</label>
+      <p class="ev-note" id="iv-col-info" role="status"></p>
+      <div class="pt-reg"><div class="pl-f"><span>${UI.colCote}</span><div class="seg" role="radiogroup" aria-label="${UI.colCote}">${["claire", "julien", "commun"].map(k => `<label class="iv-seg"><input type="radio" name="iv-col-cote" value="${k}" ${k === (S.ui.ivColCote || moi) ? "checked" : ""}><span>${esc(coteNom(k))}</span></label>`).join("")}</div></div>
+        <label class="pl-f"><span>${UI.colCercle}</span><input id="iv-col-cercle" list="iv-cercles2" autocomplete="off" value="${esc(S.ui.ivColCercle || "")}"><datalist id="iv-cercles2">${cs.map(c => `<option value="${esc(c)}">`).join("")}</datalist></label></div>
+      <p class="ev-note">${UI.colPrive}</p>
+      <p class="brief-err" id="iv-col-err" role="alert"></p>
+      <div class="acts"><button type="button" class="link" data-act="ivbulk">${UI.colSans}</button><div><button type="button" class="btn" data-close="1">${UI.annuler}</button><button type="button" class="btn primary" data-act="ivcolgo" id="iv-col-go">${UI.colGo}</button></div></div></div></div>`);
+    setTimeout(() => { if (tableur) { const f = document.getElementById("iv-fic"); if (f) f.click(); } else { const t = document.getElementById("iv-col-txt"); if (t) t.focus(); } }, 60);
+  }
+  async function lireFichier(input) {
+    const f = input.files && input.files[0], info = document.getElementById("iv-col-info"), err = document.getElementById("iv-col-err"); if (!f) return;
+    try {
+      let rows;
+      if (/\.xlsx$/i.test(f.name)) { const { lireXlsx } = await import("../agents/lib/xlsx.js"); rows = await lireXlsx(await f.arrayBuffer()); }
+      else rows = lireCsv(await f.text());
+      const txt = texteTableur(rows), n = txt ? txt.split("\n").length : 0;
+      S.ui.ivColTxt = txt; const t = document.getElementById("iv-col-txt"); if (t) t.value = txt;
+      if (info) info.textContent = UI.colLu(n); if (err) err.textContent = "";
+    } catch (e) { if (err) err.textContent = UI.colErrF(e.message || "erreur"); }
+    input.value = "";
+  }
+  async function proposer() {
+    const t = document.getElementById("iv-col-txt"), err = document.getElementById("iv-col-err"), go = document.getElementById("iv-col-go");
+    const texte = String((t && t.value) || "").trim(); if (!texte) { if (err) err.textContent = UI.colVide; return; }
+    const cote = (document.querySelector('input[name="iv-col-cote"]:checked') || {}).value || "commun", cercle = String((document.getElementById("iv-col-cercle") || {}).value || "").trim();
+    S.ui.ivColTxt = texte; S.ui.ivColCote = cote; S.ui.ivColCercle = cercle;
+    if (go) { go.disabled = true; go.textContent = UI.colBusy; } if (err) err.textContent = "";
+    try {
+      const r = await ctx.runAgentNow("foyers", { texte });
+      if (r && r.ok === false) throw new Error(r.erreur || "erreur");
+      S.ui.ivProp = nettoyerFoyersProposes(r.foyers, { texte, existants: S.guests, side: cote, cercle });
+      S.ui.ivPropSel = S.ui.ivProp.map((f, i) => (f.personnes.every(p => p.plusUn || p.dejaLa) ? -1 : i)).filter(i => i >= 0); S.ui.ivPropNoms = {};
+      ctx.closeModal(); show("coller");
+    } catch (e) { if (err) err.textContent = UI.colErr(e.message || "erreur"); if (go) { go.disabled = false; go.textContent = UI.colGo; } }
+  }
+  function vColler() {
+    const l = S.ui.ivProp; if (!l) { S.f.iView = "main"; return vMain(); }
+    const sel = S.ui.ivPropSel || [], noms = S.ui.ivPropNoms || {}, nP = sel.reduce((n, i) => n + (l[i] ? l[i].personnes.filter(p => !p.dejaLa).length : 0), 0);
+    return `<div class="ev-page pl-tache iv-page bu-arbp"><button class="link env-back" data-act="ivview" data-v="main">${ctx.BACK_SVG}<span>${UI.titre}</span></button>
+      <h2 class="ev-h2">${UI.propT}</h2><p class="ev-note">${l.length ? UI.propP : UI.propRien}</p>
+      ${l.map((x, i) => `<div class="pr-card bu-piste ${sel.includes(i) ? "on" : ""}"><input type="checkbox" data-ivpsel="${i}" ${sel.includes(i) ? "checked" : ""} aria-label="${esc(x.nom || nomFoyer({ personnes: x.personnes }))}">
+        <span class="pr-rb"><label class="sr" for="iv-pn-${i}">${UI.nomFoyer}</label><input id="iv-pn-${i}" class="iv-nin" data-ivpnom="${i}" value="${esc(noms[i] ?? (x.nom || nomFoyer({ personnes: x.personnes })))}">
+          <span class="iv-membres">${x.personnes.map(p => `<span class="chip ${p.dejaLa ? "warn" : ""}">${esc(p.name)}${p.enfant ? ` · ${UI.enfantM}` : ""}${p.dejaLa ? ` · ${UI.dejaListe}` : ""}</span>`).join("")}</span>
+          <span class="iv-pcote"><label class="sr" for="iv-pc-${i}">${UI.cote}</label><select id="iv-pc-${i}" data-ivpcote="${i}">${["claire", "julien", "commun"].map(k => `<option value="${k}" ${x.side === k ? "selected" : ""}>${esc(coteNom(k))}</option>`).join("")}</select>${x.cercle ? ` · ${esc(x.cercle)}` : ""}</span></span></div>`).join("")}
+      <button class="link" data-act="ivcoller">${UI.recommencer}</button>
+      ${l.length && S.canWrite ? `<div class="pr-bar bu-arbbar"><div class="bu-arbt"><b class="num">${nP}</b><span>${UI.personnesN(nP).replace(/^\d+ /, "")}</span></div><button class="btn primary" data-act="ivpajout" ${sel.length && nP ? "" : "disabled"}>${UI.ajouterN(sel.length, nP)}</button></div>` : ""}</div>`;
+  }
+  async function ajouterProposes() {
+    const l = S.ui.ivProp || [], sel = (S.ui.ivPropSel || []).filter(i => l[i]), noms = S.ui.ivPropNoms || {}, fids = [], gids = [];
+    for (const i of sel) {
+      const x = l[i], pers = x.personnes.filter(p => !p.dejaLa); if (!pers.some(p => !p.plusUn)) continue;
+      const nom = String(noms[i] ?? "").trim(), auto = x.nom || nomFoyer({ personnes: x.personnes });
+      const fid = await ctx.addDoc("foyers", { nom: nom && nom !== auto ? nom.slice(0, 120) : x.nom || "", side: x.side, cercle: x.cercle, etape: "liste" }); if (!fid) break; fids.push(fid);
+      for (const p of pers) { const id = await ctx.addDoc("guests", { name: p.name, ...(p.plusUn ? { plusUn: true } : {}), enfant: !!p.enfant, foyerId: fid, side: x.side, group: x.cercle, rsvp: "attente", ceremonie: true, vin: true, diner: true, regime: "", table: "", note: "" }); if (id) gids.push(id); }
+    }
+    S.ui.ivProp = null; S.ui.ivColTxt = ""; S.f.iView = "main"; ctx.saveF(); ctx.render(); window.scrollTo(0, 0);
+    ctx.toastUndo(UI.ajoutes(fids.length, gids.length), async () => { for (const id of gids) await ctx.remove("guests", id); for (const id of fids) await ctx.remove("foyers", id); });
   }
 
   /* ---------- 3.3 Moment 2 : les réponses arrivent ---------- */
@@ -198,7 +293,7 @@ export function makeInvites(ctx) {
       <label class="sr" for="iv-q">${UI.rechercher}</label><input id="iv-q" class="iv-q" type="search" autocomplete="off" name="search_q" data-ivq="1" placeholder="${UI.rechercher}" value="${esc(S.f.iq || "")}">
       ${(S.f.iq || "").length >= 2 ? recherche(fs) : tuilesReponses(fs) + tuilesCercles(fs)}
       ${cartePlan()}
-      <div class="iv-bas">${S.canWrite ? `<button class="link" data-act="bulk">${UI.coller}</button>` : ""}${S.guests.length ? `<button class="link" data-act="csv">${UI.exporter}</button>` : ""}<button class="link" data-act="ivview" data-v="liste">${UI.liste}</button>
+      <div class="iv-bas">${S.canWrite ? `<button class="link" data-act="ivcoller">${UI.coller}</button>` : ""}${S.guests.length ? `<button class="link" data-act="csv">${UI.exporter}</button>` : ""}<button class="link" data-act="ivview" data-v="liste">${UI.liste}</button>
       ${S.canWrite && fs.some(f => !envoye(f)) ? `<button class="link" data-act="ivview" data-v="envoi">${UI.envoiLien}</button>` : ""}</div></div>`;
   }
   function vReponses(k) {
@@ -503,7 +598,7 @@ export function makeInvites(ctx) {
 
   /* ---------- gestes ---------- */
   function vInvites() {
-    switch (S.f.iView) { case "cercle": return vCercle(S.f.iCercle); case "foyer": return vFoyer(S.f.iFoyer); case "regrouper": return vRegrouper(); case "reponses": return vReponses(S.f.iRep); case "envoi": return vEnvoi(); case "liste": return ctx.ancienneListe(); default: return vMain(); }
+    switch (S.f.iView) { case "cercle": return vCercle(S.f.iCercle); case "foyer": return vFoyer(S.f.iFoyer); case "regrouper": return vRegrouper(); case "reponses": return vReponses(S.f.iRep); case "envoi": return vEnvoi(); case "coller": return vColler(); case "liste": return ctx.ancienneListe(); default: return vMain(); }
   }
   const show = (v, o = {}) => { Object.assign(S.f, { iView: v }, o); ctx.saveF(); ctx.render(); window.scrollTo(0, 0); };
   function act(a, t) {
@@ -550,6 +645,12 @@ export function makeInvites(ctx) {
         let k = slug(nom); while (l.some(m => m.k === k)) k += "_"; l.push({ k, nom: nom.slice(0, 40) }); rendreMoments(); return true; }
       case "ivmok": enregistrerMoments(); return true;
       case "ivenvoyer": marquerEnvoyes(); return true;
+      case "ivtaille": { const n = +t.dataset.n; ctx.setCible(n).then(() => { ctx.render(); ctx.toast(UI.cibleOk(n === 150 ? "150+" : n)); }); return true; }
+      case "ivcoller": ouvrirColler(false); return true;
+      case "ivtableur": ouvrirColler(true); return true;
+      case "ivbulk": ctx.closeModal(); ctx.openBulk(); return true;
+      case "ivcolgo": proposer(); return true;
+      case "ivpajout": ajouterProposes(); return true;
     }
     return false;
   }
@@ -563,9 +664,14 @@ export function makeInvites(ctx) {
     if (d.ivnoms) { S.ui.ivNomsTr = el.checked; return true; }
     if (d.ivenv != null) { const l = F().filter(f => !envoye(f)), s2 = new Set(S.ui.ivEnv || l.map(f => f.id)); el.checked ? s2.add(d.ivenv) : s2.delete(d.ivenv); S.ui.ivEnv = [...s2]; ctx.render(); return true; }
     if (d.ivmnom != null) { const l = S.ui.ivMoms || []; if (l[+d.ivmnom]) l[+d.ivmnom].nom = el.value; return true; }
+    if (d.ivfichier) { lireFichier(el); return true; }
+    if (d.ivpsel != null) { const s2 = new Set(S.ui.ivPropSel || []), i = +d.ivpsel; el.checked ? s2.add(i) : s2.delete(i); S.ui.ivPropSel = [...s2].sort((x, y) => x - y); ctx.render(); return true; }
+    if (d.ivpnom != null) { S.ui.ivPropNoms = { ...(S.ui.ivPropNoms || {}), [d.ivpnom]: el.value }; return true; }
+    if (d.ivpcote != null) { const x = (S.ui.ivProp || [])[+d.ivpcote]; if (x) x.side = el.value; return true; }
     return false;
   }
   function input(el) {
+    if (el.dataset && el.dataset.ivcoltxt) { S.ui.ivColTxt = el.value; return true; }
     if (el.dataset && el.dataset.ivreltxt) { S.ui.ivRelTxt = el.value; return true; }
     if (el.dataset && el.dataset.ivmnom != null) { const l = S.ui.ivMoms || []; if (l[+el.dataset.ivmnom]) l[+el.dataset.ivmnom].nom = el.value; return true; }
     if (el.dataset && el.dataset.ivpick) { S.ui.ivPickQ = el.value; majChoix(); return true; }

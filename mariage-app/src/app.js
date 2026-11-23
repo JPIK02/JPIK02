@@ -682,7 +682,7 @@ const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,
   layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
   setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),setSettings:o=>setDoc("meta/settings",S.settings,Object.assign({},o,{updatedAt:Date.now()})),
   ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today,groupes:()=>GROUPS,runAgentNow,eur,fmtD,
-  traiteur:()=>S.vendors.find(v=>v.cat==="Traiteur"&&etapeOf(v)==="reserve")||null}));
+  traiteur:()=>S.vendors.find(v=>v.cat==="Traiteur"&&etapeOf(v)==="reserve")||null,moi:MOI,openBulk:()=>openBulk()}));
 // docs/invites-v1.md (lot 4) : plan de table dans src/plan-ui.js, règles dans agents/lib/plan.js ; l'ancienne vue reste sous « Vue en liste »
 let PT=null;
 const pt=()=>PT||(PT=makePlan({S,esc,BACK_SVG,CHEV,initials,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,makePdf,

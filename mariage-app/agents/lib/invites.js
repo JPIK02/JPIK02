@@ -202,3 +202,49 @@ export function messageRelance(modele, foyerNom, { couple = "", limite = "" } = 
   const base = String(modele || "").trim() || `Bonjour {foyer} ! Nous espérons que vous allez bien. Pourriez-vous nous dire si vous serez des nôtres${limite ? ` avant le ${limite}` : ""} ? Cela nous aide beaucoup pour l'organisation.\n\n${couple}`;
   return base.includes("{foyer}") ? base.replaceAll("{foyer}", foyerNom) : `Bonjour ${foyerNom} !\n\n${base}`;
 }
+
+/* ---------- Lot 5 : coller une liste, un tableur (3.5, 8) ---------- */
+/**
+ * Foyers proposés par le coach à partir d'une liste collée, vérifiés : chaque nom doit figurer dans le texte (rien d'inventé),
+ * un « +1 » sans nom reste un +1 ; côté et cercle seulement s'ils sont valides ; une personne déjà sur la liste est signalée (`dejaLa`).
+ * @returns [{nom, side, cercle, personnes: [{name, enfant, plusUn, dejaLa}]}]
+ */
+export function nettoyerFoyersProposes(foyers = [], { texte = "", existants = [], side = null, cercle = "" } = {}) {
+  const src = fold(texte).replace(/\s+/g, " "), vus = new Set(), deja = new Set(existants.map(g => fold(g.name)).filter(Boolean));
+  const out = [];
+  for (const f of Array.isArray(foyers) ? foyers : []) {
+    const personnes = [];
+    for (const p of Array.isArray(f && f.personnes) ? f.personnes : []) {
+      const name = String((p && p.nom) || (p && p.name) || "").trim().replace(/\s+/g, " ").slice(0, 80);
+      if (p && p.plusUn && (!name || /^\+\s*1$/.test(name))) { personnes.push({ name: "+1", plusUn: true, enfant: false }); continue; }
+      if (!name) continue;
+      // chaque mot du nom doit être dans le texte collé (l'ordre peut changer : « Martin Paul » → « Paul Martin »)
+      if (!fold(name).split(" ").every(m => src.includes(m))) continue;
+      const k = fold(name); if (vus.has(k)) continue; vus.add(k);
+      personnes.push({ name, enfant: !!(p && p.enfant), plusUn: false, dejaLa: deja.has(k) });
+    }
+    if (!personnes.some(p => !p.plusUn)) continue;
+    const s = f && COTES.includes(f.cote) ? f.cote : COTES.includes(side) ? side : "commun";
+    const c = String((f && f.cercle) || cercle || "").trim().slice(0, 40);
+    out.push({ nom: String((f && f.nom) || "").trim().slice(0, 120), side: s, cercle: c, personnes });
+  }
+  return out;
+}
+
+/** CSV (séparateur ; , ou tabulation, guillemets) → lignes de cellules. */
+export function lireCsv(texte = "") {
+  const t = String(texte).replace(/^﻿/, ""), premiere = t.split(/\r?\n/)[0] || "";
+  const sep = [";", "\t", ","].sort((a, b) => premiere.split(b).length - premiere.split(a).length)[0];
+  const rows = []; let row = [], cell = "", q = false;
+  for (let i = 0; i < t.length; i++) {
+    const c = t[i];
+    if (q) { if (c === '"' && t[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; continue; }
+    if (c === '"') q = true; else if (c === sep) { row.push(cell); cell = ""; } else if (c === "\n" || c === "\r") { if (c === "\r" && t[i + 1] === "\n") i++; row.push(cell); rows.push(row); row = []; cell = ""; } else cell += c;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.map(r => r.map(x => x.trim())).filter(r => r.some(Boolean));
+}
+/** Lignes d'un tableur → texte à relire puis à donner au coach (une ligne par rangée, cellules séparées par « · »). */
+export function texteTableur(rows = [], max = 400) {
+  return rows.slice(0, max).map(r => r.map(x => String(x ?? "").trim()).filter(Boolean).join(" · ")).filter(Boolean).join("\n");
+}
