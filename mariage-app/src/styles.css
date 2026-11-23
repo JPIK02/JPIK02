@@ -2016,6 +2016,7 @@ body.on-plan-bar .fab{bottom:calc(86px + 170px + env(safe-area-inset-bottom,0px)
 .pt-chips{display:flex;gap:8px;overflow-x:auto;padding:8px 0;scrollbar-width:none;touch-action:pan-x}
 .pt-chips.wrap{flex-wrap:wrap;overflow:visible;touch-action:auto}
 .pt-chip{flex:none;display:inline-flex;align-items:center;gap:6px;padding:4px 12px 4px 4px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-size:14px;cursor:grab;user-select:none;-webkit-user-select:none}
+.pt-tiroir .pt-chip{touch-action:none;-webkit-touch-callout:none}
 .pt-chip .iv-av{width:28px;height:28px;font-size:11px}
 .pt-chip.on{border-color:var(--coral-ui);box-shadow:0 0 0 2px var(--coral-ui)}
 .pt-fantome{position:fixed;left:0;top:0;z-index:60;pointer-events:none;box-shadow:var(--shadow-s);opacity:.95}
