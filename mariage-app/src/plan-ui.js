@@ -125,11 +125,12 @@ export function makePlan(ctx) {
   const prochainNom = () => { const ns = T().map(t => t.nom); let i = 1; while (ns.some(n => memeNom(n, `Table ${i}`))) i++; return `Table ${i}`; };
   async function ajouterTable() { const id = await ctx.addDoc("tables", { nom: prochainNom(), places: PLACES_DEFAUT, forme: "ronde", ordre: Date.now() }); if (id) setTimeout(() => ouvrirTable(id), 300); }
   async function creerTables() {
-    const n = besoinTables(gens().length), ids = [];
-    for (let i = 0; i < n; i++) { const id = await ctx.addDoc("tables", { nom: prochainNomApres(ids.length), places: PLACES_DEFAUT, forme: "ronde", ordre: Date.now() + i }); if (id) ids.push(id); }
+    // les noms sont choisis d'abord : la liste des tables se met à jour pendant la création (sinon 1, 3, 5…)
+    const n = besoinTables(gens().length), noms = nomsLibres(n), ids = [];
+    for (let i = 0; i < n; i++) { const id = await ctx.addDoc("tables", { nom: noms[i], places: PLACES_DEFAUT, forme: "ronde", ordre: Date.now() + i }); if (id) ids.push(id); }
     ctx.toastUndo(UI.tablesCreees(ids.length), async () => { for (const id of ids) await ctx.remove("tables", id); });
   }
-  const prochainNomApres = k => { const ns = T().map(t => t.nom); let i = 1, vus = 0; for (;;) { if (!ns.some(n => memeNom(n, `Table ${i}`))) { if (vus === k) return `Table ${i}`; vus++; } i++; } };
+  const nomsLibres = n => { const ns = T().map(t => t.nom), out = []; for (let i = 1; out.length < n; i++) if (!ns.some(x => memeNom(x, `Table ${i}`))) out.push(`Table ${i}`); return out; };
 
   /* ---------- feuille d'une table ---------- */
   function feuille(t) {
