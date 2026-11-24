@@ -3,7 +3,8 @@
 // « À caler », rôles (`meta/jourj.roles`). Aucun appel IA à l'affichage : seul le bouton du coach (job `jourj`) rédige un brouillon,
 // ouvert dans l'app mail du téléphone ; l'app n'envoie rien.
 import { momentsDe, barre, heureEntre, hLisible, hDe, minDe, rolesDe, personneDe, aCaler, trouDe, compteurs, lieuReserve, prestatairesDuJour,
-  coucherSoleil, minutesLocales, villeSoleil, VILLES, VOIT_DEFAUT } from "../agents/lib/jourj.js";
+  coucherSoleil, minutesLocales, villeSoleil, VILLES, VOIT_DEFAUT, visiblesPar, fichePrestataire, etatFiche, empreinteFiche, momentsPourMetier, contactSurPlace,
+  cleTrou, moisAvant } from "../agents/lib/jourj.js";
 import { concernes, tablesDe, resume } from "../agents/lib/plan.js";
 
 // Textes d'interface (à traduire)
@@ -14,11 +15,30 @@ const UI = {
   soleil: h => `Coucher du soleil à ${h}`, soleilOu: "Où situer le coucher du soleil ?", soleilChanger: "changer", soleilT: "Le coucher du soleil",
   soleilP: "Choisissez la ville la plus proche du lieu. Le calcul se fait sur votre téléphone, sans service extérieur.", soleilAuto: "Comme le lieu réservé",
   caler: n => `À caler · ${n}`, plusN: n => `+ ${n}`, moinsN: "Voir moins",
-  trou: { arrivee: t => `Heure d'arrivée de ${t.vendor} (${t.moment})`, role: t => `${t.role} : à confier`, pluie: t => `${t.moment} : pas de plan pluie`, objet: t => `${t.objet} (${t.moment}) : personne pour s'en charger` },
+  trou: { fiche: t => `Fiche de ${t.vendor} : mise à jour depuis l'envoi`, arrivee: t => `Heure d'arrivée de ${t.vendor} (${t.moment})`, role: t => `${t.role} : à confier`, pluie: t => `${t.moment} : pas de plan pluie`, objet: t => `${t.objet} (${t.moment}) : personne pour s'en charger` },
   trouCourt: { arrivee: t => `Heure d'arrivée de ${t.vendor} à fixer`, pluie: () => "Plan pluie à prévoir", objet: t => `${t.objet} : à confier` },
   deroule: "Le déroulé", aAjuster: "à ajuster", sansHeure: "--:--", glisser: n => `Déplacer ${n}`, deplace: (n, h) => `${n} passe à ${h}`,
   quiFait: "Qui fait quoi", aConfier: "À confier", ajouterRole: "Ajouter un rôle", nouveauRole: "Nouveau rôle",
-  partager: "Partager le déroulé", partagerS: "PDF pour les témoins et les prestataires",
+  partager: "Partager le déroulé", partagerS: "Invités, prestataires, témoins : chacun sa version",
+  // 3.3 partager
+  chacun: "Chacun sa version", chacunP: "Un seul déroulé : ce que vous changez se met à jour partout.", onglets: { invites: "Invités", prestataires: "Prestataires", temoins: "Témoins" },
+  invVoient: n => `${n} moment${n > 1 ? "s" : ""} visible${n > 1 ? "s" : ""} par les invités`, invCaches: n => `${n} caché${n > 1 ? "s" : ""} aux invités`, aucunVisible: "Aucun moment visible par les invités.",
+  acces: "Accès et parking", accesPh: "Adresse, plan d'accès, où se garer…", navettes: "Navettes", navettesPh: "Horaires et point de départ des navettes…",
+  pdfInvites: "PDF pour les invités", pdfTemoins: "PDF pour les témoins", lienPlusTard: "Le lien à partager arrive bientôt ; en attendant, le PDF.",
+  tem: { moments: "moments", roles: "rôles", prestas: "prestataires", pluie: "plans pluie" }, temP: "Tout le déroulé, les rôles, les contacts des prestataires et les plans pluie.",
+  etat: { prete: n => `Prête · ${n} moment${n > 1 ? "s" : ""}`, envoyee: d => `Envoyée le ${d}`, maj: d => `Envoyée le ${d} · mise à jour depuis`,
+    manque: { moments: "Moments à choisir", arrivee: "Heure d'arrivée manquante", contact: "Contact sur place manquant" } },
+  completer: "Compléter", envoyer: "Envoyer", renvoyer: "Renvoyer", voirPdf: "Voir la fiche", envoyerN: n => `Envoyer les ${n} fiche${n > 1 ? "s" : ""} prête${n > 1 ? "s" : ""}`,
+  aucunReserveP: "Les fiches apparaissent ici dès qu'un prestataire est réservé.", pasDeBudget: "Une fiche ne contient ni montant, ni devis, ni autre prestataire.",
+  // envoi
+  envoiT: (i, n) => (n > 1 ? `Fiche ${i} sur ${n}` : "Envoyer la fiche"), redigeMsgs: "Le coach rédige les messages…", partagerFiche: "Partager la fiche",
+  partagerP: "Choisissez Mail : la fiche est jointe et le message prêt. Rien ne part sans vous.", ouvrirMailSans: "Ouvrir dans l'app mail (sans pièce jointe)", telecharger: "Télécharger la fiche",
+  marquerEnvoyee: "Marquer comme envoyée", envoyeeOk: n => `Fiche de ${n} notée envoyée`, suivante: "Suivante", passer: "Passer", termine: "Terminé",
+  // choisir les moments d'un prestataire
+  choisirT: n => `Les moments de ${n}`, choisirP: "Cochez les moments où il intervient ; les plus courants pour son métier sont proposés.", ajoutes: n => `Ajouté à ${n} moment${n > 1 ? "s" : ""}`,
+  enregistrer: "Enregistrer",
+  // 5.4 et tâches
+  ajouterJourJ: noms => `L'ajouter au jour J : ${noms}`, tacheT: t => t,
   videT: "Pas encore de déroulé", videP: "Ajoutez les grands moments : préparatifs, mairie, cérémonie, vin d'honneur, dîner.",
   // feuille d'ajout
   nom: "Nom du moment", debut: "Début", fin: "Fin", creer: "Ajouter", annuler: "Annuler", fermer: "Fermer", nomPh: "Cérémonie, vin d'honneur…",
@@ -62,7 +82,8 @@ export function makeJourJ(ctx) {
   const R = () => rolesDe(S.jourj);
   const V = id => (S.vendors || []).find(v => v.id === id);
   const reserves = () => (S.vendors || []).filter(v => v.status === "reserve");
-  const trous = (ms = M()) => aCaler({ moments: ms, roles: R(), vendors: S.vendors || [], guests: S.guests || [] });
+  const J = () => S.jourj || {};
+  const trous = (ms = M()) => aCaler({ moments: ms, roles: R(), vendors: S.vendors || [], guests: S.guests || [], acces: J().acces || {}, fiches: J().fiches || {} });
   const doc = id => (S.schedule || []).find(x => x.id === id);
 
   /* ---------- en-tête ---------- */
@@ -132,7 +153,7 @@ export function makeJourJ(ctx) {
       ${ms.length ? `<section class="pr-sec"><h3 class="home-h">${UI.deroule}</h3><div class="jj-tl" id="jj-tl">${ms.map(m => ligneMoment(m, ts)).join("")}</div></section>`
         : `<section class="pr-card bu-arb"><b>${UI.videT}</b><p>${UI.videP}</p>${S.canWrite ? `<div class="pl-acts"><button class="btn primary" data-act="jjajout">${UI.ajouter}</button></div>` : ""}</section>`}
       ${quiFaitQuoi()}
-      ${ms.length ? `<button class="pr-row bu-pdf" data-act="pdfjourj">${SVG('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>')}<span class="pr-rb"><b>${UI.partager}</b><span>${UI.partagerS}</span></span>${ctx.CHEV}</button>` : ""}</div>`;
+      ${ms.length ? `<button class="pr-row bu-pdf" data-act="jjpartager">${SVG('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>')}<span class="pr-rb"><b>${UI.partager}</b><span>${UI.partagerS}</span></span>${ctx.CHEV}</button>` : ""}</div>`;
   }
 
   /* ---------- 3.2 un moment ---------- */
@@ -212,8 +233,193 @@ export function makeJourJ(ctx) {
   }
 
   function vJourJ() {
+    setTimeout(verifierTaches, 1500);
+    if (S.f.jView === "partager") return vPartager();
     if (S.f.jView === "moment" && S.f.jMoment) return vMoment(S.f.jMoment);
     return vMain();
+  }
+
+  /* ---------- 3.3 partager : chacun sa version ---------- */
+  const hh = mn => (mn != null ? hLisible(mn) : "—");
+  const dCourt = ms => new Date(ms).toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+  const fiche = v => fichePrestataire(v, { moments: M(), roles: R(), guests: S.guests || [], acces: J().acces || {} });
+  const envoiDe = v => (J().fiches || {})[v.id] || null;
+  const telV = v => String(v.tel || "").trim();
+  function texteEtat(e) {
+    return e.k === "manque" ? UI.etat.manque[e.manque] : e.k === "prete" ? UI.etat.prete(e.n) : e.k === "envoyee" ? UI.etat.envoyee(dCourt(e.le)) : UI.etat.maj(dCourt(e.le));
+  }
+  function ongletInvites() {
+    const ms = M(), vis = visiblesPar(ms, "invites"), a = J().acces || {}, dis = S.canWrite ? "" : "disabled";
+    return `<section class="pr-sec"><h3 class="home-h">${esc(UI.invVoient(vis.length))}</h3>
+        ${vis.length ? `<div class="pr-box">${vis.map(m => `<button class="iv-p" data-act="jjmoment" data-id="${esc(m.id)}"><span class="jj-h num">${esc(m.debut != null ? hDe(m.debut) : UI.sansHeure)}</span><span class="pr-rb"><b>${esc(m.nom)}</b>${m.lieuPrecis || m.lieu ? `<span>${esc(m.lieuPrecis || m.lieu)}</span>` : ""}</span></button>`).join("")}</div>` : `<p class="ev-note">${UI.aucunVisible}</p>`}
+        ${ms.length > vis.length ? `<p class="ev-note">${esc(UI.invCaches(ms.length - vis.length))}</p>` : ""}</section>
+      <section class="pr-card pl-champs">
+        <label class="pl-f"><span>${UI.acces}</span><textarea class="pl-note" data-jjacces="texte" placeholder="${UI.accesPh}" ${dis}>${esc(a.texte || "")}</textarea></label>
+        <label class="pl-f"><span>${UI.navettes}</span><textarea class="pl-note" data-jjacces="navettes" placeholder="${UI.navettesPh}" ${dis}>${esc(a.navettes || "")}</textarea></label></section>
+      <p class="ev-note">${UI.lienPlusTard}</p>
+      <div class="pl-acts"><button class="btn primary" data-act="jjpdf" data-v="invites" ${vis.length ? "" : "disabled"}>${UI.pdfInvites}</button></div>`;
+  }
+  function ongletPrestas() {
+    const vs = reserves(); if (!vs.length) return `<p class="ev-note">${UI.aucunReserveP}</p>`;
+    const l = vs.map(v => ({ v, e: etatFiche(fiche(v), envoiDe(v)) })), prets = l.filter(x => x.e.k === "prete" || x.e.k === "maj");
+    return `<div class="jj-fiches">${l.map(({ v, e }) => `<div class="pr-card jj-fiche ${e.k}">
+        <button class="jj-pn" data-fiche="${esc(v.id)}"><span class="pr-av t-${ctx.tintOf(v.cat)}" aria-hidden="true">${esc(ctx.initials(v.name))}</span><span class="pr-rb"><b>${esc(v.name)}</b><span>${esc(v.cat || "")}</span></span></button>
+        <span class="jj-etat ${e.k}">${esc(texteEtat(e))}</span>
+        ${S.canWrite ? `<div class="pl-acts">${e.k === "manque" ? `<button class="btn" data-act="jjcompleter" data-id="${esc(v.id)}">${UI.completer}</button>`
+          : `<button class="btn ${e.k === "envoyee" ? "" : "primary"}" data-act="jjenvoyer" data-id="${esc(v.id)}">${e.k === "prete" ? UI.envoyer : UI.renvoyer}</button>`}
+          ${e.k !== "manque" || e.manque !== "moments" ? `<button class="link" data-act="jjpdf" data-v="fiche" data-id="${esc(v.id)}">${UI.voirPdf}</button>` : ""}</div>` : ""}</div>`).join("")}</div>
+      ${S.canWrite && prets.length > 1 ? `<button class="btn primary jj-tout" data-act="jjenvoyertout">${UI.envoyerN(prets.length)}</button>` : ""}
+      <p class="ev-note">${UI.pasDeBudget}</p>`;
+  }
+  function ongletTemoins() {
+    const ms = M(), rs = R(), vs = reserves().filter(v => ms.some(m => m.prestas.some(p => p.vendorId === v.id))), pl = ms.filter(m => m.exterieur && m.pluie).length;
+    const k = (n, l) => `<div><b class="num">${n}</b><span>${l}</span></div>`;
+    return `<section class="pr-card"><div class="jj-kpis">${k(ms.length, UI.tem.moments)}${k(rs.length, UI.tem.roles)}${k(vs.length, UI.tem.prestas)}${k(pl, UI.tem.pluie)}</div><p class="ev-note">${UI.temP}</p></section>
+      <p class="ev-note">${UI.lienPlusTard}</p>
+      <div class="pl-acts"><button class="btn primary" data-act="jjpdf" data-v="temoins" ${ms.length ? "" : "disabled"}>${UI.pdfTemoins}</button></div>`;
+  }
+  function vPartager() {
+    const tab = ["invites", "prestataires", "temoins"].includes(S.f.jTab) ? S.f.jTab : "invites";
+    return `<div class="ev-page pl-tache jj-part"><button class="link env-back" data-act="jjmain">${ctx.BACK_SVG}<span>${UI.titre}</span></button>
+      <h2 class="ev-h2">${UI.chacun}</h2><p class="ev-note">${UI.chacunP}</p>
+      <div class="seg jj-tabs" role="tablist">${Object.entries(UI.onglets).map(([k, l]) => `<button role="tab" data-act="jjtab" data-v="${k}" aria-selected="${tab === k}" aria-pressed="${tab === k}">${l}</button>`).join("")}</div>
+      ${tab === "invites" ? ongletInvites() : tab === "prestataires" ? ongletPrestas() : ongletTemoins()}</div>`;
+  }
+
+  /* ---------- PDF des trois versions ---------- */
+  function specInvites() {
+    const ms = visiblesPar(M(), "invites"), a = J().acces || {};
+    return ["Jour J - invités.pdf", { docTitle: "Le déroulé de la journée", blocks: [
+      { table: { head: ["Heure", "Moment", "Lieu"], widths: [22, null, 62], boldFirst: true, body: ms.map(m => [hh(m.debut), m.nom, m.lieuPrecis || m.lieu || ""]) } },
+      ...(a.texte ? [{ h2: UI.acces }, { p: a.texte }] : []), ...(a.navettes ? [{ h2: UI.navettes }, { p: a.navettes }] : [])] }];
+  }
+  function specFiche(v) {
+    const f = fiche(v), pluie = f.moments.filter(s => s.pluie);
+    return [`Fiche jour J - ${v.name}.pdf`, { docTitle: `Fiche jour J · ${v.name}`, blocks: [
+      { kpis: [["Arrivée", hh(f.arrivee), ""], ["Vos moments", String(f.moments.length), ""], ["Contact sur place", f.contact ? f.contact.nom : "—", f.contact && f.contact.tel ? f.contact.tel : ""]] },
+      { h2: "Vos moments" }, { table: { head: ["Horaires", "Moment", "Lieu", "Arrivée", "Ce que vous faites"], widths: [26, null, 36, 18, 44], boldFirst: true,
+        body: f.moments.map(s => [`${hh(s.debut)} – ${hh(s.fin)}`, s.nom, s.lieu || "", hh(s.arrivee), s.tache || ""]) } },
+      ...(pluie.length ? [{ h2: "S'il pleut" }, { ul: pluie.map(s => `${s.nom} : ${s.pluie}`) }] : []),
+      ...(f.journee.length ? [{ h2: "La journée" }, { ul: f.journee.map(j => `${hh(j.debut)} · ${j.nom}`) }] : []),
+      ...(f.acces ? [{ h2: UI.acces }, { p: f.acces }] : []),
+      ...(f.contact ? [{ h2: "Contact sur place" }, { p: [f.contact.nom, f.contact.tel].filter(Boolean).join(" · ") }] : [])] }];
+  }
+  function specTemoins() {
+    const ms = M(), g = S.guests || [], a = J().acces || {};
+    const vs = reserves().filter(v => ms.some(m => m.prestas.some(p => p.vendorId === v.id)));
+    const objets = ms.flatMap(m => m.objets.map(o => `${o.label} (${m.nom}) : ${String(o.qui || "").trim() || UI.aConfier}${o.fait ? " ✓" : ""}`));
+    return ["Jour J - témoins.pdf", { docTitle: "Le jour J, pour les témoins", blocks: [
+      { table: { head: ["Horaires", "Moment", "Lieu", "Détail"], widths: [26, null, 40, 48], boldFirst: true, body: ms.map(m => [m.debut != null ? `${hh(m.debut)} – ${hh(m.fin)}` : "—", m.nom + (m.note ? "\n" + m.note : ""), m.lieuPrecis || m.lieu || "", m.detail || ""]) } },
+      { h2: UI.quiFait }, { table: { head: ["Rôle", "Qui", "Téléphone"], widths: [60, null, 36], boldFirst: true, body: R().map(r => { const p = personneDe(r, g); return [r.nom, p ? p.nom : UI.aConfier, p && p.tel ? p.tel : ""]; }) } },
+      ...(vs.length ? [{ h2: "Les prestataires" }, { table: { head: ["Prestataire", "Métier", "Téléphone", "Arrivée"], widths: [null, 36, 34, 18], boldFirst: true, body: vs.map(v => [v.name, v.cat || "", telV(v), hh(fiche(v).arrivee)]) } }] : []),
+      ...(ms.some(m => m.exterieur) ? [{ h2: "S'il pleut" }, { ul: ms.filter(m => m.exterieur).map(m => `${m.nom} : ${m.pluie || "à prévoir"}`) }] : []),
+      ...(objets.length ? [{ h2: UI.objetsT }, { ul: objets }] : []),
+      ...(a.texte ? [{ h2: UI.acces }, { p: a.texte }] : []), ...(a.navettes ? [{ h2: UI.navettes }, { p: a.navettes }] : [])] }];
+  }
+  function pdf(k, id) {
+    const sp = k === "invites" ? specInvites() : k === "temoins" ? specTemoins() : (() => { const v = V(id); return v ? specFiche(v) : null; })();
+    if (sp) ctx.makePdf(sp[0], sp[1]);
+  }
+
+  /* ---------- envoi des fiches (un brouillon après l'autre ; la feuille de partage du téléphone joint le PDF) ---------- */
+  async function ouvrirEnvoi(ids) {
+    ids = ids.filter(id => V(id)); if (!ids.length) return;
+    S.ui.jjEnvoi = { ids, i: 0, file: null, pour: null, err: null }; rendreEnvoi();
+    const manquent = ids.filter(id => !(J().messages || {})[id]);
+    if (manquent.length) {
+      S.ui.jjEnvoi.redige = true; majEnvoi();
+      const infos = Object.fromEntries(manquent.map(id => { const f = fiche(V(id)); return [id, { arrivee: f.arrivee != null ? hDe(f.arrivee) : null, moments: f.moments.length }]; }));
+      try { const r = await ctx.runAgentNow("jourj", { sujet: "fiches", ids: manquent, infos }); if (r && r.ok === false) S.ui.jjEnvoi.err = r.erreur || "erreur"; else if (r && r.messages) S.jourj = { ...J(), messages: { ...(J().messages || {}), ...r.messages } }; }
+      catch (e) { if (S.ui.jjEnvoi) S.ui.jjEnvoi.err = e.message || "erreur"; }
+      if (S.ui.jjEnvoi) { S.ui.jjEnvoi.redige = false; majEnvoi(); }
+    }
+  }
+  async function preparerFichier() {
+    const e = S.ui.jjEnvoi; if (!e) return; const id = e.ids[e.i]; if (e.pour === id) return;
+    e.pour = id; e.file = null; const v = V(id); if (!v) return; const [nom, spec] = specFiche(v);
+    const f = await ctx.pdfFile(nom, spec); if (S.ui.jjEnvoi === e && e.pour === id) { e.file = f; majEnvoi(); }
+  }
+  function rendreEnvoi() {
+    const e = S.ui.jjEnvoi; if (!e) return; const v = V(e.ids[e.i]); if (!v) return;
+    const m = (J().messages || {})[v.id], fait = envoiDe(v) && etatFiche(fiche(v), envoiDe(v)).k === "envoyee";
+    const to = /\S+@\S+\.\S+/.test(v.email || "") ? v.email.trim() : "";
+    const href = m ? `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(m.objet)}&body=${encodeURIComponent(m.corps)}` : "";
+    const peutPartager = !!(e.file && navigator.canShare && navigator.canShare({ files: [e.file] }));
+    const url = e.file ? URL.createObjectURL(e.file) : "", dernier = e.i >= e.ids.length - 1;
+    ctx.layer(`<div class="ov"><div class="modal iv-pick jj-envoi" role="dialog" aria-modal="true" aria-label="${esc(UI.envoiT(e.i + 1, e.ids.length))}">
+      <span class="ev-tag">${esc(UI.envoiT(e.i + 1, e.ids.length))}</span><h3>${esc(v.name)}</h3>
+      ${e.redige ? `<p class="ai-pending" role="status">${UI.redigeMsgs}</p>` : e.err && !m ? `<p class="brief-err" role="alert">${esc(UI.echec(e.err))}</p>` : ""}
+      ${m ? `<div class="pl-brouillon"><b>${esc(m.objet)}</b><p class="pl-p">${esc(m.corps)}</p></div>` : ""}
+      ${fait ? `<p class="ok-t">✓ ${esc(UI.etat.envoyee(dCourt(envoiDe(v).envoyeLe)))}</p>` : ""}
+      <p class="ev-note">${UI.partagerP}</p>
+      <div class="pl-acts">${peutPartager ? `<button class="btn primary" data-act="jjshare">${UI.partagerFiche}</button>` : ""}
+        ${m ? `<a class="btn ${peutPartager ? "" : "primary"}" href="${href}">${UI.ouvrirMailSans}</a>` : ""}
+        ${url ? `<a class="btn" href="${url}" download="${esc(e.file.name)}">${UI.telecharger}</a>` : ""}</div>
+      <div class="acts"><button type="button" class="link" data-act="jjmarquer">${UI.marquerEnvoyee}</button><div><button type="button" class="btn" data-act="jjsuiv">${dernier ? UI.termine : fait ? UI.suivante : UI.passer}</button></div></div></div></div>`);
+    preparerFichier();
+  }
+  // mise à jour de la feuille seulement si elle est encore ouverte (jamais rouverte d'elle-même)
+  const majEnvoi = () => { if (document.querySelector(".jj-envoi")) rendreEnvoi(); };
+  async function marquerEnvoyee() {
+    const e = S.ui.jjEnvoi; if (!e) return; const v = V(e.ids[e.i]); if (!v) return;
+    const fiches = { ...(J().fiches || {}), [v.id]: { envoyeLe: Date.now(), empreinte: empreinteFiche(fiche(v)) } };
+    await ctx.setMeta("jourj", { fiches }); ctx.toast(UI.envoyeeOk(v.name)); setTimeout(majEnvoi, 200);
+  }
+  async function partagerFiche() {
+    const e = S.ui.jjEnvoi; if (!e || !e.file) return; const m = (J().messages || {})[e.ids[e.i]] || {};
+    try { await navigator.share({ files: [e.file], title: m.objet || e.file.name, text: m.corps || "" }); await marquerEnvoyee(); }
+    catch (err) { if (err && err.name !== "AbortError") ctx.toast(err.message || "Partage impossible"); }
+  }
+  function suivante() {
+    const e = S.ui.jjEnvoi; if (!e) return;
+    if (e.i >= e.ids.length - 1) { S.ui.jjEnvoi = null; ctx.closeModal(); ctx.render(); return; }
+    e.i++; e.pour = null; e.file = null; rendreEnvoi();
+  }
+
+  /* ---------- compléter une fiche ---------- */
+  function completer(v) {
+    const f = fiche(v);
+    if (f.manque === "moments") return ouvrirChoix(v);
+    if (f.manque === "arrivee") { const m = M().find(x => x.prestas.some(p => p.vendorId === v.id && minDe(p.arrivee) == null)); if (m) ouvrirMoment(m.id, "arrivee"); return; }
+    if (f.manque === "contact") {
+      if (!R().some(r => r.id === "contact" || /contact/i.test(r.nom || ""))) setRoles([...R(), { id: "contact", nom: "Contact des prestataires" }]).then(() => ouvrirRole("contact"));
+      else ouvrirRole((R().find(r => r.id === "contact") || R().find(r => /contact/i.test(r.nom || ""))).id);
+    }
+  }
+  function ouvrirChoix(v) {
+    const ms = M(), sugg = new Set(momentsPourMetier(v.cat, ms, v.id).map(m => m.id));
+    ctx.layer(`<div class="ov" data-close="1"><div class="modal iv-pick" role="dialog" aria-modal="true" aria-label="${esc(UI.choisirT(v.name))}"><h3>${esc(UI.choisirT(v.name))}</h3><p class="ev-note">${UI.choisirP}</p>
+      <div class="pr-box">${ms.map(m => { const deja = m.prestas.some(p => p.vendorId === v.id);
+        return `<label class="jj-ck jj-choix"><input type="checkbox" name="jjm" value="${esc(m.id)}" ${deja || sugg.has(m.id) ? "checked" : ""}><span class="jj-h num">${esc(m.debut != null ? hDe(m.debut) : UI.sansHeure)}</span><span>${esc(m.nom)}</span></label>`; }).join("")}</div>
+      <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">${UI.annuler}</button><button type="button" class="btn primary" data-act="jjchoix" data-id="${esc(v.id)}">${UI.enregistrer}</button></div></div></div></div>`);
+  }
+  async function enregistrerChoix(vid) {
+    const coches = new Set([...document.querySelectorAll('input[name="jjm"]:checked')].map(x => x.value)); ctx.closeModal();
+    const avant = [];
+    for (const m of M()) {
+      const deja = m.prestas.some(p => p.vendorId === vid), veut = coches.has(m.id); if (deja === veut) continue;
+      const d = doc(m.id); avant.push([m.id, (d && d.prestas) || []]);
+      await setPrestas(m.id, l => { if (veut) l.push({ vendorId: vid, arrivee: "", tache: "" }); else { const i = l.findIndex(p => p.vendorId === vid); if (i >= 0) l.splice(i, 1); } });
+    }
+    if (avant.length) ctx.toastUndo(UI.ajoutes(coches.size), async () => { for (const [id, l] of avant) await ctx.patch("schedule", id, { prestas: l }); });
+  }
+
+  /* ---------- 5.4 : un prestataire qu'on vient de réserver ---------- */
+  const suggestion = v => (v && !v._prive && v.status === "reserve" ? momentsPourMetier(v.cat, M(), v.id) : []);
+  async function ajouterAuJourJ(v) {
+    const ms = suggestion(v); if (!ms.length) return 0; const avant = [];
+    for (const m of ms) { const d = doc(m.id); avant.push([m.id, (d && d.prestas) || []]); await setPrestas(m.id, l => l.push({ vendorId: v.id, arrivee: "", tache: "" })); }
+    ctx.toastUndo(UI.ajoutes(ms.length), async () => { for (const [id, l] of avant) await ctx.patch("schedule", id, { prestas: l }); });
+    return ms.length;
+  }
+
+  /* ---------- 5.4 : un trou encore là un mois avant → une tâche « Les derniers réglages » (une fois, jamais recréée) ---------- */
+  let verifie = false;
+  async function verifierTaches() {
+    if (verifie || !S.canWrite || !S.db || !S.jourjLu || !moisAvant(S.settings || {}, new Date())) return; verifie = true;
+    const deja = new Set(J().tachesCreees || []), ts = trous().filter(t => !deja.has(cleTrou(t))); if (!ts.length) return;
+    for (const t of ts) await ctx.creerSiAbsent(`tasks/jj-${cleTrou(t).replace(/[^\w-]/g, "_")}`, { title: UI.trou[t.k](t), phase: "m1", owner: "deux", status: "todo", note: "", order: 999, source: "jourj", sourceId: cleTrou(t), createdAt: Date.now() });
+    await ctx.setMeta("jourj", { tachesCreees: [...deja, ...ts.map(cleTrou)] });
   }
 
   /* ---------- écritures ---------- */
@@ -330,7 +536,7 @@ export function makeJourJ(ctx) {
       case "jjajout": if (S.canWrite) ouvrirAjout(); return true;
       case "jjcreer": creer(); return true;
       case "jjcalertout": S.ui.jjCalerTout = !S.ui.jjCalerTout; ctx.render(); return true;
-      case "jjtrou": { const tr = trous()[+t.dataset.i]; if (!tr) return true; if (tr.k === "role") ouvrirRole(tr.roleId); else ouvrirMoment(tr.momentId, tr.k); return true; }
+      case "jjtrou": { const tr = trous()[+t.dataset.i]; if (!tr) return true; if (tr.k === "role") ouvrirRole(tr.roleId); else if (tr.k === "fiche") { S.f.jTab = "prestataires"; show("partager"); } else ouvrirMoment(tr.momentId, tr.k); return true; }
       case "jjrole": ouvrirRole(id); return true;
       case "jjroleajout": { const r = { id: `r${uid()}`, nom: UI.nouveauRole }; setRoles([...R(), r]).then(() => ouvrirRole(r.id)); return true; }
       case "jjrpick": { const g = (S.guests || []).find(x => x.id === t.dataset.gid), r = roleDe(id); if (!g || !r) return true;
@@ -349,6 +555,16 @@ export function makeJourJ(ctx) {
       case "jjcoach": demanderCoach(id, t.dataset.sujet === "arrivee" ? "arrivee" : "pluie", t.dataset.v || ""); return true;
       case "jjcopie": { const d = doc(id), b = d && d.brouillon; if (b) navigator.clipboard.writeText(`${b.objet ? b.objet + "\n\n" : ""}${b.corps}`).then(() => ctx.toast(UI.copie), () => {}); return true; }
       case "jjsuppr": supprimer(id); return true;
+      case "jjpartager": show("partager"); return true;
+      case "jjtab": S.f.jTab = t.dataset.v; ctx.saveF(); ctx.render(); return true;
+      case "jjpdf": pdf(t.dataset.v, id); return true;
+      case "jjcompleter": { const v = V(id); if (v) completer(v); return true; }
+      case "jjchoix": enregistrerChoix(id); return true;
+      case "jjenvoyer": ouvrirEnvoi([id]); return true;
+      case "jjenvoyertout": ouvrirEnvoi(reserves().filter(v => ["prete", "maj"].includes(etatFiche(fiche(v), envoiDe(v)).k)).map(v => v.id)); return true;
+      case "jjshare": partagerFiche(); return true;
+      case "jjmarquer": marquerEnvoyee(); return true;
+      case "jjsuiv": suivante(); return true;
     }
     return false;
   }
@@ -362,8 +578,9 @@ export function makeJourJ(ctx) {
     if (ds.jjrlibre) { const v = el.value.trim(); majR(ds.jjrlibre, v ? { personne: v.slice(0, 60), guestId: "" } : { personne: "" }); return true; }
     if (ds.jjrtel) { majR(ds.jjrtel, { tel: el.value.trim().slice(0, 30) }); return true; }
     if (ds.jjsoleil) { ctx.setMeta("jourj", { soleil: el.value }); return true; }
+    if (ds.jjacces) { const a = { ...(J().acces || {}), [ds.jjacces]: el.value.trim().slice(0, 2000) }; ctx.setMeta("jourj", { acces: a }); return true; }
     return false;
   }
   function input(el) { if (el.dataset && el.dataset.jjrq) { S.ui.jjRq = el.value; majRole(true); return true; } return false; }
-  return { vJourJ, act, change, input, prestatairesDuJour: () => prestatairesDuJour(M(), S.vendors || []) };
+  return { vJourJ, act, change, input, verifierTaches, suggestion, ajouterAuJourJ, prestatairesDuJour: () => prestatairesDuJour(M(), S.vendors || []) };
 }

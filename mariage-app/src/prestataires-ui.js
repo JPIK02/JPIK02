@@ -486,6 +486,7 @@ export function makePrest(ctx) {
     raison: "Autre prestataire choisi", prochaine: "Prochaine décision", voirFiche: n => `Voir la fiche de ${n}`, annulerRes: "Annuler la réservation", annule: "Réservation annulée",
     fermer: "Fermer", paiements: "Paiements", prevu: "Prévu au budget", montantL: "Montant", acompteL: "Acompte", soldeL: "Solde", reste: "Reste à payer", paye: "Payé",
     marquer: "Marquer payé", aVerser: d => (d ? `avant le ${d}` : "date à fixer"), voirBudget: "Voir le budget", prevenirFiche: n => `Prévenir les ${n} autres candidats`,
+    jourj: noms => `L'ajouter au jour J : ${noms}`, jourjS: "Un geste, annulable", jourjOk: n => `Ajouté à ${n} moment${n > 1 ? "s" : ""} du jour J`,
     contratT: "Signer le contrat", contratB: "C'est signé", pointT: d => `Faire le point ${d ? `le ${d}` : "un mois avant"}`, pointB: "Préparer avec le coach", contratOk: "Contrat signé",
   };
   const tachesDe = v => (S.tasks || []).filter(x => x.vendorId === v.id);
@@ -557,12 +558,19 @@ export function makePrest(ctx) {
       <section class="pr-sec"><h3 class="home-h">${UR.fait}</h3><div class="pr-box">
         ${eff.montant ? `<button class="pr-res" data-act="prres-go" data-v="budget"><span class="rs-ring" aria-hidden="true"><svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="22" class="tr"/><circle cx="26" cy="26" r="22" class="fg" stroke-dasharray="${x.toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 26 26)"/></svg></span>
           <span class="pr-rn"><b>${esc(UR.engages(ctx.eur(eff.montant)))}</b><br><span>${esc(pct != null ? UR.partBudget(pct) : UR.budgetPoste(nomMetier(v.cat)))}</span></span>${ctx.CHEV}</button>` : ""}
-        ${eff.taches.length ? `<button class="pr-res" data-act="prres-go" data-v="planning"><span class="pr-ck" aria-hidden="true">✓</span><span class="pr-rn"><b>${UR.taches(eff.taches.length)}</b><br><span>${esc(eff.taches.map(t => t.title.split(" · ")[0]).join(" · "))}</span></span>${ctx.CHEV}</button>` : ""}</div></section>
+        ${eff.taches.length ? `<button class="pr-res" data-act="prres-go" data-v="planning"><span class="pr-ck" aria-hidden="true">✓</span><span class="pr-rn"><b>${UR.taches(eff.taches.length)}</b><br><span>${esc(eff.taches.map(t => t.title.split(" · ")[0]).join(" · "))}</span></span>${ctx.CHEV}</button>` : ""}
+        ${lienJourJ(v, eff)}</div></section>
       ${autres.length && !eff.plusTard ? `<section class="pr-pe"><span class="pr-lab">${esc(UR.prevenirT(autres.length).toUpperCase())}</span>
         ${(res.messages || []).length ? (eff.relire ? blocMessages(v, res.messages) : `<p>${esc(UR.prevenirP(autres.map(a => a.name).join(", ")))}</p><div class="pr-pe-a"><button class="btn dark" data-act="prres-relire">${UR.relire}</button><button class="btn" data-act="prres-tard">${UR.plusTard}</button></div>`)
           : `<p class="ai-pending" role="status">${UR.redige}</p>`}</section>` : ""}
       ${d ? carteDecider(d, UR.prochaine) : ""}
       <div class="cv-acts"><button class="btn primary" data-act="prres-fiche">${esc(UR.voirFiche(v.name))}</button><button class="link" data-act="prres-annuler">${UR.annulerRes}</button></div></div>`;
+  }
+  // Jour J (docs/jour-j-v1.md, 5.4) : proposer d'ajouter le prestataire aux moments de son métier
+  function lienJourJ(v, eff) {
+    if (eff.jourj) return `<div class="pr-res"><span class="pr-ck" aria-hidden="true">✓</span><span class="pr-rn"><b>${esc(UR.jourjOk(eff.jourj))}</b></span></div>`;
+    const ms = ctx.jourj ? ctx.jourj().suggestion(v) : []; if (!ms.length || !S.canWrite) return "";
+    return `<button class="pr-res" data-act="prres-jourj" data-id="${v.id}"><span class="pr-ck" aria-hidden="true">+</span><span class="pr-rn"><b>${esc(UR.jourj(ms.map(m => m.nom).join(", ")))}</b><br><span>${UR.jourjS}</span></span>${ctx.CHEV}</button>`;
   }
   function fermerReserve(vu = true) {
     const eff = S.ui.prRes; S.ui.prRes = null; ctx.closeModal(); document.body.classList.remove("qs-open");
@@ -634,6 +642,7 @@ export function makePrest(ctx) {
       case "prres-close": fermerReserve(); return true;
       case "prres-fiche": { const x = S.ui.prRes && S.ui.prRes.id; fermerReserve(); if (x) show("fiche", { pFiche: x }); return true; }
       case "prres-go": { fermerReserve(); ctx.go(t.dataset.v); return true; }
+      case "prres-jourj": { const v = S.vendors.find(x => x.id === t.dataset.id), eff = S.ui.prRes; if (v && eff) ctx.jourj().ajouterAuJourJ(v).then(n => { eff.jourj = n; renderReserve(); }); return true; }
       case "prres-relire": S.ui.prRes.relire = true; renderReserve(); return true;
       case "prres-tard": S.ui.prRes.plusTard = true; renderReserve(); return true;
       case "prres-annuler": { const eff = S.ui.prRes; if (eff) annulerReservation(eff).then(() => ctx.toast(UR.annule)); return true; }

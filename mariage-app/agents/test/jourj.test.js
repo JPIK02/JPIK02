@@ -75,3 +75,44 @@ test("ville : nom, code postal, Corse, rien", () => {
   assert.equal(villeSoleil({ vendors: [], settings: { ville: "Paris" } }).nom, "Paris");
   assert.equal(villeSoleil({ choix: "Nice", vendors }).nom, "Nice");
 });
+
+import { fichePrestataire, empreinteFiche, etatFiche, fichesModifiees, momentsPourMetier, contactSurPlace, visiblesPar, cleTrou, moisAvant } from "../lib/jourj.js";
+
+test("fiche prestataire : ses moments, rien d'autre, ce qui manque", () => {
+  const v = { id: "ph", name: "Studio", cat: "Photographe", status: "reserve", prix: 3000, devis: [{ montant: 3000 }] };
+  const autre = { id: "dj", name: "DJ", status: "reserve" };
+  const moments = momentsDe([
+    { id: "a", time: "14:00", title: "Cérémonie", exterieur: true, pluie: "Halle", prestas: [{ vendorId: "ph", arrivee: "13:15", tache: "Photos" }, { vendorId: "dj" }] },
+    { id: "b", time: "16:00", title: "Photos de couple", voit: { invites: false } },
+    { id: "c", time: "19:00", title: "Dîner", prestas: [{ vendorId: "ph" }], voit: { prestataires: false } },
+  ]);
+  let f = fichePrestataire(v, { moments, roles: [{ id: "contact", nom: "Contact des prestataires" }] });
+  assert.equal(f.manque, "arrivee"); assert.equal(f.moments.length, 2); assert.equal(f.arrivee, 13 * 60 + 15);
+  assert.deepEqual(f.journee.map(j => j.nom), ["Cérémonie", "Photos de couple"]);
+  const json = JSON.stringify(f); assert.ok(!json.includes("3000") && !json.includes("DJ"));
+  const m2 = momentsDe([{ id: "a", time: "14:00", title: "Cérémonie", prestas: [{ vendorId: "ph", arrivee: "13:15" }] }]);
+  f = fichePrestataire(v, { moments: m2, roles: [{ id: "contact", nom: "Contact", personne: "Tom", tel: "06" }] });
+  assert.equal(f.manque, null); assert.deepEqual(f.contact, { nom: "Tom", tel: "06" });
+  assert.equal(fichePrestataire(v, { moments: [] }).manque, "moments");
+  assert.equal(fichePrestataire(v, { moments: m2, roles: [] }).manque, "contact");
+  // envoi puis modification
+  const e = { envoyeLe: 1, empreinte: empreinteFiche(f) };
+  assert.equal(etatFiche(f, null).k, "prete"); assert.equal(etatFiche(f, e).k, "envoyee");
+  const m3 = momentsDe([{ id: "a", time: "14:30", title: "Cérémonie", prestas: [{ vendorId: "ph", arrivee: "13:15" }] }]);
+  const roles = [{ id: "contact", nom: "Contact", personne: "Tom", tel: "06" }];
+  assert.equal(etatFiche(fichePrestataire(v, { moments: m3, roles }), e).k, "maj");
+  assert.deepEqual(fichesModifiees({ moments: m3, roles, vendors: [v, autre], fiches: { ph: e } }).map(x => x.k), ["fiche"]);
+  assert.equal(aCaler({ moments: m3, roles, vendors: [v], fiches: { ph: e } }).at(-1).k, "fiche");
+  assert.equal(visiblesPar(moments, "invites").length, 2); assert.equal(contactSurPlace([], []), null);
+});
+
+test("métier → moments, clé d'un trou, dernier mois", () => {
+  const ms = momentsDe([{ id: "p", time: "10:00", title: "Préparatifs" }, { id: "c", time: "15:00", title: "Cérémonie laïque" }, { id: "v", time: "17:00", title: "Vin d'honneur" }, { id: "d", time: "20:00", title: "Dîner" }, { id: "s", time: "23:00", title: "Soirée dansante" }]);
+  assert.deepEqual(momentsPourMetier("Traiteur", ms).map(m => m.id), ["v", "d"]);
+  assert.deepEqual(momentsPourMetier("Musique", ms).map(m => m.id), ["c", "s"]);
+  assert.equal(momentsPourMetier("Photographe", ms).length, 5); assert.deepEqual(momentsPourMetier("Lieu", ms), []);
+  assert.equal(cleTrou({ k: "arrivee", momentId: "c", vendorId: "v1" }), "arrivee:c:v1");
+  assert.equal(moisAvant({ date: "2028-05-20" }, new Date(2028, 3, 25)), true);
+  assert.equal(moisAvant({ date: "2028-05-20" }, new Date(2028, 3, 10)), false);
+  assert.equal(moisAvant({ date: "2028-05-20", dateIndicative: true }, new Date(2028, 4, 1)), false);
+});

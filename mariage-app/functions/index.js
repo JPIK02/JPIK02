@@ -156,6 +156,8 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
       if (job === "arbitrer") return { ok: true, arbitrage: await A.runArbitrer({ autres: !!req.data?.autres }) };
       if (job === "foyers") return { ok: true, ...(await A.runFoyersListe({ texte: String(req.data?.texte || "").slice(0, 15000) })) };
       if (job === "placer") return { ok: true, placement: await A.runPlacer() };
+      if (job === "jourj" && req.data?.sujet === "fiches") { const ids = (Array.isArray(req.data?.ids) ? req.data.ids : []).slice(0, 30).map(String), infos = req.data?.infos && typeof req.data.infos === "object" ? req.data.infos : {};
+        return { ok: true, messages: await A.runMessagesFiches({ ids, infos }) }; }
       if (job === "jourj") return { ok: true, brouillon: await A.runQuestionJourJ({ momentId: String(req.data?.id || ""), sujet: req.data?.sujet === "arrivee" ? "arrivee" : "pluie", vendorId: String(req.data?.vendorId || "") }) };
       if (job === "relance") return { ok: true, relance: await A.runRelance({ autre: !!req.data?.autre }) };
       if (job === "repartir") return { ok: true, repartition: await A.runRepartir({ total: Math.max(0, Math.min(1e7, +req.data?.total || 0)) }) };

@@ -265,3 +265,30 @@ export async function runQuestionJourJ({ momentId, sujet = "pluie", vendorId = "
   log("[jour J] brouillon prêt");
   return brouillon;
 }
+
+/* ---------- Jour J : messages d'envoi des fiches prestataires (docs/jour-j-v1.md, 3.3 et 7) ---------- */
+// Un appel pour toutes les fiches demandées : deux phrases par prestataire, la fiche est jointe par le couple (feuille de partage).
+// Envoyé à Claude : nom et métier du prestataire, heure d'arrivée et nombre de moments ; jamais de montant, de devis ni de nom d'invité.
+const OUT_FICHES = {
+  name: "enregistrer_messages", description: "Un message court par prestataire, pour accompagner sa fiche du jour J.",
+  input_schema: { type: "object", properties: { messages: { type: "array", items: { type: "object", properties: {
+    vendorId: { type: "string" }, objet: { type: "string" }, corps: { type: "string", description: "deux phrases, cordiales, signées du couple ; la fiche est jointe" } },
+    required: ["vendorId", "objet", "corps"] } } }, required: ["messages"] },
+};
+export async function runMessagesFiches({ ids = [], infos = {}, log = console.log }) {
+  const [vendors, settings, jourj] = await Promise.all([listAll("vendors"), getMeta("settings"), getMeta("jourj")]);
+  const vs = vendors.filter(v => v.status === "reserve" && ids.includes(v.id)); if (!vs.length) throw new Error("aucun prestataire réservé");
+  const noms = coupleNames(settings), signature = `${noms.p1} et ${noms.p2}`;
+  const data = vs.map(v => { const i = infos[v.id] || {}; return { vendorId: v.id, nom: v.name, metier: v.cat || null, arrivee: typeof i.arrivee === "string" ? i.arrivee.slice(0, 8) : null, moments: Math.max(0, Math.min(30, +i.moments || 0)) }; });
+  const out = await runForOutput({
+    system: SYSTEM,
+    user: `Pour chaque prestataire ci-dessous, écris un message très court (objet + deux phrases) qui accompagne sa fiche du jour J, jointe : remercier, dire que la fiche contient son heure d'arrivée, ses moments, l'accès et le contact sur place, l'inviter à signaler tout souci. Signature : « ${signature} ».` +
+      `${settings.date ? ` Date du mariage : ${settings.date}${settings.dateIndicative ? " (indicative)" : ""}.` : ""}\n<prestataires>${JSON.stringify(data)}</prestataires>\nAppelle enregistrer_messages.`,
+    output: OUT_FICHES, feature: "coach", maxTokens: 400 + 250 * vs.length,
+  });
+  const messages = { ...((jourj || {}).messages || {}) };
+  for (const m of Array.isArray(out.messages) ? out.messages : []) if (vs.some(v => v.id === m.vendorId)) messages[m.vendorId] = { ...nettoyer(m), at: Date.now() };
+  await getDb().doc("meta/jourj").set({ messages }, { merge: true });
+  log(`[jour J] ${Object.keys(messages).length} message(s) d'envoi`);
+  return messages;
+}

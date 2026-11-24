@@ -88,9 +88,9 @@ export function prestatairesDuJour(moments = [], vendors = []) {
 /* ---------- À caler (5.2) ---------- */
 /**
  * Trous, dans l'ordre du dossier : prestataire réservé sans heure d'arrivée, rôle sans personne, moment en extérieur sans plan pluie,
- * objet sans responsable. (La fiche prestataire envoyée puis modifiée arrive avec le lot 2.) Calculé sans IA.
+ * objet sans responsable, fiche prestataire envoyée puis modifiée (si `fiches` est donné). Calculé sans IA.
  */
-export function aCaler({ moments = [], roles = [], vendors = [], guests = [] } = {}) {
+export function aCaler({ moments = [], roles = [], vendors = [], guests = [], acces = null, fiches = null } = {}) {
   const out = [];
   for (const m of moments) for (const p of m.prestas) {
     const v = vendors.find(x => x.id === p.vendorId);
@@ -99,6 +99,7 @@ export function aCaler({ moments = [], roles = [], vendors = [], guests = [] } =
   for (const r of roles) if (!personneDe(r, guests)) out.push({ k: "role", roleId: r.id, role: r.nom });
   for (const m of moments) if (m.exterieur && !m.pluie) out.push({ k: "pluie", momentId: m.id, moment: m.nom });
   for (const m of moments) for (const o of m.objets) if (!String(o.qui || "").trim()) out.push({ k: "objet", momentId: m.id, moment: m.nom, objetId: o.id, objet: o.label });
+  if (fiches) out.push(...fichesModifiees({ moments, roles, vendors, guests, acces: acces || {}, fiches }));
   return out;
 }
 /** Le premier trou d'un moment (affiché en rouge sur sa ligne). */
@@ -181,4 +182,73 @@ export function villeSoleil({ choix = "", vendors = [], settings = {} } = {}) {
   if (choix) { const v = VILLES.find(x => x.nom === choix); if (v) return v; }
   const l = lieuReserve(vendors);
   return (l && (villeDe(l.ville) || villeDe(l.adresse) || villeDe(l.name))) || villeDe(settings.lieu) || villeDe(settings.ville) || null;
+}
+
+/* ---------- Lot 2 : partager (3.3) ---------- */
+// `meta/jourj.acces` {texte, navettes} : accès, parking et navettes ; `meta/jourj.fiches` {vendorId: {envoyeLe, empreinte}} ;
+// `meta/jourj.messages` {vendorId: {objet, corps, at}} (messages d'envoi rédigés par le coach, job `jourj` sujet `fiches`).
+export const visiblesPar = (moments, qui) => moments.filter(m => m.voit[qui] !== false);
+/** Contact sur place des prestataires : le rôle « Contact des prestataires » (id `contact`, sinon un rôle de ce nom). */
+export function contactSurPlace(roles = [], guests = []) {
+  const r = roles.find(x => x.id === "contact") || roles.find(x => /contact/i.test(x.nom || "")); if (!r) return null;
+  const p = personneDe(r, guests); return p ? { nom: p.nom, tel: p.tel } : null;
+}
+/**
+ * Fiche d'un prestataire réservé : ses moments (heure d'arrivée, tâche), la journée vue des prestataires, l'accès, le contact sur place.
+ * Rien sur le budget, les devis ni les autres prestataires. `manque` : la première information qui empêche de l'envoyer.
+ */
+export function fichePrestataire(v, { moments = [], roles = [], guests = [], acces = {} } = {}) {
+  const siens = moments.filter(m => m.prestas.some(p => p.vendorId === v.id)).map(m => {
+    const p = m.prestas.find(x => x.vendorId === v.id);
+    return { nom: m.nom, debut: m.debut, fin: m.fin, lieu: m.lieuPrecis || m.lieu, arrivee: minDe(p.arrivee), tache: String(p.tache || "").trim(), pluie: m.exterieur ? m.pluie : "" };
+  });
+  const arrivees = siens.map(s => s.arrivee).filter(x => x != null), contact = contactSurPlace(roles, guests);
+  const fiche = {
+    vendorId: v.id, nom: v.name || "", metier: v.cat || "", moments: siens, arrivee: arrivees.length ? Math.min(...arrivees) : null,
+    journee: visiblesPar(moments, "prestataires").filter(m => m.debut != null).map(m => ({ nom: m.nom, debut: m.debut })),
+    acces: String((acces && acces.texte) || "").trim(), contact,
+  };
+  fiche.manque = !siens.length ? "moments" : siens.some(s => s.arrivee == null) ? "arrivee" : !contact ? "contact" : null;
+  return fiche;
+}
+/** Empreinte stable du contenu d'une fiche (pour « mise à jour depuis »). */
+export function empreinteFiche(f) {
+  const s = JSON.stringify([f.moments, f.journee, f.acces, f.contact]); let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h.toString(36);
+}
+/** État d'une fiche : manque | prete | envoyee | maj. */
+export function etatFiche(f, envoi) {
+  if (f.manque) return { k: "manque", manque: f.manque };
+  if (envoi && envoi.envoyeLe) return empreinteFiche(f) === envoi.empreinte ? { k: "envoyee", le: envoi.envoyeLe } : { k: "maj", le: envoi.envoyeLe };
+  return { k: "prete", n: f.moments.length };
+}
+/** Fiches modifiées depuis leur envoi (5e trou de « À caler »). */
+export function fichesModifiees({ moments = [], roles = [], vendors = [], guests = [], acces = {}, fiches = {} } = {}) {
+  return vendors.filter(v => v.status === "reserve" && fiches[v.id] && fiches[v.id].envoyeLe)
+    .filter(v => etatFiche(fichePrestataire(v, { moments, roles, guests, acces }), fiches[v.id]).k === "maj")
+    .map(v => ({ k: "fiche", vendorId: v.id, vendor: v.name }));
+}
+
+/* ---------- 5.4 : un prestataire réservé, ajouté aux moments de son métier ---------- */
+const MOTIFS_METIER = {
+  Photographe: /./, "Vidéaste": /./, "Wedding planner": /./,
+  Traiteur: /vin d|cocktail|aperitif|diner|repas|dejeuner|brunch|lendemain/, Bar: /vin d|cocktail|aperitif|diner|repas|soiree|bal|fete/,
+  Musique: /ceremonie|benediction|soiree|bal|danse|fete/, Officiant: /ceremonie|benediction/, "Coiffure & maquillage": /prepar/,
+  "Pâtissier": /gateau|dessert|piece montee|diner/, Fleuriste: /prepar|ceremonie|installation/, Transport: /navette|transfert|depart|retour/,
+  "Animation enfants": /diner|repas|soiree/,
+};
+/** Les moments où un prestataire de ce métier intervient d'ordinaire (ceux où il n'est pas déjà). */
+export function momentsPourMetier(metier, moments = [], vendorId = null) {
+  const re = MOTIFS_METIER[metier]; if (!re) return [];
+  return moments.filter(m => re.test(fold(m.nom)) && !m.prestas.some(p => p.vendorId === vendorId));
+}
+
+/* ---------- 5.4 : un trou encore là un mois avant → une tâche dans « Les derniers réglages » ---------- */
+export const cleTrou = t => [t.k, t.momentId || t.roleId || "", t.vendorId || t.objetId || ""].join(":");
+/** Vrai dans le dernier mois avant une date confirmée (jamais avec une date indicative). */
+export function moisAvant(settings = {}, today = new Date()) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(settings.date || "")); if (!m || settings.dateIndicative) return false;
+  const d = Date.UTC(+m[1], +m[2] - 1, +m[3]), t = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+  return t >= d - 30 * 864e5 && t <= d;
 }

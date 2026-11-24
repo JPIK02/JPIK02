@@ -416,6 +416,7 @@ function weddingTiles(){
   </div>`;
 }
 function vApercu(){
+  setTimeout(()=>jj().verifierTaches(),2500); // jour J : trous encore là un mois avant → tâches (une fois par session)
   if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported"}),0);
   const al=alerts(),cards=todoCards(al),ui=S.ui;
   // la première carte en grand, puis 2 petites côte à côte, puis « + N » (ou toutes si on a déplié)
@@ -687,7 +688,8 @@ const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,
 // docs/invites-v1.md (lot 4) : plan de table dans src/plan-ui.js, règles dans agents/lib/plan.js ; l'ancienne vue reste sous « Vue en liste »
 // Jour J v1 (src/jourj-ui.js, docs/jour-j-v1.md) : déroulé, moments, rôles ; l'ancienne vue vJourJ reste dans le code
 let JJ=null;
-const jj=()=>JJ||(JJ=makeJourJ({S,esc,BACK_SVG,CHEV,initials,tintOf,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,wDate,inspTile,
+const jj=()=>JJ||(JJ=makeJourJ({S,esc,BACK_SVG,CHEV,initials,tintOf,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,wDate,inspTile,makePdf,pdfFile,
+  creerSiAbsent:(path,data)=>S.db?S.db.doc(path).get().then(x=>x.exists?false:S.db.doc(path).set(data).then(()=>true)).catch(()=>false):false,
   layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
   setMeta:(k,o)=>setDoc("meta/"+k,S[k]||{},o)}));
 let PT=null;
@@ -831,7 +833,7 @@ function vPrestataires(){
 }
 // Onglet « Prestataires » v1 : écrans dans src/prestataires-ui.js, règles dans agents/lib/prestataires.js
 let PR=null;
-const pr=()=>PR||(PR=makePrest({S,esc,toast,toastUndo,go,render,saveF,CHEV,BACK_SVG,tintOf,initials,eur,pd,today,wDate,fold,env,briefFor,pdfBriefs,patch,devisSection,
+const pr=()=>PR||(PR=makePrest({S,esc,toast,toastUndo,go,render,saveF,CHEV,BACK_SVG,tintOf,initials,eur,pd,today,wDate,fold,env,briefFor,pdfBriefs,patch,devisSection,jourj:()=>jj(),
   ficheDetails,pendingSugs,openEditor,closeModal,fileForAI,addVendor,kick,acceptSug,runAgentNow,openCompare,runQr,
   addDoc,remove,phaseFor,budgetLineFor,prenom,moi:MOI,autreKey,prenomAutre:()=>prenomDe2(autreKey()),setDoc:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
   logo:()=>(document.querySelector(".brand-mark")||{}).outerHTML||"",userEmail:()=>String(S.user&&S.user.email||""),
@@ -1340,15 +1342,17 @@ function vReglages(){
 
 /* ---------- Documents PDF (impression du navigateur : « Enregistrer en PDF » ou partager) ---------- */
 // Fabrique un vrai PDF (module chargé à la demande) puis propose de le partager / l'enregistrer.
+// Le fichier PDF seul (sans fenêtre), pour le joindre à un partage (fiches prestataires du jour J)
+async function pdfFile(name,spec){
+  const {buildPdf}=await import("./pdf.js");
+  const st=S.settings,d=wDate();
+  const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase())+(st.dateIndicative?" (date indicative, à confirmer)":""):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
+    footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
+  return new File([blob],name,{type:"application/pdf"});
+}
 async function makePdf(name,spec){
   toast("Préparation du PDF…");
-  try{
-    const {buildPdf}=await import("./pdf.js");
-    const st=S.settings,d=wDate();
-    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase())+(st.dateIndicative?" (date indicative, à confirmer)":""):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
-      footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
-    showPdf(new File([blob],name,{type:"application/pdf"}));
-  }catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
+  try{showPdf(await pdfFile(name,spec))}catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
 }
 function showPdf(file){
   S.pdfFile=file;const url=URL.createObjectURL(file);
@@ -2106,7 +2110,8 @@ function boot(){
     meta("arbitrage","arbitrage"); // pistes du coach pour revenir sous la limite (docs/budget-planning-v1.md, 3.3)
     meta("repartition","repartition"); // répartition proposée par le coach pour un budget vide (3.6)
     meta("relance","relance"); // message de relance des invités (docs/invites-v1.md, 3.3.2)
-    meta("plan","plan"); meta("placement","placement"); meta("jourj","jourj"); // jour J : rôles, ville du coucher du soleil // plan de table : personnes à séparer, proposition du coach (3.4)
+    meta("plan","plan"); meta("placement","placement"); meta("jourj","jourj"); // jour J : rôles, ville du coucher du soleil, accès, fiches envoyées
+    unsubs.push(db.doc("meta/jourj").onSnapshot(LIVE,s=>{if(!s.metadata.fromCache)S.jourjLu=true},()=>{})); // lu du serveur : les tâches « un mois avant » peuvent être créées // plan de table : personnes à séparer, proposition du coach (3.4)
     // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
     unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });
