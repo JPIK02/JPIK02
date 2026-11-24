@@ -12,6 +12,7 @@ import {makeBudget,METIER_OPTIONS} from "./budget-ui.js";
 import {makePlanning} from "./planning-ui.js";
 import {makeInvites} from "./invites-ui.js";
 import {makePlan} from "./plan-ui.js";
+import {makeJourJ} from "./jourj-ui.js";
 import {nomFoyer} from "../agents/lib/invites.js";
 import {ETAPES} from "../agents/lib/planning.js";
 import {tuileDe} from "../agents/lib/prestataires.js";
@@ -81,7 +82,7 @@ const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 const COLS=["tasks","budget","guests","foyers","tables","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},relance:{},plan:{},placement:{},foyers:[],tables:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},relance:{},plan:{},placement:{},jourj:{},foyers:[],tables:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -410,7 +411,7 @@ function weddingTiles(){
     ${tile({empty:!ref,go:'data-go="budget"',vis:ringV(pct,52,engage>0),big:`<span class="num">${kEur(prevu||tot)}</span>`,line:engage?`<span class="${pct>100?"over":""}">${Math.round(pct)} % signé</span>`:"Budget prévu",aria:ref?`Budget : ${eur(prevu||tot)} prévus, ${Math.round(pct)} % signé`:"Budget : commencer"})}
     ${tile({empty:!g.length,go:'data-go="invites"',vis:dots,big:ans?`<span class="num">${ans} / ${g.length}</span>`:`<span class="num">${g.length}</span>`,line:ans?"Invités ont répondu":"Invités · réponses à venir",aria:g.length?`Invités : ${ans} réponses sur ${g.length}`:"Invités : commencer"})}
     ${tile({empty:!S.tasks.length&&!S.rdv.length,go:'data-go="planning"',vis:bars,big:"Planning",line:late?`<span class="over">${late} en retard</span>`:next?`${esc(whenShort(next.d))} · ${esc(next.t)}`:"Rien de daté à venir",aria:`Planning : ${late?`${late} en retard`:next?`prochain, ${next.t}, ${whenShort(next.d)}`:"rien de daté à venir"}`})}
-    ${tile({empty:!steps,go:'data-go="jour-j"',vis:frise,big:"Jour J",line:pl(steps,"étape","étapes"),aria:steps?`Jour J : ${pl(steps,"étape","étapes")}`:"Jour J : commencer"})}
+    ${tile({empty:!steps,go:'data-go="jour-j"',vis:frise,big:"Jour J",line:pl(steps,"moment","moments"),aria:steps?`Jour J : ${pl(steps,"moment","moments")}`:"Jour J : commencer"})}
     ${tile({empty:false,go:'data-act="docsmenu"',vis:sheets,big:"Briefs",line:ready?"À envoyer":"À préparer",aria:`Documents : briefs ${ready?"à envoyer":"à préparer"}`})}
   </div>`;
 }
@@ -548,7 +549,7 @@ function renderBnav(){
   // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
-  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")||(S.view==="tables"&&S.f.tView!=="liste")); // Budget, Planning : même modèle de page (en-tête propre)
+  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")||(S.view==="tables"&&S.f.tView!=="liste")||S.view==="jour-j"); // Budget, Planning : même modèle de page (en-tête propre)
   {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer"))))}
   if(S.view!=="tables")document.body.classList.remove("on-plan-bar"); // tiroir « À placer » du plan de table
 }
@@ -684,6 +685,11 @@ const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,
   ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today,groupes:()=>GROUPS,runAgentNow,eur,fmtD,
   traiteur:()=>S.vendors.find(v=>v.cat==="Traiteur"&&etapeOf(v)==="reserve")||null,moi:MOI,openBulk:()=>openBulk()}));
 // docs/invites-v1.md (lot 4) : plan de table dans src/plan-ui.js, règles dans agents/lib/plan.js ; l'ancienne vue reste sous « Vue en liste »
+// Jour J v1 (src/jourj-ui.js, docs/jour-j-v1.md) : déroulé, moments, rôles ; l'ancienne vue vJourJ reste dans le code
+let JJ=null;
+const jj=()=>JJ||(JJ=makeJourJ({S,esc,BACK_SVG,CHEV,initials,tintOf,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,wDate,inspTile,
+  layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
+  setMeta:(k,o)=>setDoc("meta/"+k,S[k]||{},o)}));
 let PT=null;
 const pt=()=>PT||(PT=makePlan({S,esc,BACK_SVG,CHEV,initials,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,makePdf,
   layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
@@ -983,7 +989,7 @@ function openDocsMenu(){
   document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Documents à partager"><h3>Documents à partager</h3>
     ${briefsPanel(null)}
     <div class="docs-list">
-      <div class="doc-row"><div><b>Déroulé du jour J</b><span>${rows?`${rows} étape${rows>1?"s":""}, pour les témoins et les prestataires`:"Ajoutez d'abord les étapes dans Jour J"}</span></div>${rows?`<button class="btn sm" data-act="pdfjourj">PDF</button>`:`<button class="btn sm" data-go="jour-j">Ouvrir</button>`}</div>
+      <div class="doc-row"><div><b>Déroulé du jour J</b><span>${rows?`${rows} moment${rows>1?"s":""}, pour les témoins et les prestataires`:"Ajoutez d'abord les moments dans Jour J"}</span></div>${rows?`<button class="btn sm" data-act="pdfjourj">PDF</button>`:`<button class="btn sm" data-go="jour-j">Ouvrir</button>`}</div>
       <div class="doc-row"><div><b>Rapport d'organisation</b><span>Planning, budget, prestataires et invités en un document</span></div><button class="btn sm" data-act="pdfreport">PDF</button></div>
     </div>
     <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Fermer</button></div></div></div></div>`;
@@ -1644,7 +1650,7 @@ function applyTheme(t){
 function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t)}</b>${esc(s)}</div></div>`}
 
 /* ---------- Render ---------- */
-const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:()=>pt().vPlan(),envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
+const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:()=>pt().vPlan(),envies:vEnvies,prestataires:vPrestataires,"jour-j":()=>jj().vJourJ(),assistant:vAssistant,reglages:vReglages};
 function render(){
   renderHero();renderTabs();queueTop();
   // écran de fin de niveau ouvert : il se met à jour quand la récompense arrive (sauf pendant la correction de la phrase)
@@ -1861,6 +1867,7 @@ document.addEventListener("click",async e=>{
   if(a&&bu().act(a,t))return; // gestes du « Budget » (src/budget-ui.js)
   if(a&&iv().act(a,t))return; // gestes des « Invités » (src/invites-ui.js)
   if(a&&pt().act(a,t))return; // plan de table (src/plan-ui.js)
+  if(a&&jj().act(a,t))return; // jour J (src/jourj-ui.js)
   if(a==="plrdvgo"){S.f.plView="rdv";S.f.plId=t.dataset.id;S.f.plFrom={v:"main"};S.f.plBackLabel="Notre planning";saveF();go("planning");return}
   if(a&&pl().act(a,t))return; // gestes du « Planning » (src/planning-ui.js)
   if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
@@ -1962,7 +1969,7 @@ function renderInvitesPart(){
   document.querySelectorAll('[data-f^="g"]').forEach(b=>b.setAttribute("aria-pressed",S.f[b.dataset.f]===b.dataset.v));
   if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
-document.addEventListener("input",e=>{if(pr().input(e.target))return;if(iv().input(e.target))return;if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
+document.addEventListener("input",e=>{if(pr().input(e.target))return;if(jj().input(e.target))return;if(iv().input(e.target))return;if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
   if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,180,Math.round((window.visualViewport?.height||innerHeight)*.3))+"px"}});
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
@@ -1971,6 +1978,7 @@ document.addEventListener("change",async e=>{
   if(pl().change(el))return; // champs d'une tâche (échéance, étape, thème, note)
   if(iv().change(el))return; // champs d'un foyer, cible, regroupement
   if(pt().change(el))return; // nom d'une table
+  if(jj().change(el))return; // champs d'un moment, rôles (jour J)
   if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
   if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
@@ -2098,7 +2106,7 @@ function boot(){
     meta("arbitrage","arbitrage"); // pistes du coach pour revenir sous la limite (docs/budget-planning-v1.md, 3.3)
     meta("repartition","repartition"); // répartition proposée par le coach pour un budget vide (3.6)
     meta("relance","relance"); // message de relance des invités (docs/invites-v1.md, 3.3.2)
-    meta("plan","plan"); meta("placement","placement"); // plan de table : personnes à séparer, proposition du coach (3.4)
+    meta("plan","plan"); meta("placement","placement"); meta("jourj","jourj"); // jour J : rôles, ville du coucher du soleil // plan de table : personnes à séparer, proposition du coach (3.4)
     // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
     unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });

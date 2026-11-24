@@ -239,3 +239,29 @@ export async function runFoyersListe({ texte = "", log = console.log } = {}) {
   log(`[foyers] ${foyers.length} foyer(s) proposé(s)`);
   return { foyers };
 }
+
+/* ---------- Jour J : question à un prestataire (docs/jour-j-v1.md, 3.2 et 7) ---------- */
+// Plan pluie (au lieu) ou heure d'arrivée (au prestataire du moment) : brouillon court rangé sur le moment (`schedule.brouillon`),
+// ouvert dans l'app mail du téléphone ; aucun nom d'invité n'est envoyé.
+export async function runQuestionJourJ({ momentId, sujet = "pluie", vendorId = "", log = console.log }) {
+  const [schedule, vendors, settings] = await Promise.all([listAll("schedule"), listAll("vendors"), getMeta("settings")]);
+  const m = schedule.find(x => x.id === momentId); if (!m) throw new Error("moment introuvable");
+  const reserves = vendors.filter(v => v.status === "reserve");
+  const v = sujet === "arrivee" ? reserves.find(x => x.id === vendorId) : reserves.find(x => x.cat === "Lieu");
+  if (!v) throw new Error(sujet === "arrivee" ? "prestataire introuvable" : "aucun lieu réservé");
+  const noms = coupleNames(settings), signature = `${noms.p1} et ${noms.p2}`;
+  const moment = { nom: m.title || "", debut: m.time || null, fin: m.fin || null, lieu: m.lieu || null, lieuPrecis: m.lieuPrecis || null, exterieur: !!m.exterieur };
+  const demande = sujet === "arrivee"
+    ? `Demande à ${v.name} (${v.cat || "prestataire"}) à quelle heure il prévoit d'arriver le jour du mariage pour le moment ci-dessous, et le temps d'installation dont il a besoin.`
+    : `Demande au lieu ${v.name} quelle solution de repli est prévue en cas de pluie pour le moment ci-dessous (salle, tente, horaires), et ce qu'il faut réserver ou confirmer.`;
+  const out = nettoyer(await runForOutput({
+    system: SYSTEM,
+    user: `${demande} Court (3 à 5 phrases), cordial ; n'invente rien. Signature : « ${signature} ».` +
+      `${settings.date ? ` Date du mariage : ${settings.date}${settings.dateIndicative ? " (indicative)" : ""}.` : ""}\n<moment>${JSON.stringify(moment)}</moment>\nAppelle enregistrer_message.`,
+    output: OUT_MSG, feature: "coach", maxTokens: 1200,
+  }));
+  const brouillon = { k: sujet === "arrivee" ? "arrivee" : "pluie", vendorId: v.id, ...out, at: Date.now() };
+  await getDb().doc(`schedule/${momentId}`).set({ brouillon }, { merge: true });
+  log("[jour J] brouillon prêt");
+  return brouillon;
+}
