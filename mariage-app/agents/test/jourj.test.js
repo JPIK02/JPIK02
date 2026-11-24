@@ -153,3 +153,25 @@ test("liens : expiration, vues sans montant ni moments cachés", () => {
   const i = vueInvites({ schedule, settings: { date: "2028-05-20" } }); assert.deepEqual(i.moments.map(m => m.nom), ["Cérémonie"]);
   assert.ok(!JSON.stringify(i).includes("Studio"));
 });
+
+import { TRAMES, enviesDuJour, phraseEnvies, nettoyerTrame } from "../lib/jourj.js";
+
+test("trames : lendemain après la nuit, hors de la barre", () => {
+  const d = momentsDe(TRAMES.find(t => t.k === "deux").moments.map((m, i) => ({ id: String(i), ...m })));
+  assert.equal(d.at(-1).nom, "Brunch du lendemain"); assert.equal(d.at(-1).lendemain, true); assert.equal(d.at(-1).debut, 35 * 60);
+  const b = barre(d); assert.equal(b.fin, 27 * 60);
+  for (const t of TRAMES) assert.ok(t.moments.length >= 6 && t.moments.every(m => minDe(m.time) != null));
+});
+
+test("envies → trame recommandée et phrase", () => {
+  const A = { "ceremonie.types": { v: ["civile-en-mairie", "laique"] }, "lieu.dedans": { v: ["dehors"] }, "musique.qui": { v: ["dj"] } };
+  let e = enviesDuJour(A); assert.equal(e.reco, "mairie"); assert.equal(phraseEnvies(e), "cérémonies civile et laïque, en extérieur, soirée avec DJ");
+  e = enviesDuJour({ ...A, "lendemain.format": { v: ["brunch"] } }); assert.equal(e.reco, "deux");
+  e = enviesDuJour({ "lendemain.format": { v: ["rien"] }, "mariage.duree": { v: ["une-journee"] } }); assert.equal(e.reco, "meme"); assert.equal(phraseEnvies(e), "");
+});
+
+test("trame du coach nettoyée", () => {
+  const l = nettoyerTrame([{ title: "Dîner", time: "20:00", fin: "23:00", cle: true, prix: 9 }, { title: "", time: "10:00" }, { title: "Faux", time: "25:00" },
+    { title: "Brunch", time: "11:00", jour: 2 }, { title: "Cérémonie", time: "15:00", note: "x".repeat(300) }, { title: "Dîner", time: "20:00" }]);
+  assert.deepEqual(l.map(m => m.title), ["Cérémonie", "Dîner", "Brunch"]); assert.equal(l[0].note.length, 200); assert.equal(l[1].prix, undefined); assert.equal(l[2].jour, 2);
+});

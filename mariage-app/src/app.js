@@ -551,7 +551,7 @@ function renderBnav(){
   document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
   document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")||(S.view==="tables"&&S.f.tView!=="liste")||S.view==="jour-j"); // Budget, Planning : même modèle de page (en-tête propre)
-  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer"))))}
+  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer")||(S.view==="jour-j"&&S.f.jView==="trame"))))}
   if(S.view!=="tables")document.body.classList.remove("on-plan-bar");
   if(S.view!=="jour-j")document.body.classList.remove("jj-live"); // écran du jour J (toujours sombre, sans bouton du coach) // tiroir « À placer » du plan de table
 }

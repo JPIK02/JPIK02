@@ -3,7 +3,7 @@
 // lieu, qui (détail), note, template. Ajoutés : fin, lieuPrecis, cle, exterieur, pluie, prestas [{vendorId, arrivee, tache}],
 // objets [{id, label, qui, fait}], voit {invites, prestataires, temoins}, brouillon. Aucune migration : un ancien moment se lit tel quel.
 // Rôles : `meta/jourj.roles` [{id, nom, guestId, personne, tel}] ; absents = rôles par défaut (écrits à la première modification).
-// Une heure avant 6 h appartient à la nuit du mariage (après minuit).
+// Une heure avant 6 h appartient à la nuit du mariage (après minuit). `jour: 2` = le lendemain (brunch : +24 h dans les calculs).
 
 export const DUREE_DEFAUT = 60;
 const fold = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -27,7 +27,8 @@ export const VOIT_DEFAUT = { invites: true, prestataires: true, temoins: true };
  */
 export function momentsDe(schedule = []) {
   const ms = schedule.map(s => ({
-    id: s.id, nom: String(s.title || "").trim(), time: s.time || "", debut: minDe(s.time), finSaisie: minDe(s.fin),
+    id: s.id, nom: String(s.title || "").trim(), time: s.time || "", lendemain: s.jour === 2,
+    debut: minDe(s.time) == null ? null : minDe(s.time) + (s.jour === 2 ? 1440 : 0), finSaisie: minDe(s.fin) == null ? null : minDe(s.fin) + (s.jour === 2 ? 1440 : 0),
     lieu: String(s.lieu || "").trim(), lieuPrecis: String(s.lieuPrecis || "").trim(), detail: String(s.qui || "").trim(), note: s.note || "",
     cle: !!s.cle, exterieur: !!s.exterieur, pluie: String(s.pluie || "").trim(), template: !!s.template,
     prestas: (Array.isArray(s.prestas) ? s.prestas : []).filter(p => p && p.vendorId),
@@ -45,7 +46,7 @@ export function momentsDe(schedule = []) {
 
 /** Barre de la journée : de la première heure à la dernière fin, un segment par moment (en %), repères d'heure. */
 export function barre(moments = []) {
-  const ms = moments.filter(m => m.debut != null); if (!ms.length) return null;
+  const ms = moments.filter(m => m.debut != null && !m.lendemain); if (!ms.length) return null; // le lendemain n'entre pas dans la barre du jour J
   const debut = Math.min(...ms.map(m => m.debut)), fin = Math.max(...ms.map(m => m.fin)), span = Math.max(1, fin - debut);
   const pct = x => Math.max(0, Math.min(100, ((x - debut) / span) * 100));
   const pas = span > 12 * 60 ? 240 : span > 6 * 60 ? 180 : span > 3 * 60 ? 120 : 60, reperes = [];
@@ -336,4 +337,49 @@ export function vueInvites({ schedule = [], jourj = {}, settings = {}, noms = {}
     moments: visiblesPar(momentsDe(schedule), "invites").map(m => ({ nom: m.nom, debut: m.debut, fin: m.fin, lieu: m.lieuPrecis || m.lieu })),
     acces: (jourj.acces || {}).texte || "", navettes: (jourj.acces || {}).navettes || "",
   };
+}
+
+/* ---------- Lot 4 : journée vide, trames (3.5) ---------- */
+// Trois trames de départ ; le coach les adapte aux envies (job `jourj` sujet `trame`), le couple valide avant toute création.
+export const TRAMES = [
+  { k: "meme", nom: "Tout au même endroit", phrase: "Cérémonie, vin d'honneur, dîner et soirée sans changer de lieu.", moments: [
+    { title: "Préparatifs", time: "10:00", fin: "13:30" }, { title: "Cérémonie", time: "15:00", fin: "16:00", cle: true, exterieur: true },
+    { title: "Vin d'honneur", time: "16:15", fin: "19:00", exterieur: true }, { title: "Photos de couple", time: "19:00", fin: "19:30", voit: { invites: false } },
+    { title: "Dîner", time: "20:00", fin: "23:00", cle: true }, { title: "Ouverture du bal", time: "23:00", fin: "23:15", cle: true }, { title: "Soirée dansante", time: "23:15", fin: "03:00" }] },
+  { k: "mairie", nom: "Mairie le matin, fête le soir", phrase: "Le civil en petit comité, puis la cérémonie et la fête l'après-midi.", moments: [
+    { title: "Préparatifs", time: "08:30", fin: "10:30" }, { title: "Mariage civil à la mairie", time: "11:00", fin: "11:45", cle: true },
+    { title: "Déjeuner en famille", time: "12:30", fin: "14:30" }, { title: "Cérémonie laïque", time: "17:00", fin: "18:00", cle: true, exterieur: true },
+    { title: "Vin d'honneur", time: "18:00", fin: "20:00", exterieur: true }, { title: "Dîner", time: "20:30", fin: "23:30", cle: true }, { title: "Soirée dansante", time: "23:30", fin: "03:00" }] },
+  { k: "deux", nom: "Deux jours", phrase: "Le grand jour, puis un brunch le lendemain pour prolonger.", moments: [
+    { title: "Préparatifs", time: "10:00", fin: "13:30" }, { title: "Cérémonie", time: "15:00", fin: "16:00", cle: true, exterieur: true },
+    { title: "Vin d'honneur", time: "16:15", fin: "19:00", exterieur: true }, { title: "Dîner", time: "20:00", fin: "23:00", cle: true },
+    { title: "Soirée dansante", time: "23:00", fin: "03:00" }, { title: "Brunch du lendemain", time: "11:00", fin: "15:00", jour: 2, exterieur: true }] },
+];
+const valsDe = (A, id) => { const v = A[id] && A[id].v; return Array.isArray(v) ? v : []; };
+/** Ce que Nos envies dit de la journée : cérémonies, dedans/dehors, soirée, lendemain ; et la trame recommandée. */
+export function enviesDuJour(A = {}) {
+  const ceremonies = valsDe(A, "ceremonie.types").filter(x => x !== "pas-encore-decide"), dedans = valsDe(A, "lieu.dedans"), musique = valsDe(A, "musique.qui");
+  const lendemain = valsDe(A, "lendemain.format").filter(x => x !== "rien").length > 0 || valsDe(A, "mariage.duree").some(x => x !== "une-journee");
+  const reco = lendemain ? "deux" : ceremonies.includes("civile-en-mairie") && ceremonies.some(x => x !== "civile-en-mairie") ? "mairie" : "meme";
+  return { ceremonies, dedans, musique, lendemain, reco };
+}
+/** La phrase « D'après vos envies : … » (vide si Nos envies ne dit rien de la journée). */
+export function phraseEnvies(e) {
+  const C = { "civile-en-mairie": "civile", religieuse: "religieuse", laique: "laïque" }, parts = [];
+  if (e.ceremonies.length) parts.push(`cérémonie${e.ceremonies.length > 1 ? "s" : ""} ${e.ceremonies.map(c => C[c] || c).join(" et ")}`);
+  if (e.dedans.length) parts.push(e.dedans.length > 1 ? "dedans et dehors" : e.dedans[0] === "dehors" ? "en extérieur" : "à l'intérieur");
+  if (e.musique.length) parts.push(`soirée avec ${e.musique.map(m => (m === "dj" ? "DJ" : "groupe live")).join(" et ")}`);
+  if (e.lendemain) parts.push("un lendemain");
+  return parts.join(", ");
+}
+/** Moments proposés par le coach, vérifiés : heures valides, nom obligatoire, 16 au plus, rien d'autre. */
+export function nettoyerTrame(l = []) {
+  const ok = t => minDe(t) != null, out = [];
+  for (const x of Array.isArray(l) ? l : []) {
+    const title = String((x && x.title) || "").trim().slice(0, 60); if (!title || !ok(x.time) || out.some(o => o.title === title && o.time === x.time)) continue;
+    out.push({ title, time: x.time.slice(0, 5), ...(ok(x.fin) ? { fin: x.fin.slice(0, 5) } : {}), ...(x.jour === 2 ? { jour: 2 } : {}), cle: !!x.cle, exterieur: !!x.exterieur,
+      ...(x.note ? { note: String(x.note).trim().slice(0, 200) } : {}), ...(x.voit && x.voit.invites === false ? { voit: { invites: false } } : {}) });
+    if (out.length >= 16) break;
+  }
+  return momentsDe(out.map((m, i) => ({ id: String(i), ...m }))).map(m => out[+m.id]);
 }

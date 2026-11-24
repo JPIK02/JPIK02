@@ -2181,3 +2181,19 @@ body.jjp-live .jjp{max-width:520px}
 .jjp-l li{padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
 .jjp-l a{color:var(--link);font-weight:600;text-decoration:none;min-height:32px;display:inline-flex;align-items:center}
 .jjp-p{margin:0;white-space:pre-line}
+/* Jour J lot 4 : journée vide, trames */
+.jj-vide{display:flex;flex-direction:column;gap:12px}
+.jj-imag{margin:4px 0 0;font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:30px;line-height:1.15;color:var(--ink)}
+.jj-dapres{margin:0;font-size:15px;color:var(--ink);padding:10px 14px;border-radius:14px;background:var(--accent-soft)}
+.jj-trames{display:flex;flex-direction:column;gap:10px}
+.jj-trame{display:flex;flex-direction:column;gap:8px;text-align:left;font:inherit;color:var(--ink);cursor:pointer;min-height:44px}
+.jj-trame.on{border-color:var(--coral-ui);border-width:2px}
+.jj-tn{display:flex;align-items:center;justify-content:space-between;gap:8px}.jj-tn b{font-size:17px;font-weight:500}
+.jj-tp{font-size:14px;color:var(--muted)}
+.jj-mini{position:relative;display:block;height:10px;border-radius:999px;background:var(--surface-2)}
+.jj-mini i{position:absolute;top:0;bottom:0;border-radius:999px;background:var(--line-strong);border-right:2px solid var(--surface)}
+.jj-mini i.cle{background:var(--coral-ui)}
+.jj-mini2{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.jj-mini2 i{display:inline-block;width:44px;height:10px;border-radius:999px;background:var(--gold)}
+.jj-mini2::after{content:"le lendemain"}
+.jj-h small{display:block;font-size:11px;font-weight:600;color:var(--coral-ink);letter-spacing:.05em}

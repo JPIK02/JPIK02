@@ -292,3 +292,33 @@ export async function runMessagesFiches({ ids = [], infos = {}, log = console.lo
   log(`[jour J] ${Object.keys(messages).length} message(s) d'envoi`);
   return messages;
 }
+
+/* ---------- Jour J : trame adaptée aux envies (docs/jour-j-v1.md, 3.5 et 7) ---------- */
+// Le couple choisit une trame ; le coach ajuste les moments et les heures à leurs envies (cérémonies, dehors, soirée, lendemain).
+// Rien n'est créé côté serveur : la proposition est gardée dans meta/jourj.trame, le couple la valide dans l'app.
+const OUT_TRAME = {
+  name: "enregistrer_trame", description: "Le déroulé proposé pour le jour J, à valider par le couple.",
+  input_schema: { type: "object", properties: {
+    phrase: { type: "string", description: "une phrase : ce que tu as adapté et pourquoi, d'après leurs envies" },
+    moments: { type: "array", minItems: 4, maxItems: 16, items: { type: "object", properties: {
+      title: { type: "string" }, time: { type: "string", description: "début HH:MM" }, fin: { type: "string", description: "fin HH:MM" },
+      jour: { type: "integer", enum: [1, 2], description: "2 pour le lendemain" }, cle: { type: "boolean", description: "moment clé" }, exterieur: { type: "boolean" },
+      note: { type: "string", description: "une demi-phrase utile, facultative" } }, required: ["title", "time", "fin", "cle", "exterieur"] } },
+  }, required: ["phrase", "moments"] },
+};
+export async function runTrame({ trame = "meme", log = console.log } = {}) {
+  const { TRAMES, nettoyerTrame } = await import("./lib/jourj.js");
+  const t = TRAMES.find(x => x.k === trame) || TRAMES[0];
+  const [envies, settings] = await Promise.all([listAll("envies"), getMeta("settings")]);
+  const out = await runForOutput({
+    system: SYSTEM,
+    user: `Adapte cette trame de jour J (« ${t.nom} ») aux envies du couple : garde l'esprit de la trame, ajuste les moments et les heures (cérémonies voulues, dehors ou dedans, durée du vin d'honneur, soirée, lendemain), réaliste et sans trou inutile. N'ajoute aucun prestataire, aucun nom, aucun prix.` +
+      `${settings.date ? ` Date : ${settings.date}${settings.dateIndicative ? " (indicative)" : ""}.` : ""}\n<trame>${JSON.stringify(t.moments)}</trame>\n<envies>${enviesForAI(envies, [], coupleNames(settings))}</envies>\nAppelle enregistrer_trame.`,
+    output: OUT_TRAME, feature: "coach", maxTokens: 2500,
+  });
+  const res = { k: t.k, moments: nettoyerTrame(out.moments), phrase: String(out.phrase || "").trim().slice(0, 300), at: Date.now() };
+  if (!res.moments.length) throw new Error("proposition vide");
+  await getDb().doc("meta/jourj").set({ trame: res }, { merge: true });
+  log(`[jour J] trame ${t.k} : ${res.moments.length} moments`);
+  return res;
+}

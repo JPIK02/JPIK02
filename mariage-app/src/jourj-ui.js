@@ -4,7 +4,7 @@
 // ouvert dans l'app mail du téléphone ; l'app n'envoie rien.
 import { momentsDe, barre, heureEntre, hLisible, hDe, minDe, rolesDe, personneDe, aCaler, trouDe, compteurs, lieuReserve, prestatairesDuJour,
   coucherSoleil, minutesLocales, villeSoleil, VILLES, VOIT_DEFAUT, visiblesPar, fichePrestataire, etatFiche, empreinteFiche, momentsPourMetier, contactSurPlace,
-  cleTrou, moisAvant, vueTemoins, estLeJour, heureDuJour, aDecaler } from "../agents/lib/jourj.js";
+  cleTrou, moisAvant, vueTemoins, estLeJour, heureDuJour, aDecaler, TRAMES, enviesDuJour, phraseEnvies, nettoyerTrame } from "../agents/lib/jourj.js";
 import { rendreJour } from "./jourj-jour.js";
 import { concernes, tablesDe, resume } from "../agents/lib/plan.js";
 
@@ -33,6 +33,12 @@ const UI = {
   partageLe: d => `Partagé le ${d}`, cree: "Lien prêt, pas encore partagé", sansLien: "Pas de lien", ajouterTemoin: "Ajouter un témoin", temoin: "Témoin",
   aConfierAvant: "Confiez d'abord ce rôle à quelqu'un", lienTexteTem: (r, c) => `Voici le déroulé de notre jour J${r ? ` (${r.toLowerCase()})` : ""}. Le jour même, la page devient l'écran du jour.${c ? ` ${c}` : ""}`,
   lienTexteInv: "Le programme de notre mariage :", echecLien: e => `Le lien n'a pas pu être créé : ${e}`,
+  // 3.5 journée vide et trames
+  imaginons: "Imaginons votre journée.", imaginonsP: "Choisissez une trame : le coach l'adapte à vos envies, vous validez avant que rien ne soit créé.",
+  dapres: p => `D'après vos envies : ${p}.`, recommandee: "Recommandée", partirDe: n => `Partir de « ${n} »`, pageBlanche: "Partir d'une page blanche",
+  adapte: "Le coach adapte la trame à vos envies…", tramePropT: n => `Votre journée · ${n}`, tramePropP: "Décochez ce qui ne vous va pas ; tout reste modifiable ensuite.",
+  creerN: n => `Créer ${n} moment${n > 1 ? "s" : ""}`, autreTrame: "Une autre proposition", autresTrames: "Revenir aux trames", telleQuelle: "Prendre la trame telle quelle",
+  crees: n => `${n} moment${n > 1 ? "s" : ""} créé${n > 1 ? "s" : ""}`, lendemain: "Le lendemain", jPlus1: "J+1",
   // le jour même
   ecranJour: "Revenir à l'écran du jour", ecranJourS: "Le moment en cours, le suivant, les numéros utiles", decaleOk: n => `${n} moment${n > 1 ? "s" : ""} décalé${n > 1 ? "s" : ""} de 15 min`,
   rienADecaler: "Aucun moment à décaler", retardAnnule: "Décalage annulé",
@@ -120,7 +126,7 @@ export function makeJourJ(ctx) {
     const b = barre(ms), so = soleil(), c = compteurs({ moments: ms, roles: R(), vendors: S.vendors || [], guests: S.guests || [] });
     const lieu = lieuReserve(S.vendors || []), nomLieu = lieu ? lieu.name : (S.settings.lieu || "");
     const phrase = b ? `${UI.phrase(hLisible(b.debut), hLisible(b.fin))}, ${nomLieu ? esc(auLieu(nomLieu)) : UI.lieuAChoisir}` : (nomLieu ? esc(nomLieu) : "");
-    const ligneSoleil = !so ? "" : so.mn != null ? `<p class="jj-sol">${SVG(SOLEIL)}<span>${esc(UI.soleil(hLisible(so.mn)))} · ${esc(so.ville.nom)}</span>${S.canWrite ? `<button class="link" data-act="jjsoleil">${UI.soleilChanger}</button>` : ""}</p>`
+    const ligneSoleil = !so || !ms.length ? "" : so.mn != null ? `<p class="jj-sol">${SVG(SOLEIL)}<span>${esc(UI.soleil(hLisible(so.mn)))} · ${esc(so.ville.nom)}</span>${S.canWrite ? `<button class="link" data-act="jjsoleil">${UI.soleilChanger}</button>` : ""}</p>`
       : S.canWrite ? `<p class="jj-sol">${SVG(SOLEIL)}<button class="link" data-act="jjsoleil">${UI.soleilOu}</button></p>` : "";
     const cpt = (n, lab, cls = "") => `<div><b class="num ${cls}">${n || UI.cpt.aucun}</b><span>${lab(n)}</span></div>`;
     return `<section class="pr-head bu-head jj-head">
@@ -148,7 +154,7 @@ export function makeJourJ(ctx) {
     const sous = [m.lieuPrecis || m.lieu, noms.length ? noms.join(", ") : m.detail].filter(Boolean).join(" · ");
     return `<div class="jj-l ${m.cle ? "cle" : ""}" data-mid="${esc(m.id)}">
       ${S.canWrite ? `<button class="jj-grip" aria-label="${esc(UI.glisser(m.nom))}">${SVG(GRIP)}</button>` : ""}
-      <button class="jj-lb" data-act="jjmoment" data-id="${esc(m.id)}"><span class="jj-h num">${m.debut != null ? esc(hDe(m.debut)) : UI.sansHeure}</span><span class="jj-dot" aria-hidden="true"></span>
+      <button class="jj-lb" data-act="jjmoment" data-id="${esc(m.id)}"><span class="jj-h num">${m.lendemain ? `<small>${UI.jPlus1}</small>` : ""}${m.debut != null ? esc(hDe(m.debut)) : UI.sansHeure}</span><span class="jj-dot" aria-hidden="true"></span>
         <span class="pr-rb"><b>${esc(m.nom)}${m.template ? ` <span class="chip">${UI.aAjuster}</span>` : ""}</b>${sous ? `<span>${esc(sous)}</span>` : ""}${t ? `<span class="jj-bad">${esc(UI.trouCourt[t.k](t))}</span>` : ""}</span>${ctx.CHEV}</button></div>`;
   }
   function quiFaitQuoi() {
@@ -160,9 +166,8 @@ export function makeJourJ(ctx) {
   }
   function vMain() {
     const ms = M(), ts = trous(ms), jour = estLeJour(S.settings || {}, ms, new Date());
-    return `<div class="pr bu jj">${head(ms)}${jour ? `<button class="pr-row bu-pdf jj-live-row" data-act="jjdouvrir"><span class="pr-rb"><b>${UI.ecranJour}</b><span>${UI.ecranJourS}</span></span>${ctx.CHEV}</button>` : ""}${carteCaler(ts)}
-      ${ms.length ? `<section class="pr-sec"><h3 class="home-h">${UI.deroule}</h3><div class="jj-tl" id="jj-tl">${ms.map(m => ligneMoment(m, ts)).join("")}</div></section>`
-        : `<section class="pr-card bu-arb"><b>${UI.videT}</b><p>${UI.videP}</p>${S.canWrite ? `<div class="pl-acts"><button class="btn primary" data-act="jjajout">${UI.ajouter}</button></div>` : ""}</section>`}
+    return `<div class="pr bu jj">${head(ms)}${jour ? `<button class="pr-row bu-pdf jj-live-row" data-act="jjdouvrir"><span class="pr-rb"><b>${UI.ecranJour}</b><span>${UI.ecranJourS}</span></span>${ctx.CHEV}</button>` : ""}${ms.length ? carteCaler(ts) : vVide()}
+      ${ms.length ? `<section class="pr-sec"><h3 class="home-h">${UI.deroule}</h3><div class="jj-tl" id="jj-tl">${ms.map(m => ligneMoment(m, ts)).join("")}</div></section>` : carteCaler(ts)}
       ${quiFaitQuoi()}
       ${ms.length ? `<button class="pr-row bu-pdf" data-act="jjpartager">${SVG('<path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M10 12h5M10 16h5"/>')}<span class="pr-rb"><b>${UI.partager}</b><span>${UI.partagerS}</span></span>${ctx.CHEV}</button>` : ""}</div>`;
   }
@@ -235,7 +240,8 @@ export function makeJourJ(ctx) {
         <div class="pl-f2"><label class="pl-f"><span>${UI.lieu}</span><input data-jjf="lieu" data-id="${esc(m.id)}" value="${esc(m.lieu)}" maxlength="120" ${dis}></label>
           <label class="pl-f"><span>${UI.lieuPrecis}</span><input data-jjf="lieuPrecis" data-id="${esc(m.id)}" value="${esc(m.lieuPrecis)}" placeholder="${UI.lieuPrecisPh}" maxlength="120" ${dis}></label></div>
         <label class="pl-f"><span>${UI.detail}</span><input data-jjf="qui" data-id="${esc(m.id)}" value="${esc(m.detail)}" placeholder="${UI.detailPh}" maxlength="160" ${dis}></label>
-        <div class="iv-moments">${[["cle", UI.cle], ["exterieur", UI.exterieur]].map(([k, l]) => `<button class="chip ${m[k] ? "acc" : ""}" data-act="jjdrap" data-id="${esc(m.id)}" data-k="${k}" aria-pressed="${m[k]}" ${dis}>${l}</button>`).join("")}</div>
+        <div class="iv-moments">${[["cle", UI.cle], ["exterieur", UI.exterieur]].map(([k, l]) => `<button class="chip ${m[k] ? "acc" : ""}" data-act="jjdrap" data-id="${esc(m.id)}" data-k="${k}" aria-pressed="${m[k]}" ${dis}>${l}</button>`).join("")}
+          <button class="chip ${m.lendemain ? "acc" : ""}" data-act="jjlendemain" data-id="${esc(m.id)}" aria-pressed="${m.lendemain}" ${dis}>${UI.lendemain}</button></div>
       </section>
       ${secPluie(m)}${ligneDiner(m)}${secPrestas(m)}${secObjets(m)}
       <section class="pr-sec"><h3 class="home-h">${UI.voitT}</h3><div class="iv-moments">${Object.keys(VOIT_DEFAUT).map(k => `<button class="chip ${m.voit[k] ? "acc" : ""}" data-act="jjvoit" data-id="${esc(m.id)}" data-k="${k}" aria-pressed="${!!m.voit[k]}" ${dis}>${UI.voit[k]}</button>`).join("")}</div><p class="ev-note">${UI.voitP}</p></section>
@@ -246,6 +252,7 @@ export function makeJourJ(ctx) {
   function vJourJ() {
     setTimeout(verifierTaches, 1500);
     if (S.f.jView === "partager") return vPartager();
+    if (S.f.jView === "trame") return vTrame();
     if (estLeJour(S.settings || {}, M(), new Date()) && !S.ui.jjFerme && S.f.jView !== "moment") return vDuJour();
     if (S.f.jView === "moment" && S.f.jMoment) return vMoment(S.f.jMoment);
     return vMain();
@@ -434,6 +441,52 @@ export function makeJourJ(ctx) {
     await ctx.setMeta("jourj", { tachesCreees: [...deja, ...ts.map(cleTrou)] });
   }
 
+  /* ---------- 3.5 journée vide : trames adaptées par le coach ---------- */
+  const enviesA = () => Object.fromEntries((S.envies || []).map(d => [d.id, d]));
+  function miniBarre(t) {
+    const ms = momentsDe(t.moments.map((m, i) => ({ id: String(i), ...m }))), b = barre(ms), l2 = ms.filter(m => m.lendemain);
+    return `<span class="jj-mini" aria-hidden="true">${b ? b.segments.map(s => `<i class="${s.cle ? "cle" : ""}" style="left:${s.x.toFixed(1)}%;width:${s.w.toFixed(1)}%"></i>`).join("") : ""}</span>${l2.length ? `<span class="jj-mini2" aria-hidden="true"><i></i></span>` : ""}`;
+  }
+  function vVide() {
+    const e = enviesDuJour(enviesA()), ph = phraseEnvies(e), reco = TRAMES.find(t => t.k === e.reco), sel = S.ui.jjTrame || reco.k;
+    if (S.ui.jjTrameBusy) return `<section class="pr-card jj-vide"><p class="ai-pending" role="status">${UI.adapte}</p></section>`;
+    return `<section class="jj-vide"><h3 class="jj-imag">${UI.imaginons}</h3><p class="ev-note">${UI.imaginonsP}</p>
+      ${ph ? `<p class="jj-dapres">${esc(UI.dapres(ph))}</p>` : ""}
+      <div class="jj-trames" role="radiogroup" aria-label="${UI.imaginons}">${TRAMES.map(t => `<button class="pr-card jj-trame ${sel === t.k ? "on" : ""}" role="radio" aria-checked="${sel === t.k}" data-act="jjtramesel" data-v="${t.k}" ${S.canWrite ? "" : "disabled"}>
+        <span class="jj-tn"><b>${esc(t.nom)}</b>${t.k === reco.k ? `<span class="chip acc">${UI.recommandee}</span>` : ""}</span>${miniBarre(t)}<span class="jj-tp">${esc(t.phrase)}</span></button>`).join("")}</div>
+      ${S.ui.jjErr ? `<p class="brief-err" role="alert">${esc(UI.echec(S.ui.jjErr))}</p><button class="link" data-act="jjtelle">${UI.telleQuelle}</button>` : ""}
+      ${S.canWrite ? `<div class="pl-acts"><button class="btn primary" data-act="jjtramego">${esc(UI.partirDe(TRAMES.find(t => t.k === sel).nom))}</button><button class="link" data-act="jjajout">${UI.pageBlanche}</button></div>` : ""}</section>`;
+  }
+  async function adapterTrame(k) {
+    if (S.ui.jjTrameBusy) return; S.ui.jjTrameBusy = true; S.ui.jjErr = null; ctx.render();
+    try {
+      const r = await ctx.runAgentNow("jourj", { sujet: "trame", trame: k });
+      if (r && r.ok === false) S.ui.jjErr = r.erreur || "erreur";
+      else { S.jourj = { ...J(), trame: r.trame }; S.ui.jjTrameCoche = null; S.ui.jjTrameBusy = false; show("trame"); return; }
+    } catch (e) { S.ui.jjErr = e.message || "erreur"; }
+    S.ui.jjTrameBusy = false; ctx.render();
+  }
+  function trameTelleQuelle(k) {
+    const t = TRAMES.find(x => x.k === k) || TRAMES[0];
+    S.jourj = { ...J(), trame: { k: t.k, moments: nettoyerTrame(t.moments), phrase: "", at: Date.now() } }; S.ui.jjErr = null; S.ui.jjTrameCoche = null; show("trame");
+  }
+  function vTrame() {
+    const tr = J().trame; if (!tr || !(tr.moments || []).length) { S.f.jView = "main"; return vMain(); }
+    const t = TRAMES.find(x => x.k === tr.k) || TRAMES[0], coche = S.ui.jjTrameCoche || tr.moments.map(() => true), n = coche.filter(Boolean).length;
+    return `<div class="ev-page pl-tache jj-part"><button class="link env-back" data-act="jjmain">${ctx.BACK_SVG}<span>${UI.titre}</span></button>
+      <h2 class="ev-h2">${esc(UI.tramePropT(t.nom))}</h2>${tr.phrase ? `<p class="jj-dapres">${esc(tr.phrase)}</p>` : ""}<p class="ev-note">${UI.tramePropP}</p>
+      <div class="pr-box">${tr.moments.map((m, i) => `<label class="jj-ck jj-choix"><input type="checkbox" data-jjtc="${i}" ${coche[i] ? "checked" : ""}>
+        <span class="jj-h num">${m.jour === 2 ? `<small>${UI.jPlus1}</small>` : ""}${esc(m.time)}</span><span class="pr-rb"><b>${esc(m.title)}${m.cle ? ` <span class="chip acc">${UI.cle}</span>` : ""}</b>${m.note ? `<span>${esc(m.note)}</span>` : ""}</span></label>`).join("")}</div>
+      <div class="pl-acts"><button class="link" data-act="jjtrameautre">${UI.autreTrame}</button><button class="link" data-act="jjtrameretour">${UI.autresTrames}</button></div>
+      ${S.canWrite ? `<div class="pr-bar bu-arbbar"><div class="bu-arbt"><b class="num">${n}</b><span>${n > 1 ? "moments" : "moment"}</span></div><button class="btn primary" data-act="jjtramecreer" ${n ? "" : "disabled"}>${UI.creerN(n)}</button></div>` : ""}</div>`;
+  }
+  async function creerTrame() {
+    const tr = J().trame; if (!tr) return; const coche = S.ui.jjTrameCoche || tr.moments.map(() => true), ids = [];
+    for (const [i, m] of tr.moments.entries()) if (coche[i]) { const id = await ctx.addDoc("schedule", { ...m, template: true }); if (id) ids.push(id); }
+    S.ui.jjTrameCoche = null; show("main");
+    ctx.toastUndo(UI.crees(ids.length), async () => { for (const id of ids) await ctx.remove("schedule", id); });
+  }
+
   /* ---------- 3.4 le jour même ---------- */
   const vueJour = () => vueTemoins({ schedule: S.schedule || [], vendors: S.vendors || [], guests: S.guests || [], jourj: J(), settings: S.settings || {}, roleId: "", noms: {} });
   // le prénom d'un témoin dont le lien a été partagé (« [Prénom] a le même écran »)
@@ -591,7 +644,7 @@ export function makeJourJ(ctx) {
     if (!poser || d.idx === d.i0) return;
     const autres = M().filter(m => m.id !== d.id), m = M().find(x => x.id === d.id), s = doc(d.id); if (!m || !s) return;
     const deb = heureEntre(autres[d.idx - 1] ? autres[d.idx - 1].debut : null, autres[d.idx] ? autres[d.idx].debut : null);
-    const avant = { time: s.time || "", fin: s.fin || "", template: !!s.template }, o = { time: hDe(deb), template: false };
+    const avant = { time: s.time || "", fin: s.fin || "", template: !!s.template, jour: s.jour || 1 }, o = { time: hDe(deb), template: false, jour: deb >= 30 * 60 ? 2 : 1 };
     if (m.finSaisie != null && m.debut != null) o.fin = hDe(deb + (m.finSaisie - m.debut));
     if (await ctx.patch("schedule", d.id, o)) ctx.toastUndo(UI.deplace(m.nom, hLisible(deb)), () => ctx.patch("schedule", d.id, avant));
   }
@@ -637,6 +690,13 @@ export function makeJourJ(ctx) {
       case "jjshare": partagerFiche(); return true;
       case "jjmarquer": marquerEnvoyee(); return true;
       case "jjsuiv": suivante(); return true;
+      case "jjtramesel": S.ui.jjTrame = t.dataset.v; ctx.render(); return true;
+      case "jjtramego": adapterTrame(S.ui.jjTrame || enviesDuJour(enviesA()).reco); return true;
+      case "jjtelle": trameTelleQuelle(S.ui.jjTrame || enviesDuJour(enviesA()).reco); return true;
+      case "jjtrameautre": { const k = (J().trame || {}).k; show("main"); adapterTrame(k || "meme"); return true; }
+      case "jjtrameretour": show("main"); return true;
+      case "jjtramecreer": creerTrame(); return true;
+      case "jjlendemain": { const d = doc(id); if (d) ctx.patch("schedule", id, { jour: d.jour === 2 ? 1 : 2 }); return true; }
       case "jjdfermer": S.ui.jjFerme = true; S.ui.jjConf = false; document.body.classList.remove("jj-live"); ctx.render(); window.scrollTo(0, 0); return true;
       case "jjdouvrir": S.ui.jjFerme = false; ctx.render(); window.scrollTo(0, 0); return true;
       case "jjdretard": S.ui.jjConf = true; ctx.render(); return true;
@@ -660,6 +720,7 @@ export function makeJourJ(ctx) {
     if (ds.jjrlibre) { const v = el.value.trim(); majR(ds.jjrlibre, v ? { personne: v.slice(0, 60), guestId: "" } : { personne: "" }); return true; }
     if (ds.jjrtel) { majR(ds.jjrtel, { tel: el.value.trim().slice(0, 30) }); return true; }
     if (ds.jjsoleil) { ctx.setMeta("jourj", { soleil: el.value }); return true; }
+    if (ds.jjtc != null) { const tr = J().trame; if (tr) { const c = S.ui.jjTrameCoche || tr.moments.map(() => true); c[+ds.jjtc] = el.checked; S.ui.jjTrameCoche = c; ctx.render(); } return true; }
     if (ds.jjacces) { const a = { ...(J().acces || {}), [ds.jjacces]: el.value.trim().slice(0, 2000) }; ctx.setMeta("jourj", { acces: a }); return true; }
     return false;
   }
