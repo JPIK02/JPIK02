@@ -2,6 +2,7 @@
 // La clé Claude reste côté serveur (variable d'environnement écrite au déploiement depuis les secrets GitHub).
 import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
 import { gererLien, traiterAdresse } from "./adresse.js";
+import { gererLienJourJ, traiterJourJ } from "./jourj.js";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { initializeApp } from "firebase-admin/app";
@@ -200,5 +201,21 @@ export const adresseFoyer = onRequest({ timeoutSeconds: 20, maxInstances: 2, cor
   res.set("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ erreur: "méthode" });
   const r = await traiterAdresse(db, req.body || {}, { noms: coupleNames });
+  return res.status(r.status).json(r.body);
+});
+
+/* ---------- Jour J : liens des témoins et des invités (docs/jour-j-v1.md, section 4) ----------
+   Lecture par le serveur seulement ; un témoin peut seulement décaler la suite le jour même (journalisé). */
+export const lienJourJ = onCall({ timeoutSeconds: 30 }, async req => {
+  const email = String(req.auth?.token?.email || "").toLowerCase();
+  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
+  const r = await gererLienJourJ(db, { type: req.data?.type, roleId: req.data?.roleId, action: req.data?.action });
+  if (r.erreur) throw new HttpsError(r.code || "invalid-argument", r.erreur);
+  return r;
+});
+export const jourjPublic = onRequest({ timeoutSeconds: 20, maxInstances: 3, cors: false, invoker: "public" }, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ erreur: "méthode" });
+  const r = await traiterJourJ(db, req.body || {}, { noms: coupleNames });
   return res.status(r.status).json(r.body);
 });

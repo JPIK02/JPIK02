@@ -252,3 +252,88 @@ export function moisAvant(settings = {}, today = new Date()) {
   const d = Date.UTC(+m[1], +m[2] - 1, +m[3]), t = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
   return t >= d - 30 * 864e5 && t <= d;
 }
+
+/* ---------- Lot 3 : le jour même (3.4) ---------- */
+/**
+ * L'heure « du jour J » (Europe/Paris) : avant 6 h, on est encore dans la nuit de la veille (date de la veille, minutes + 24 h).
+ * @returns {date: "AAAA-MM-JJ", mn}
+ */
+export function heureDuJour(now = new Date(), timeZone = "Europe/Paris") {
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .formatToParts(now).map(x => [x.type, x.value]));
+  let date = `${p.year}-${p.month}-${p.day}`, mn = +p.hour * 60 + +p.minute;
+  if (+p.hour < 6) { const d = new Date(Date.UTC(+p.year, +p.month - 1, +p.day) - 864e5); date = d.toISOString().slice(0, 10); mn += 1440; }
+  return { date, mn };
+}
+/** C'est le jour du mariage, de 6 h à la fin du dernier moment (jamais avec une date indicative ni sans moment). */
+export function estLeJour(settings = {}, moments = [], now = new Date()) {
+  if (!settings.date || settings.dateIndicative) return false;
+  const h = heureDuJour(now), ms = moments.filter(m => m.debut != null); if (h.date !== String(settings.date).slice(0, 10) || !ms.length) return false;
+  return h.mn >= 6 * 60 && h.mn <= Math.max(...ms.map(m => m.fin));
+}
+/** Le moment en cours, le suivant, la progression du moment en cours (0 à 1) et le délai avant le suivant (minutes). */
+export function ecranDuJour(moments = [], mn) {
+  const ms = moments.filter(m => m.debut != null);
+  const courant = ms.filter(m => m.debut <= mn && mn < m.fin).sort((a, b) => b.debut - a.debut)[0] || null;
+  const suivant = ms.find(m => m.debut > mn) || null;
+  return { courant, suivant, progression: courant ? Math.min(1, (mn - courant.debut) / Math.max(1, courant.fin - courant.debut)) : 0, dans: suivant ? suivant.debut - mn : null };
+}
+export const duree = n => (n < 60 ? `${n} min` : `${Math.floor(n / 60)} h${n % 60 ? ` ${String(n % 60).padStart(2, "0")}` : ""}`);
+/**
+ * « On a du retard » : les moments pas encore commencés avancent de `de` minutes (début et fin saisie) ; les autres ne bougent pas.
+ * @returns [{id, avant: {time, fin}, apres: {time, fin}}]
+ */
+export function aDecaler(moments = [], mn, de = 15) {
+  return moments.filter(m => m.debut != null && m.debut > mn).map(m => ({
+    id: m.id, avant: { time: m.time || "", fin: m.finSaisie != null ? hDe(m.finSaisie) : "" },
+    apres: { time: hDe(m.debut + de), fin: m.finSaisie != null ? hDe(m.finSaisie + de) : "" },
+  }));
+}
+/** Les numéros à appeler : maître de cérémonie, puis prestataires du moment en cours et du suivant, puis les autres rôles (4 au plus). */
+export function aAppeler({ roles = [], guests = [], vendors = [], courant = null, suivant = null } = {}, max = 4) {
+  const out = [], vu = new Set(), add = (nom, role, tel) => { const t = String(tel || "").trim(); if (!t || vu.has(t) || out.length >= max) return; vu.add(t); out.push({ nom, role, tel: t }); };
+  const mc = roles.find(r => r.id === "mc"), p = mc && personneDe(mc, guests); if (p) add(p.nom, mc.nom, p.tel);
+  for (const m of [courant, suivant].filter(Boolean)) for (const x of m.prestas) { const v = vendors.find(y => y.id === x.vendorId); if (v) add(v.name, v.cat || "", v.tel); }
+  for (const r of roles) { const q = personneDe(r, guests); if (q) add(q.nom, r.nom, q.tel); }
+  return out;
+}
+
+/* ---------- Lot 3 : liens des témoins et des invités (section 4) ---------- */
+// `meta/jourj.liens` {temoins: {roleId: {token, creeLe, expire, partageLe?}}, invites: {token, creeLe, expire, partageLe?}} : lisible du couple ;
+// `liens/<sha-256 du jeton>` {type: temoin|invites, roleId?, expire, revoque, compte} : lu par le serveur seulement (comme le lien d'adresse).
+// `meta/jourj.retards` [{at, de, par, ids, avant: {id: {time, fin}}, annuleLe?}] : chaque décalage, qui et quand, annulable par le couple.
+/** Expiration : deux jours après le mariage ; sans date, un an après la création. */
+export function expirationJourJ(dateMariage, maintenant = Date.now()) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateMariage || ""));
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3] + 2, 22, 59, 59) : maintenant + 365 * 864e5;
+}
+export const lienJourJActif = (l, maintenant = Date.now()) => !!(l && (l.type === "temoin" || l.type === "invites") && !l.revoque && +l.expire > maintenant);
+const prenom = s => String(s || "").trim().split(/\s+/)[0] || "";
+/**
+ * Ce que voit un témoin : tout le déroulé, les rôles (nom, téléphone), les prestataires du jour (nom, métier, téléphone, arrivée),
+ * plans pluie, objets, accès ; jamais de montant, de devis, de note de prestataire ni le reste de l'app.
+ */
+export function vueTemoins({ schedule = [], vendors = [], guests = [], jourj = {}, settings = {}, roleId = "", noms = {} } = {}) {
+  const ms = momentsDe(schedule), roles = rolesDe(jourj), moi = roles.find(r => r.id === roleId), p = moi && personneDe(moi, guests);
+  const vs = prestatairesDuJour(ms, vendors), ville = villeSoleil({ choix: jourj.soleil, vendors, settings });
+  return {
+    type: "temoin", couple: [noms.p1, noms.p2].filter(Boolean).join(" et "), date: settings.dateIndicative ? null : settings.date || null,
+    moi: { role: moi ? moi.nom : "", prenom: p ? prenom(p.nom) : "" },
+    moments: ms.map(m => ({ id: m.id, nom: m.nom, debut: m.debut, fin: m.fin, lieu: m.lieuPrecis || m.lieu, detail: m.detail, note: m.note, cle: m.cle,
+      exterieur: m.exterieur, pluie: m.pluie, objets: m.objets.map(o => ({ label: o.label, qui: o.qui || "", fait: !!o.fait })),
+      prestas: m.prestas.map(x => { const v = vendors.find(y => y.id === x.vendorId); return v ? { nom: v.name, metier: v.cat || "", tel: String(v.tel || ""), arrivee: minDe(x.arrivee), tache: x.tache || "" } : null; }).filter(Boolean) })),
+    roles: roles.map(r => { const q = personneDe(r, guests); return { id: r.id, nom: r.nom, personne: q ? q.nom : "", tel: q ? q.tel : "" }; }),
+    prestataires: vs.map(v => ({ nom: v.name, metier: v.cat || "", tel: String(v.tel || ""), photo: v.cat === "Photographe" })),
+    acces: (jourj.acces || {}).texte || "", navettes: (jourj.acces || {}).navettes || "",
+    coucher: settings.date && ville ? minutesLocales(coucherSoleil(settings.date, ville.lat, ville.lng)) : null,
+    retard: (() => { const r = (jourj.retards || []).filter(x => !x.annuleLe).at(-1); return r ? { at: r.at, de: r.de, par: r.par } : null; })(),
+  };
+}
+/** Ce que voient les invités (lien du faire-part) : les moments visibles par eux, l'accès, les navettes. Aucun nom, aucun contact. */
+export function vueInvites({ schedule = [], jourj = {}, settings = {}, noms = {} } = {}) {
+  return {
+    type: "invites", couple: [noms.p1, noms.p2].filter(Boolean).join(" et "), date: settings.dateIndicative ? null : settings.date || null,
+    moments: visiblesPar(momentsDe(schedule), "invites").map(m => ({ nom: m.nom, debut: m.debut, fin: m.fin, lieu: m.lieuPrecis || m.lieu })),
+    acces: (jourj.acces || {}).texte || "", navettes: (jourj.acces || {}).navettes || "",
+  };
+}

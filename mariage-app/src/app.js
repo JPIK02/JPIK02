@@ -1,7 +1,7 @@
 // Polices Lamaelle hébergées avec l'app (pas de Google Fonts : RGPD) : Jost pour l'interface, Cormorant Garamond italique pour les accroches
 import "@fontsource/jost/300.css";import "@fontsource/jost/400.css";import "@fontsource/jost/500.css";import "@fontsource/jost/600.css";
 import "@fontsource/cormorant-garamond/400-italic.css";import "@fontsource/cormorant-garamond/500-italic.css";
-import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow,lienFoyer} from "./firebase.js";
+import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow,lienFoyer,lienJourJ} from "./firebase.js";
 import {QCATS} from "./questions.js"; // ancien questionnaire : archive lisible (synthèse, réponses archivées)
 import {TUILES} from "../agents/lib/envies/catalogue.js";
 import {FR as FR_ENVIES} from "../agents/lib/envies/fr.js";
@@ -552,7 +552,8 @@ function renderBnav(){
   // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
   document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")||(S.view==="tables"&&S.f.tView!=="liste")||S.view==="jour-j"); // Budget, Planning : même modèle de page (en-tête propre)
   {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer"))))}
-  if(S.view!=="tables")document.body.classList.remove("on-plan-bar"); // tiroir « À placer » du plan de table
+  if(S.view!=="tables")document.body.classList.remove("on-plan-bar");
+  if(S.view!=="jour-j")document.body.classList.remove("jj-live"); // écran du jour J (toujours sombre, sans bouton du coach) // tiroir « À placer » du plan de table
 }
 function renderTabs(){
   renderBnav();
@@ -688,7 +689,7 @@ const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,
 // docs/invites-v1.md (lot 4) : plan de table dans src/plan-ui.js, règles dans agents/lib/plan.js ; l'ancienne vue reste sous « Vue en liste »
 // Jour J v1 (src/jourj-ui.js, docs/jour-j-v1.md) : déroulé, moments, rôles ; l'ancienne vue vJourJ reste dans le code
 let JJ=null;
-const jj=()=>JJ||(JJ=makeJourJ({S,esc,BACK_SVG,CHEV,initials,tintOf,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,wDate,inspTile,makePdf,pdfFile,
+const jj=()=>JJ||(JJ=makeJourJ({S,esc,BACK_SVG,CHEV,initials,tintOf,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,wDate,inspTile,makePdf,pdfFile,lienJourJ,prenom:()=>prenom(),
   creerSiAbsent:(path,data)=>S.db?S.db.doc(path).get().then(x=>x.exists?false:S.db.doc(path).set(data).then(()=>true)).catch(()=>false):false,
   layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
   setMeta:(k,o)=>setDoc("meta/"+k,S[k]||{},o)}));

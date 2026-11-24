@@ -18,6 +18,17 @@
         "destination": "/adresse.html"
       },
       {
+        "source": "/api/jourj",
+        "function": {
+          "functionId": "jourjPublic",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/jourj",
+        "destination": "/jourj.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }

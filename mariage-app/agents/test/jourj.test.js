@@ -116,3 +116,40 @@ test("métier → moments, clé d'un trou, dernier mois", () => {
   assert.equal(moisAvant({ date: "2028-05-20" }, new Date(2028, 3, 10)), false);
   assert.equal(moisAvant({ date: "2028-05-20", dateIndicative: true }, new Date(2028, 4, 1)), false);
 });
+
+import { heureDuJour, estLeJour, ecranDuJour, aDecaler, aAppeler, duree, expirationJourJ, lienJourJActif, vueTemoins, vueInvites } from "../lib/jourj.js";
+
+test("heure du jour J (Paris), nuit après minuit", () => {
+  assert.deepEqual(heureDuJour(new Date("2028-05-20T14:30:00Z")), { date: "2028-05-20", mn: 16 * 60 + 30 });
+  assert.deepEqual(heureDuJour(new Date("2028-05-20T23:30:00Z")), { date: "2028-05-20", mn: 25 * 60 + 30 });
+  const ms = momentsDe([{ id: "a", time: "15:00", title: "Cérémonie" }, { id: "b", time: "20:00", title: "Dîner", fin: "02:00" }]);
+  assert.equal(estLeJour({ date: "2028-05-20" }, ms, new Date("2028-05-20T03:00:00Z")), false); // 5 h à Paris
+  assert.equal(estLeJour({ date: "2028-05-20" }, ms, new Date("2028-05-20T05:00:00Z")), true);
+  assert.equal(estLeJour({ date: "2028-05-20" }, ms, new Date("2028-05-20T23:30:00Z")), true);   // 1 h 30, encore la soirée
+  assert.equal(estLeJour({ date: "2028-05-20" }, ms, new Date("2028-05-21T00:30:00Z")), false);  // 2 h 30 : fini
+  assert.equal(estLeJour({ date: "2028-05-20", dateIndicative: true }, ms, new Date("2028-05-20T12:00:00Z")), false);
+});
+
+test("écran du jour, retard, numéros", () => {
+  const ms = momentsDe([{ id: "a", time: "15:00", title: "Cérémonie", fin: "16:00" }, { id: "b", time: "16:30", title: "Vin", prestas: [{ vendorId: "t" }] }, { id: "c", time: "20:00", title: "Dîner", fin: "23:00" }]);
+  let e = ecranDuJour(ms, 15 * 60 + 30); assert.equal(e.courant.id, "a"); assert.equal(e.suivant.id, "b"); assert.equal(e.progression, 0.5); assert.equal(e.dans, 60);
+  e = ecranDuJour(ms, 16 * 60 + 10); assert.equal(e.courant, null); assert.equal(e.suivant.id, "b");
+  const d = aDecaler(ms, 15 * 60 + 30); assert.deepEqual(d.map(x => x.id), ["b", "c"]);
+  assert.deepEqual(d[1], { id: "c", avant: { time: "20:00", fin: "23:00" }, apres: { time: "20:15", fin: "23:15" } });
+  assert.equal(duree(25), "25 min"); assert.equal(duree(70), "1 h 10"); assert.equal(duree(120), "2 h");
+  const appel = aAppeler({ roles: [{ id: "mc", nom: "Maître de cérémonie", personne: "Tom", tel: "06 1" }, { id: "x", nom: "Alliances", personne: "Zoé", tel: "06 3" }],
+    vendors: [{ id: "t", name: "Traiteur", cat: "Traiteur", tel: "06 2" }], courant: ms[0], suivant: ms[1] });
+  assert.deepEqual(appel.map(a => a.nom), ["Tom", "Traiteur", "Zoé"]);
+});
+
+test("liens : expiration, vues sans montant ni moments cachés", () => {
+  assert.equal(new Date(expirationJourJ("2028-05-20")).toISOString().slice(0, 10), "2028-05-22");
+  assert.equal(lienJourJActif({ type: "temoin", expire: Date.now() + 1000 }), true); assert.equal(lienJourJActif({ foyerId: "f", expire: Date.now() + 1000 }), false);
+  const schedule = [{ id: "a", time: "15:00", title: "Cérémonie", prestas: [{ vendorId: "v", arrivee: "14:00" }] }, { id: "b", time: "17:00", title: "Photos de couple", voit: { invites: false } }];
+  const vendors = [{ id: "v", name: "Studio", cat: "Photographe", status: "reserve", prix: 3200, tel: "06", note: "négocié" }];
+  const t = vueTemoins({ schedule, vendors, guests: [{ id: "g", name: "Tom Durand" }], jourj: { roles: [{ id: "mc", nom: "MC", guestId: "g", tel: "07" }] }, settings: { date: "2028-05-20" }, roleId: "mc", noms: { p1: "A", p2: "B" } });
+  assert.equal(t.moi.prenom, "Tom"); assert.equal(t.moments.length, 2); assert.equal(t.prestataires[0].tel, "06");
+  const s = JSON.stringify(t); assert.ok(!s.includes("3200") && !s.includes("négocié"));
+  const i = vueInvites({ schedule, settings: { date: "2028-05-20" } }); assert.deepEqual(i.moments.map(m => m.nom), ["Cérémonie"]);
+  assert.ok(!JSON.stringify(i).includes("Studio"));
+});

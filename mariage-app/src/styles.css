@@ -2132,3 +2132,52 @@ body.pt-drag{user-select:none;-webkit-user-select:none}
 .jj-choix{padding:4px 12px;border-top:1px solid var(--line)}.jj-choix:first-child{border-top:0}
 .jj-envoi .pl-brouillon{margin:6px 0}
 .jj-tout{align-self:stretch}
+/* Jour J lot 3 : le jour même (toujours sombre : couleurs du bandeau) et page publique des liens */
+body.jj-live{background:var(--hero-b)}
+body.jj-live .fab,body.jj-live .hero{display:none!important}
+.jjd{display:flex;flex-direction:column;gap:18px;padding:8px 0 40px;color:var(--hero-fg);background:var(--hero-b)}
+.jj-jour{margin:-22px calc(-1*max(16px,env(safe-area-inset-left,0px))) 0;padding:calc(10px + var(--top,0px)) max(16px,env(safe-area-inset-left,0px)) 0;background:var(--hero-b);min-height:100vh}
+.jjd-top{display:flex;align-items:center;justify-content:space-between;min-height:44px}
+.jjd-k,.jjd-l{font-size:12px;letter-spacing:.3em;font-weight:600;color:var(--hero-gold)}
+.jjd-x{width:44px;height:44px;border-radius:50%;border:0;background:var(--hero-glass-2);color:var(--hero-fg);display:grid;place-items:center;cursor:pointer}
+.jjd-x svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.jjd-now{display:flex;flex-direction:column;gap:8px}
+.jjd-now h1{margin:0;font-family:var(--f-accroche,var(--f-display));font-style:italic;font-weight:500;font-size:44px;line-height:1.05;color:var(--hero-fg)}
+.jjd-now p{margin:0;font-size:16px;color:var(--hero-muted)}
+.jjd-prog{display:block;height:8px;border-radius:999px;background:var(--hero-glass)}
+.jjd-prog i{display:block;height:100%;border-radius:999px;background:var(--coral-ui)}
+.jjd-next{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:18px;background:var(--hero-glass);border:1px solid var(--hero-line)}
+.jjd-next b{font-size:19px;font-weight:500}.jjd-next span{font-size:14.5px;color:var(--hero-muted)}.jjd-next .jjd-u{color:var(--hero-gold)}
+.jjd-sun{display:flex;align-items:center;gap:8px;margin:0;font-size:15px;color:var(--hero-fg)}
+.jjd-sun svg{flex:none;width:20px;height:20px;fill:none;stroke:var(--hero-gold);stroke-width:2;stroke-linecap:round}
+.jjd-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:8px}
+.jjd-tel{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-height:88px;padding:12px;border-radius:16px;background:var(--hero-glass);border:1px solid var(--hero-line);color:var(--hero-fg);text-decoration:none}
+.jjd-tel b{font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;max-width:100%;white-space:nowrap}.jjd-tel>span:last-child{font-size:13px;color:var(--hero-muted)}
+.jjd-av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:600;background:var(--coral-ui);color:var(--hero-b);margin-bottom:4px}
+.jjd-btn{min-height:52px;border-radius:999px;border:1.5px solid var(--hero-fg);background:transparent;color:var(--hero-fg);font:inherit;font-size:16px;font-weight:600;padding:10px 18px;cursor:pointer}
+.jjd-btn.ghost{border-color:var(--hero-line)}
+.jjd-conf{display:flex;flex-direction:column;gap:10px;padding:14px;border-radius:16px;border:1.5px solid var(--coral-ui)}
+.jjd-conf p{margin:0;font-size:15.5px}.jjd-conf div{display:flex;gap:10px;flex-wrap:wrap}
+.jjd-log{margin:0;font-size:14px;color:var(--hero-muted)}
+.jjd-link{background:none;border:0;color:var(--hero-fg);font:inherit;font-weight:600;text-decoration:underline;cursor:pointer;min-height:44px}
+.jjd-fin{margin:6px 0 0;font-family:var(--f-accroche,var(--f-display));font-style:italic;font-size:24px;color:var(--hero-fg)}
+.jj-lien{display:flex;flex-direction:column;gap:8px}.jj-lien .home-h{margin:0}
+.jj-lr{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-top:1px solid var(--line)}
+.jj-lr:first-child{border-top:0}.jj-lr .pr-rb span{font-size:13.5px;color:var(--muted)}
+.jj-la{display:flex;align-items:center;gap:10px}
+/* page publique */
+body.jjp-live{background:var(--hero-b)}
+body.jjp-live .jjp{max-width:520px}
+.jjp-date{font-weight:500}
+.jjp-sec{display:flex;flex-direction:column;gap:8px;margin-top:22px}
+.jjp-sec h2{margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.jjp-tl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.jjp-tl li{display:flex;gap:14px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.jjp-tl li.cle{border-color:var(--coral-ui)}
+.jjp-h{flex:none;width:52px;font-weight:600}
+.jjp-tl div,.jjp-l li{display:flex;flex-direction:column;gap:2px;min-width:0}
+.jjp-tl span,.jjp-l span{font-size:14px;color:var(--muted)}
+.jjp-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.jjp-l li{padding:10px 14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.jjp-l a{color:var(--link);font-weight:600;text-decoration:none;min-height:32px;display:inline-flex;align-items:center}
+.jjp-p{margin:0;white-space:pre-line}

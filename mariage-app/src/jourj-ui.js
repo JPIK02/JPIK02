@@ -4,7 +4,8 @@
 // ouvert dans l'app mail du téléphone ; l'app n'envoie rien.
 import { momentsDe, barre, heureEntre, hLisible, hDe, minDe, rolesDe, personneDe, aCaler, trouDe, compteurs, lieuReserve, prestatairesDuJour,
   coucherSoleil, minutesLocales, villeSoleil, VILLES, VOIT_DEFAUT, visiblesPar, fichePrestataire, etatFiche, empreinteFiche, momentsPourMetier, contactSurPlace,
-  cleTrou, moisAvant } from "../agents/lib/jourj.js";
+  cleTrou, moisAvant, vueTemoins, estLeJour, heureDuJour, aDecaler } from "../agents/lib/jourj.js";
+import { rendreJour } from "./jourj-jour.js";
 import { concernes, tablesDe, resume } from "../agents/lib/plan.js";
 
 // Textes d'interface (à traduire)
@@ -24,7 +25,17 @@ const UI = {
   chacun: "Chacun sa version", chacunP: "Un seul déroulé : ce que vous changez se met à jour partout.", onglets: { invites: "Invités", prestataires: "Prestataires", temoins: "Témoins" },
   invVoient: n => `${n} moment${n > 1 ? "s" : ""} visible${n > 1 ? "s" : ""} par les invités`, invCaches: n => `${n} caché${n > 1 ? "s" : ""} aux invités`, aucunVisible: "Aucun moment visible par les invités.",
   acces: "Accès et parking", accesPh: "Adresse, plan d'accès, où se garer…", navettes: "Navettes", navettesPh: "Horaires et point de départ des navettes…",
-  pdfInvites: "PDF pour les invités", pdfTemoins: "PDF pour les témoins", lienPlusTard: "Le lien à partager arrive bientôt ; en attendant, le PDF.",
+  pdfInvites: "PDF pour les invités", pdfTemoins: "PDF pour les témoins",
+  // liens (section 4)
+  lienInvT: "Le lien pour le faire-part", lienInvP: "Le programme de la journée, sans nom ni numéro. Il expire deux jours après le mariage.",
+  liensTemT: "Les liens des témoins", liensTemP: "Un lien par personne : tout le déroulé et, le jour J, l'écran du jour. Lecture seule, sauf « On a du retard ». Il expire deux jours après le mariage.",
+  creerLien: "Créer le lien", partagerLien: "Partager le lien", revoquer: "Révoquer", lienCree: "Lien prêt", lienRevoque: "Lien révoqué", lienCopie: "Lien copié",
+  partageLe: d => `Partagé le ${d}`, cree: "Lien prêt, pas encore partagé", sansLien: "Pas de lien", ajouterTemoin: "Ajouter un témoin", temoin: "Témoin",
+  aConfierAvant: "Confiez d'abord ce rôle à quelqu'un", lienTexteTem: (r, c) => `Voici le déroulé de notre jour J${r ? ` (${r.toLowerCase()})` : ""}. Le jour même, la page devient l'écran du jour.${c ? ` ${c}` : ""}`,
+  lienTexteInv: "Le programme de notre mariage :", echecLien: e => `Le lien n'a pas pu être créé : ${e}`,
+  // le jour même
+  ecranJour: "Revenir à l'écran du jour", ecranJourS: "Le moment en cours, le suivant, les numéros utiles", decaleOk: n => `${n} moment${n > 1 ? "s" : ""} décalé${n > 1 ? "s" : ""} de 15 min`,
+  rienADecaler: "Aucun moment à décaler", retardAnnule: "Décalage annulé",
   tem: { moments: "moments", roles: "rôles", prestas: "prestataires", pluie: "plans pluie" }, temP: "Tout le déroulé, les rôles, les contacts des prestataires et les plans pluie.",
   etat: { prete: n => `Prête · ${n} moment${n > 1 ? "s" : ""}`, envoyee: d => `Envoyée le ${d}`, maj: d => `Envoyée le ${d} · mise à jour depuis`,
     manque: { moments: "Moments à choisir", arrivee: "Heure d'arrivée manquante", contact: "Contact sur place manquant" } },
@@ -148,8 +159,8 @@ export function makeJourJ(ctx) {
       ${S.canWrite ? `<button class="iv-p plus" data-act="jjroleajout"><span class="pr-rb"><b>${UI.ajouterRole}</b></span></button>` : ""}</div></section>`;
   }
   function vMain() {
-    const ms = M(), ts = trous(ms);
-    return `<div class="pr bu jj">${head(ms)}${carteCaler(ts)}
+    const ms = M(), ts = trous(ms), jour = estLeJour(S.settings || {}, ms, new Date());
+    return `<div class="pr bu jj">${head(ms)}${jour ? `<button class="pr-row bu-pdf jj-live-row" data-act="jjdouvrir"><span class="pr-rb"><b>${UI.ecranJour}</b><span>${UI.ecranJourS}</span></span>${ctx.CHEV}</button>` : ""}${carteCaler(ts)}
       ${ms.length ? `<section class="pr-sec"><h3 class="home-h">${UI.deroule}</h3><div class="jj-tl" id="jj-tl">${ms.map(m => ligneMoment(m, ts)).join("")}</div></section>`
         : `<section class="pr-card bu-arb"><b>${UI.videT}</b><p>${UI.videP}</p>${S.canWrite ? `<div class="pl-acts"><button class="btn primary" data-act="jjajout">${UI.ajouter}</button></div>` : ""}</section>`}
       ${quiFaitQuoi()}
@@ -235,6 +246,7 @@ export function makeJourJ(ctx) {
   function vJourJ() {
     setTimeout(verifierTaches, 1500);
     if (S.f.jView === "partager") return vPartager();
+    if (estLeJour(S.settings || {}, M(), new Date()) && !S.ui.jjFerme && S.f.jView !== "moment") return vDuJour();
     if (S.f.jView === "moment" && S.f.jMoment) return vMoment(S.f.jMoment);
     return vMain();
   }
@@ -256,8 +268,8 @@ export function makeJourJ(ctx) {
       <section class="pr-card pl-champs">
         <label class="pl-f"><span>${UI.acces}</span><textarea class="pl-note" data-jjacces="texte" placeholder="${UI.accesPh}" ${dis}>${esc(a.texte || "")}</textarea></label>
         <label class="pl-f"><span>${UI.navettes}</span><textarea class="pl-note" data-jjacces="navettes" placeholder="${UI.navettesPh}" ${dis}>${esc(a.navettes || "")}</textarea></label></section>
-      <p class="ev-note">${UI.lienPlusTard}</p>
-      <div class="pl-acts"><button class="btn primary" data-act="jjpdf" data-v="invites" ${vis.length ? "" : "disabled"}>${UI.pdfInvites}</button></div>`;
+      ${blocLienInvites()}
+      <div class="pl-acts"><button class="btn" data-act="jjpdf" data-v="invites" ${vis.length ? "" : "disabled"}>${UI.pdfInvites}</button></div>`;
   }
   function ongletPrestas() {
     const vs = reserves(); if (!vs.length) return `<p class="ev-note">${UI.aucunReserveP}</p>`;
@@ -275,8 +287,8 @@ export function makeJourJ(ctx) {
     const ms = M(), rs = R(), vs = reserves().filter(v => ms.some(m => m.prestas.some(p => p.vendorId === v.id))), pl = ms.filter(m => m.exterieur && m.pluie).length;
     const k = (n, l) => `<div><b class="num">${n}</b><span>${l}</span></div>`;
     return `<section class="pr-card"><div class="jj-kpis">${k(ms.length, UI.tem.moments)}${k(rs.length, UI.tem.roles)}${k(vs.length, UI.tem.prestas)}${k(pl, UI.tem.pluie)}</div><p class="ev-note">${UI.temP}</p></section>
-      <p class="ev-note">${UI.lienPlusTard}</p>
-      <div class="pl-acts"><button class="btn primary" data-act="jjpdf" data-v="temoins" ${ms.length ? "" : "disabled"}>${UI.pdfTemoins}</button></div>`;
+      ${blocLiensTemoins()}
+      <div class="pl-acts"><button class="btn" data-act="jjpdf" data-v="temoins" ${ms.length ? "" : "disabled"}>${UI.pdfTemoins}</button></div>`;
   }
   function vPartager() {
     const tab = ["invites", "prestataires", "temoins"].includes(S.f.jTab) ? S.f.jTab : "invites";
@@ -422,6 +434,66 @@ export function makeJourJ(ctx) {
     await ctx.setMeta("jourj", { tachesCreees: [...deja, ...ts.map(cleTrou)] });
   }
 
+  /* ---------- 3.4 le jour même ---------- */
+  const vueJour = () => vueTemoins({ schedule: S.schedule || [], vendors: S.vendors || [], guests: S.guests || [], jourj: J(), settings: S.settings || {}, roleId: "", noms: {} });
+  // le prénom d'un témoin dont le lien a été partagé (« [Prénom] a le même écran »)
+  function avecQui() {
+    const t = (J().liens || {}).temoins || {}, r = R().find(x => t[x.id] && t[x.id].partageLe), p = r && personneDe(r, S.guests || []);
+    return p ? p.nom.split(/\s+/)[0] : "";
+  }
+  function vDuJour() {
+    document.body.classList.add("jj-live");
+    return `<div class="jj-jour">${rendreJour(vueJour(), heureDuJour().mn, { fermer: true, peutDecaler: S.canWrite, confirmer: !!S.ui.jjConf, annuler: S.canWrite, avecQui: avecQui() })}</div>`;
+  }
+  setInterval(() => { if (S.view === "jour-j" && document.body.classList.contains("jj-live") && !document.hidden && !S.ui.jjConf) ctx.render(); }, 60e3);
+  async function decaler() {
+    S.ui.jjConf = false; const d = aDecaler(M(), heureDuJour().mn, 15);
+    if (!d.length) { ctx.toast(UI.rienADecaler); ctx.render(); return; }
+    for (const x of d) await ctx.patch("schedule", x.id, { time: x.apres.time, ...(x.apres.fin ? { fin: x.apres.fin } : {}) });
+    const entree = { at: Date.now(), de: 15, par: ctx.prenom(), ids: d.map(x => x.id), avant: Object.fromEntries(d.map(x => [x.id, x.avant])) };
+    await ctx.setMeta("jourj", { retards: [...(J().retards || []), entree].slice(-30) });
+    ctx.toastUndo(UI.decaleOk(d.length), () => annulerRetard(entree.at)); ctx.render();
+  }
+  async function annulerRetard(at) {
+    const l = (J().retards || []).slice(), i = at ? l.findIndex(x => x.at === at) : l.map(x => !x.annuleLe).lastIndexOf(true); if (i < 0 || l[i].annuleLe) return;
+    for (const [id, a] of Object.entries(l[i].avant || {})) if (doc(id)) await ctx.patch("schedule", id, { time: a.time, ...(a.fin ? { fin: a.fin } : {}) });
+    l[i] = { ...l[i], annuleLe: Date.now() }; await ctx.setMeta("jourj", { retards: l }); ctx.toast(UI.retardAnnule); ctx.render();
+  }
+
+  /* ---------- liens des témoins et des invités (section 4) ---------- */
+  const urlLien = t => `${location.origin}/jourj#t=${t}`;
+  const lienDe = (type, roleId) => { const l = J().liens || {}; return type === "invites" ? l.invites || null : ((l.temoins || {})[roleId] || null); };
+  async function creerLien(type, roleId) {
+    S.ui.jjLien = `${type}|${roleId || ""}`; ctx.render();
+    try { await ctx.lienJourJ({ type, roleId, action: "creer" }); ctx.toast(UI.lienCree); }
+    catch (e) { ctx.toast(UI.echecLien(e.message || "erreur")); }
+    S.ui.jjLien = null; ctx.render();
+  }
+  async function partagerLien(type, roleId) {
+    const l = lienDe(type, roleId); if (!l) return; const url = urlLien(l.token), r = R().find(x => x.id === roleId);
+    const texte = type === "invites" ? `${UI.lienTexteInv} ${url}` : UI.lienTexteTem(r ? r.nom : "", url);
+    const noter = () => { const L = { temoins: {}, ...(J().liens || {}) }; if (type === "invites") L.invites = { ...l, partageLe: Date.now() }; else L.temoins = { ...(L.temoins || {}), [roleId]: { ...l, partageLe: Date.now() } }; return ctx.setMeta("jourj", { liens: L }); };
+    try { if (navigator.share) { await navigator.share({ text: texte }); await noter(); return; } } catch (e) { if (e && e.name === "AbortError") return; }
+    try { await navigator.clipboard.writeText(texte); ctx.toast(UI.lienCopie); await noter(); } catch {}
+  }
+  async function revoquerLien(type, roleId) { try { await ctx.lienJourJ({ type, roleId, action: "revoquer" }); ctx.toast(UI.lienRevoque); } catch (e) { ctx.toast(e.message || "Erreur"); } }
+  function etatLien(l) { return !l ? UI.sansLien : l.partageLe ? UI.partageLe(dCourt(l.partageLe)) : UI.cree; }
+  function actionsLien(type, roleId, possible = true) {
+    if (!S.canWrite) return ""; const l = lienDe(type, roleId), busy = S.ui.jjLien === `${type}|${roleId || ""}`;
+    if (!l) return possible ? `<button class="btn sm" data-act="jjlien" data-t="${type}" data-r="${esc(roleId || "")}" ${busy ? "disabled" : ""}>${UI.creerLien}</button>` : "";
+    return `<button class="btn sm primary" data-act="jjlienpart" data-t="${type}" data-r="${esc(roleId || "")}">${UI.partagerLien}</button><button class="link" data-act="jjlienrev" data-t="${type}" data-r="${esc(roleId || "")}">${UI.revoquer}</button>`;
+  }
+  function blocLienInvites() {
+    const l = lienDe("invites");
+    return `<section class="pr-card jj-lien"><h3 class="home-h">${UI.lienInvT}</h3><p class="ev-note">${UI.lienInvP}</p><span class="jj-etat ${l ? "prete" : ""}">${esc(etatLien(l))}</span><div class="pl-acts">${actionsLien("invites")}</div></section>`;
+  }
+  function blocLiensTemoins() {
+    const g = S.guests || [];
+    return `<section class="pr-sec"><h3 class="home-h">${UI.liensTemT}</h3><p class="ev-note">${UI.liensTemP}</p><div class="pr-box">${R().map(r => { const p = personneDe(r, g), l = lienDe("temoin", r.id);
+      return `<div class="jj-lr"><span class="pr-rb"><b>${esc(r.nom)}</b><span>${esc(p ? `${p.nom} · ${etatLien(l)}` : UI.aConfierAvant)}</span></span><div class="jj-la">${actionsLien("temoin", r.id, !!p)}${!p && S.canWrite ? `<button class="link" data-act="jjrole" data-id="${esc(r.id)}">${UI.completer}</button>` : ""}</div></div>`; }).join("")}
+      ${S.canWrite ? `<button class="iv-p plus" data-act="jjtemoinajout"><span class="pr-rb"><b>${UI.ajouterTemoin}</b></span></button>` : ""}</div></section>`;
+  }
+
   /* ---------- écritures ---------- */
   const show = (v, id) => { S.f.jView = v; if (id) S.f.jMoment = id; ctx.saveF(); ctx.render(); window.scrollTo(0, 0); };
   const ouvrirMoment = (id, sec) => { show("moment", id); if (sec) setTimeout(() => { const el = document.getElementById(`jj-sec-${sec}`); if (el) el.scrollIntoView({ block: "center" }); }, 120); };
@@ -565,6 +637,16 @@ export function makeJourJ(ctx) {
       case "jjshare": partagerFiche(); return true;
       case "jjmarquer": marquerEnvoyee(); return true;
       case "jjsuiv": suivante(); return true;
+      case "jjdfermer": S.ui.jjFerme = true; S.ui.jjConf = false; document.body.classList.remove("jj-live"); ctx.render(); window.scrollTo(0, 0); return true;
+      case "jjdouvrir": S.ui.jjFerme = false; ctx.render(); window.scrollTo(0, 0); return true;
+      case "jjdretard": S.ui.jjConf = true; ctx.render(); return true;
+      case "jjdretardnon": S.ui.jjConf = false; ctx.render(); return true;
+      case "jjdretardok": decaler(); return true;
+      case "jjdannuler": annulerRetard(); return true;
+      case "jjlien": creerLien(t.dataset.t, t.dataset.r || ""); return true;
+      case "jjlienpart": partagerLien(t.dataset.t, t.dataset.r || ""); return true;
+      case "jjlienrev": revoquerLien(t.dataset.t, t.dataset.r || ""); return true;
+      case "jjtemoinajout": { const r = { id: `t${uid()}`, nom: UI.temoin }; setRoles([...R(), r]).then(() => ouvrirRole(r.id)); return true; }
     }
     return false;
   }
