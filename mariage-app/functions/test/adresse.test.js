@@ -28,16 +28,32 @@ test("le couple crée un lien ; la page lit son foyer seulement", async () => {
   assert.ok(token && db.D["foyers/f1"].lien.token === token);
   const r = await traiterAdresse(db, { token, action: "lire" }, { noms });
   assert.equal(r.status, 200); assert.equal(r.body.vue.couple, "Claire et Julien");
-  assert.deepEqual(r.body.vue.personnes.map(p => p.prenom), ["Paul", "Léa"]);
+  assert.equal(r.body.vue.mode, "adresse"); assert.equal(r.body.vue.personnes, undefined); // avant le faire-part : l'adresse seule
   const s = JSON.stringify(r.body); assert.ok(!s.includes("secret de famille") && !s.includes("Zoé") && !s.includes("ne pas voir") && !s.includes("table"));
 });
-test("écrire : ses champs et les régimes de SES personnes, jamais ceux d'un autre foyer", async () => {
+test("avant le faire-part : l'adresse seule, aucun régime écrit", async () => {
   const db = base(), { token } = await gererLien(db, { foyerId: "f1" });
   const r = await traiterAdresse(db, { token, action: "ecrire", data: { adresse: "12 rue des Lilas", email: "p@r.fr", regimes: { g1: "Végétarien", g3: "piraté" }, note: "x", side: "claire" } }, { noms });
-  assert.equal(r.status, 200);
+  assert.equal(r.status, 200); assert.equal(r.body.vue.mode, "adresse"); assert.equal(r.body.vue.personnes, undefined);
   assert.equal(db.D["foyers/f1"].adresse, "12 rue des Lilas"); assert.equal(db.D["foyers/f1"].note, "secret de famille"); assert.equal(db.D["foyers/f1"].side, "julien");
-  assert.equal(db.D["guests/g1"].regime, "Végétarien"); assert.equal(db.D["guests/g3"].regime, "");
+  assert.equal(db.D["guests/g1"].regime, ""); assert.equal(db.D["guests/g3"].regime, "");
   assert.ok(db.D["foyers/f1"].lienReponseLe > 0);
+  assert.equal((await traiterAdresse(db, { token, action: "ecrire", data: { email: "p@r.fr" } })).status, 400); // adresse obligatoire
+});
+test("faire-part envoyé : le même lien montre la réponse, puis les régimes de qui vient", async () => {
+  const db = base(), { token } = await gererLien(db, { foyerId: "f1" });
+  db.D["foyers/f1"].etape = "fairepart"; db.D["guests/g2"].regime = "sans gluten"; // régime saisi avant le correctif : gardé, prérempli
+  let r = await traiterAdresse(db, { token, action: "lire" }, { noms, now: () => Date.UTC(2099, 0, 1) });
+  assert.equal(r.body.vue.mode, "reponse"); assert.equal(r.body.vue.personnes.find(p => p.id === "g2").regime, "sans gluten");
+  r = await traiterAdresse(db, { token, action: "ecrire", data: { reponses: { g1: { rsvp: "oui", absents: ["vin"], regime: "Végétarien" }, g2: { rsvp: "non" }, g3: { rsvp: "oui" } } } }, { noms, now: () => Date.UTC(2099, 0, 1) });
+  assert.equal(r.status, 200);
+  assert.equal(db.D["guests/g1"].rsvp, "oui"); assert.deepEqual(db.D["guests/g1"].absentA, { vin: true }); assert.equal(db.D["guests/g1"].regime, "Végétarien");
+  assert.equal(db.D["guests/g2"].rsvp, "non"); assert.equal(db.D["guests/g2"].regime, "sans gluten"); assert.equal(db.D["guests/g3"].rsvp, undefined);
+  assert.equal(db.D["foyers/f1"].etape, "repondu"); assert.ok(db.D["foyers/f1"].reponduLe > 0);
+  // après la date limite (deux mois avant le mariage) : plus de réponse, l'adresse reste modifiable
+  r = await traiterAdresse(db, { token, action: "ecrire", data: { reponses: { g1: { rsvp: "non" } } } }, { noms, now: () => Date.UTC(2099, 3, 25) });
+  assert.equal(r.status, 403); assert.equal(db.D["guests/g1"].rsvp, "oui");
+  assert.equal((await traiterAdresse(db, { token, action: "ecrire", data: { adresse: "Ailleurs" } }, { noms, now: () => Date.UTC(2099, 3, 25) })).status, 200);
 });
 test("jeton modifié, révoqué, remplacé ou expiré : refusé", async () => {
   const db = base(), { token } = await gererLien(db, { foyerId: "f1" });

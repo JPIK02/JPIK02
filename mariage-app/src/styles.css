@@ -2197,3 +2197,20 @@ body.jjp-live .jjp{max-width:520px}
 .jj-mini2 i{display:inline-block;width:44px;height:10px;border-radius:999px;background:var(--gold)}
 .jj-mini2::after{content:"le lendemain"}
 .jj-h small{display:block;font-size:11px;font-weight:600;color:var(--coral-ink);letter-spacing:.05em}
+/* Lien invité v1.1 : réponse au faire-part */
+.ad-pers{display:flex;flex-direction:column;gap:10px;margin:0 0 12px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.ad-pers legend{padding:0 6px;font-weight:600;font-size:16px}
+.ad-seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ad-seg label{position:relative}
+.ad-seg input{position:absolute;opacity:0;inset:0}
+.ad-seg span{display:flex;align-items:center;justify-content:center;min-height:48px;border:1.5px solid var(--line);border-radius:12px;font-weight:600;cursor:pointer}
+.ad-seg input:checked+span{border-color:var(--coral-ui);background:var(--accent-soft);color:var(--ink)}
+.ad-seg input:focus-visible+span{outline:3px solid var(--coral-ui);outline-offset:2px}
+.ad-vient{display:flex;flex-direction:column;gap:8px}
+.ad-sous{font-size:13px;font-weight:600;color:var(--muted)}
+.ad-ms{display:flex;flex-wrap:wrap;gap:8px}
+.ad-m{display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:999px}
+.ad-m input{width:20px;height:20px;accent-color:var(--coral-ui)}
+.ad-plie{margin-top:18px;border-top:1px solid var(--line);padding-top:10px}
+.ad-plie summary{min-height:44px;display:flex;align-items:center;font-weight:600;cursor:pointer;color:var(--link)}
+.ad-btn.sec{background:var(--surface);color:var(--ink);border:1.5px solid var(--line-strong)}

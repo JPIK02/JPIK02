@@ -22,15 +22,33 @@ test("limite de fréquence : 30 par heure et par jeton", () => {
   assert.ok(!limite(c, t).ok);
   assert.ok(limite(c, t + 36e5).ok, "l'heure suivante, le compte repart");
 });
-test("envoi nettoyé : seulement ses champs et les régimes de SES personnes", () => {
-  const r = nettoyerEnvoi({ adresse: " 12 rue des Lilas\n59000 Lille ", email: "a@b.fr", tel: "+33 6 12 34 56 78", regimes: { g1: "Végétarien", autre: "x" }, role: "admin" }, [{ id: "g1" }, { id: "g2" }]);
-  assert.deepEqual(r, { foyer: { adresse: "12 rue des Lilas\n59000 Lille", tel: "+33 6 12 34 56 78", email: "a@b.fr" }, regimes: { g1: "Végétarien" } });
-  assert.equal(nettoyerEnvoi({ email: "pas un mail" }, []).erreur, "e-mail");
-  assert.equal(nettoyerEnvoi({ tel: "appelez-moi" }, []).erreur, "téléphone");
+test("adresse (avant le faire-part) : ses champs seulement, plus aucun régime, adresse obligatoire", () => {
+  const r = nettoyerEnvoi({ adresse: " 12 rue des Lilas\n59000 Lille ", email: "a@b.fr", tel: "+33 6 12 34 56 78", regimes: { g1: "Végétarien" }, role: "admin" }, [{ id: "g1" }, { id: "g2" }]);
+  assert.deepEqual(r, { foyer: { adresse: "12 rue des Lilas\n59000 Lille", email: "a@b.fr", tel: "+33 6 12 34 56 78" }, guests: {} });
+  assert.equal(nettoyerEnvoi({ adresse: "x", email: "pas un mail" }, []).erreur, "e-mail");
+  assert.equal(nettoyerEnvoi({ adresse: "x", tel: "appelez-moi" }, []).erreur, "téléphone");
+  assert.equal(nettoyerEnvoi({ email: "a@b.fr" }, []).erreur, "adresse");
   assert.equal(nettoyerEnvoi({ adresse: "x".repeat(900) }, []).foyer.adresse.length, 400);
 });
-test("vue publique : son foyer seulement, prénoms seuls", () => {
-  const v = vuePublique({ foyer: { adresse: "A", note: "privée", cercle: "Famille" }, personnes: [{ id: "g1", name: "Paul Rousselot", regime: "", table: "3" }, { id: "g2", name: "+1", plusUn: true }], noms: { p1: "Claire", p2: "Julien" } });
-  assert.equal(v.couple, "Claire et Julien"); assert.deepEqual(v.personnes.map(p => p.prenom), ["Paul", ""]);
-  const s = JSON.stringify(v); assert.ok(!s.includes("privée") && !s.includes("Famille") && !s.includes("table") && !s.includes("Rousselot\""));
+test("réponse (faire-part envoyé) : SES personnes, moments invités, régime de qui vient, prénom d'un +1", () => {
+  const P = [{ id: "g1", name: "Paul R", vin: false }, { id: "g2", name: "+1", plusUn: true }, { id: "g3", name: "Léa R", regime: "sans gluten" }];
+  const r = nettoyerEnvoi({ reponses: { g1: { rsvp: "oui", absents: ["vin", "diner", "piraté"], regime: "Végétarien" }, g2: { rsvp: "oui", prenom: "Sam" }, g3: { rsvp: "non", regime: "x" }, autre: { rsvp: "oui" } } }, P, { mode: "reponse" });
+  assert.deepEqual(r.foyer, {});
+  assert.deepEqual(r.guests.g1, { rsvp: "oui", absentA: { diner: true }, regime: "Végétarien" });
+  assert.deepEqual(r.guests.g2, { rsvp: "oui", absentA: {}, name: "Sam" });
+  assert.deepEqual(r.guests.g3, { rsvp: "non" }); assert.equal(r.guests.autre, undefined);
+  assert.equal(nettoyerEnvoi({ reponses: { g1: { rsvp: "oui", prenom: "Pirate" } } }, P, { mode: "reponse" }).guests.g1.name, undefined);
+  assert.equal(nettoyerEnvoi({ adresse: "Nouvelle", reponses: {} }, P, { mode: "reponse" }).foyer.adresse, "Nouvelle");
+});
+test("vue publique : son foyer seulement, prénoms seuls ; la réponse seulement après le faire-part", () => {
+  const P = [{ id: "g1", name: "Paul Rousselot", regime: "", table: "3", vin: false }, { id: "g2", name: "+1", plusUn: true }];
+  let v = vuePublique({ foyer: { adresse: "A", note: "privée", cercle: "Famille" }, personnes: P, noms: { p1: "Claire", p2: "Julien" } });
+  assert.equal(v.mode, "adresse"); assert.equal(v.couple, "Claire et Julien"); assert.equal(v.personnes, undefined);
+  let s = JSON.stringify(v); assert.ok(!s.includes("privée") && !s.includes("Famille") && !s.includes("table") && !s.includes("\"3\""));
+  v = vuePublique({ foyer: { etape: "fairepart", note: "privée" }, personnes: P, settings: { date: "2099-06-10" }, maintenant: Date.UTC(2099, 0, 1) });
+  assert.equal(v.mode, "reponse"); assert.equal(v.limite, "2099-04-10"); assert.equal(v.ouvert, true);
+  assert.deepEqual(v.personnes.map(p => p.prenom), ["Paul", ""]); assert.equal(v.personnes[1].aNommer, true);
+  assert.deepEqual(v.personnes[0].moments.map(m => m.k), ["ceremonie", "diner"]);
+  s = JSON.stringify(v); assert.ok(!s.includes("privée") && !s.includes("table"));
+  assert.equal(vuePublique({ foyer: { etape: "fairepart" }, personnes: P, settings: { date: "2099-06-10" }, maintenant: Date.UTC(2099, 4, 1) }).ouvert, false);
 });

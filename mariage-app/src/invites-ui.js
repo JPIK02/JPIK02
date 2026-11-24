@@ -66,7 +66,7 @@ const UI = {
   envoyer: "Pour les envoyer",
   purgeT: "Six mois après le mariage", purgeP: n => `Comme annoncé à vos invités, leurs adresses, e-mails, téléphones et régimes (${n} foyer${n > 1 ? "s" : ""}) peuvent maintenant être supprimés.`,
   purgeBtn: "Supprimer ces informations", purgeOk: "Adresses, contacts et régimes supprimés",
-  lienT: "Le lien pour vos invités", lienP: "Ils saisissent eux-mêmes leur adresse, leur e-mail, leur téléphone et leurs régimes, sans compte.",
+  lienT: "Le lien pour vos invités", lienP: "Sans compte : avant le faire-part, ils donnent leur adresse ; une fois le faire-part envoyé, le même lien leur sert à répondre (qui vient, à quels moments, régimes).",
   demanderLien: "Demander par lien", partagerLien: "Partager le lien", revoquer: "Révoquer le lien", nouveauLien: "Nouveau lien",
   lienCree: (c, e) => `Lien créé le ${c} · valable jusqu'au ${e}`, reponseLe: d => `Réponse reçue le ${d}`, lienEnCours: "Création du lien…", lienPret: "Lien prêt : touchez « Partager le lien »",
   lienCopie: "Lien copié : collez-le dans votre message", lienRevoque: "Lien révoqué : il ne fonctionne plus", lienErreur: e => `Le lien n'a pas pu être créé : ${e}`,

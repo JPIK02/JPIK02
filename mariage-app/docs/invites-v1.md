@@ -96,12 +96,12 @@ Affiché tant qu'il n'y a aucun invité.
 Validé par Julien. C'est le seul endroit où des personnes extérieures écrivent dans l'app.
 
 1. **Un lien par foyer**, avec un jeton aléatoire long, envoyé par le couple (feuille de partage du téléphone). Option « un lien pour tous » : **non** en v1, pour éviter les inscriptions sauvages.
-2. La page ouverte par le lien : aux couleurs de Lamaelle, prénoms du couple, nom du foyer, champs **adresse postale, e-mail, téléphone**, et pour chaque personne le **régime alimentaire** (facultatif). Aucun compte, aucune autre donnée visible.
+2. La page ouverte par le lien : aux couleurs de Lamaelle, prénoms du couple, nom du foyer. **Corrigé par `docs/invites-v1.1.md` (24/11/2026)** : un seul lien dont le contenu suit le moment du foyer. Avant le faire-part, **adresse postale** (obligatoire), **e-mail et téléphone** (facultatifs), rien d'autre ; faire-part envoyé, **la réponse** (qui vient, à quels moments) puis le **régime** de chaque personne qui vient, l'adresse restant modifiable en bas. Aucun compte, aucune autre donnée visible.
 3. Écriture **via une fonction serveur**, jamais en direct dans Firestore ; le jeton ne donne accès qu'aux champs de son foyer. Limite de fréquence par jeton.
 4. Le couple voit les réponses arriver ; une modification par le foyer remplace la précédente (date affichée).
 5. **Données personnelles** : mention courte sur la page (qui collecte, pourquoi, durée de conservation, contact pour suppression). Proposer une durée par défaut (suppression des adresses et régimes 6 mois après le mariage, sur confirmation du couple) et la soumettre à Julien.
 6. Le lien expire au mariage ; le couple peut le révoquer ou en générer un nouveau.
-7. Plus tard, la même page pourra recueillir les **réponses au faire-part** (RSVP). Prévoir le modèle pour, sans le livrer en v1.
+7. La même page recueille les **réponses au faire-part** une fois celui-ci envoyé (`docs/invites-v1.1.md`, section 4), modifiables jusqu'à la date limite.
 
 ## 5. Données et migration
 
