@@ -1,0 +1,29 @@
+name: Comptes autorisés
+# Écrit config/acces (liste des comptes autorisés et partenaire de chacun) dans la base de prod, à partir de la variable
+# COMPTES_AUTORISES (« adresse:claire, adresse:julien, … »). Les adresses ne sont jamais dans le dépôt ni dans les journaux.
+# « verifier » compare sans rien écrire. Lancement manuel seulement.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Écrire ou seulement vérifier"
+        type: choice
+        options: ["verifier", "ecrire"]
+        default: "verifier"
+jobs:
+  acces:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: mariage-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd agents && npm ci --no-audit --no-fund
+      - env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          COMPTES_AUTORISES: ${{ vars.COMPTES_AUTORISES }}
+        run: node scripts/config-acces.js ${{ inputs.action == 'ecrire' && 'ecrire' || 'verifier' }}
