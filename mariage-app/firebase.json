@@ -7,6 +7,28 @@
     ],
     "rewrites": [
       {
+        "source": "/api/adresse",
+        "function": {
+          "functionId": "adresseFoyer",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/adresse",
+        "destination": "/adresse.html"
+      },
+      {
+        "source": "/api/jourj",
+        "function": {
+          "functionId": "jourjPublic",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/jourj",
+        "destination": "/jourj.html"
+      },
+      {
         "source": "**",
         "destination": "/index.html"
       }
@@ -40,7 +62,7 @@
         ]
       },
       {
-        "source": "**/*.@(html|webmanifest|svg)",
+        "source": "**/*.@(html|webmanifest|svg|json)",
         "headers": [
           {
             "key": "Cache-Control",

@@ -27,10 +27,14 @@ export const db = firebase.firestore();
 const fns = firebase.app().functions("europe-west1");
 export const callAssistant = data => fns.httpsCallable("assistant", { timeout: 300000 })(data).then(r => r.data);
 // Lance un agent tout de suite côté serveur (la réponse n'est pas attendue par l'interface)
-export const runAgentNow = job => fns.httpsCallable("runAgent", { timeout: 1800000 })({ job }).then(r => r.data);
+export const runAgentNow = (job, params = {}) => fns.httpsCallable("runAgent", { timeout: 1800000 })({ job, ...params }).then(r => r.data);
+// Lien d'adresse d'un foyer (docs/invites-v1.md, section 4) : créer ou révoquer, réservé au couple
+export const lienJourJ = (o = {}) => fns.httpsCallable("lienJourJ", { timeout: 30000 })(o).then(r => r.data);
+export const lienFoyer = (foyerId, action = "creer") => fns.httpsCallable("lienFoyer", { timeout: 30000 })({ foyerId, action }).then(r => r.data);
 
 // Cache local : l'app reste lisible hors ligne et se resynchronise ensuite.
-db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+// Sans synchronisation entre onglets : elle alourdit chaque démarrage (sur iPhone surtout) ; un 2e onglet passe en mémoire.
+db.enablePersistence().catch(() => {});
 
 if (import.meta.env.VITE_USE_EMULATORS === "1") {
   db.useEmulator("127.0.0.1", 8080);

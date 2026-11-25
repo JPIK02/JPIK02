@@ -1,6 +1,8 @@
 // Assistant IA intégré à Lamaelle : fonction appelable par les deux comptes du couple uniquement.
 // La clé Claude reste côté serveur (variable d'environnement écrite au déploiement depuis les secrets GitHub).
-import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { onCall, onRequest, HttpsError } from "firebase-functions/v2/https";
+import { gererLien, traiterAdresse } from "./adresse.js";
+import { gererLienJourJ, traiterJourJ } from "./jourj.js";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { setGlobalOptions } from "firebase-functions/v2";
 import { initializeApp } from "firebase-admin/app";
@@ -67,7 +69,7 @@ export const assistant = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async
   const settingsDoc = (await db.doc("meta/settings").get()).data() || {};
   const names = coupleNames(settingsDoc);
   const me = PARTNER[email] === "claire" ? names.p1 : PARTNER[email] === "julien" ? names.p2 : "";
-  const exec = makeTools(db, { qcats: QCATS, thumbs, author: me });
+  const exec = makeTools(db, { qcats: QCATS, thumbs, author: me, partner: PARTNER[email] || "claire" });
   const system = systemPrompt({ prenom: me || "l'un des mariés", couple: names, dateIndicative: !!settingsDoc.dateIndicative, today: new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "Europe/Paris" }), view, mode });
   client ||= new Anthropic();
 
@@ -121,8 +123,100 @@ export const runAgent = onCall({ timeoutSeconds: 1800, memory: "1GiB", maxInstan
   const email = String(req.auth?.token?.email || "").toLowerCase();
   if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
   const job = req.data?.job;
+  // tenue secrète : un partenaire ne peut demander un travail que sur son propre espace privé, jamais sur celui de l'autre
+  const moi = PARTNER[email];
+  const sonEspace = v => { if (v == null || v === "") return undefined; if (v !== moi) throw new HttpsError("permission-denied", "Espace privé de l'autre partenaire."); return v; };
+  // Récompense de fin de niveau de « Nos envies » (phrase, notes du métier, brief, questions à poser)
+  if (job === "recompense") {
+    const { runRecompense, NIVEAUX_RECOMPENSE } = await import("./agents/recompense-agent.js");
+    const { TBY } = await import("./agents/lib/envies/logic.js");
+    const tuile = String(req.data?.tuile || ""), niveau = String(req.data?.niveau || "");
+    if (!TBY[tuile] || !NIVEAUX_RECOMPENSE.includes(niveau)) throw new HttpsError("invalid-argument", "Récompense inconnue.");
+    const { withLock } = await import("./agents/lib/lock.js");
+    await withLock(`recompense-${tuile}-${niveau}${req.data?.pour ? "-" + moi : ""}`, 10 * 60 * 1000, () => runRecompense({ tuile, niveau, pour: sonEspace(req.data?.pour) }));
+    return { ok: true };
+  }
+  // Prestataires (docs/prestataires-v1.md) : fiche préremplie à partir d'un lien, d'une photo ou d'un PDF (rien n'est enregistré ici :
+  // l'app montre les champs au couple, qui vérifie), et comparaison d'un métier sur les envies du couple (gardée tant que rien ne change).
+  if (job === "fiche") {
+    const { runFiche } = await import("./agents/fiche-agent.js");
+    try { return { ok: true, fiche: await runFiche({ url: req.data?.url, nom: req.data?.nom, fichier: req.data?.fichier, metier: req.data?.metier }) }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
+  // Brief de la tenue secrète : rédigé pour la personne qui le demande, dans son espace privé
+  if (job === "brieftenue") {
+    const { runBriefTenue } = await import("./agents/briefs-agent.js");
+    const { withLock } = await import("./agents/lib/lock.js");
+    try { await withLock(`brieftenue-${moi}`, 10 * 60 * 1000, () => runBriefTenue({ pour: sonEspace(moi) })); return { ok: true }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
+  // Le coach dans les pages Budget et Planning (docs/budget-planning-v1.md, lot 3) : sur action seulement
+  if (job === "arbitrer" || job === "reponse" || job === "creneaux" || job === "repartir" || job === "relance" || job === "placer" || job === "foyers" || job === "jourj") {
+    const A = await import("./agents/pages-agent.js");
+    try {
+      if (job === "arbitrer") return { ok: true, arbitrage: await A.runArbitrer({ autres: !!req.data?.autres }) };
+      if (job === "foyers") return { ok: true, ...(await A.runFoyersListe({ texte: String(req.data?.texte || "").slice(0, 15000) })) };
+      if (job === "placer") return { ok: true, placement: await A.runPlacer() };
+      if (job === "jourj" && req.data?.sujet === "trame") return { ok: true, trame: await A.runTrame({ trame: String(req.data?.trame || "meme") }) };
+      if (job === "jourj" && req.data?.sujet === "fiches") { const ids = (Array.isArray(req.data?.ids) ? req.data.ids : []).slice(0, 30).map(String), infos = req.data?.infos && typeof req.data.infos === "object" ? req.data.infos : {};
+        return { ok: true, messages: await A.runMessagesFiches({ ids, infos }) }; }
+      if (job === "jourj") return { ok: true, brouillon: await A.runQuestionJourJ({ momentId: String(req.data?.id || ""), sujet: req.data?.sujet === "arrivee" ? "arrivee" : "pluie", vendorId: String(req.data?.vendorId || "") }) };
+      if (job === "relance") return { ok: true, relance: await A.runRelance({ autre: !!req.data?.autre }) };
+      if (job === "repartir") return { ok: true, repartition: await A.runRepartir({ total: Math.max(0, Math.min(1e7, +req.data?.total || 0)) }) };
+      const tacheId = String(req.data?.id || "");
+      return { ok: true, brouillon: await (job === "reponse" ? A.runReponse({ tacheId }) : A.runCreneaux({ tacheId })) };
+    } catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
+  if (job === "reserve") {
+    const { runReserve } = await import("./agents/reserve-agent.js");
+    try { return { ok: true, reservation: await runReserve({ id: String(req.data?.id || ""), prive: sonEspace(req.data?.prive) }) }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
+  if (job === "comparer") {
+    const { runComparer } = await import("./agents/comparer-agent.js");
+    const ids = Array.isArray(req.data?.ids) ? req.data.ids.map(String).slice(0, 3) : [];
+    try { return { ok: true, comparaison: await runComparer({ metier: String(req.data?.metier || ""), ids, prive: sonEspace(req.data?.prive) }) }; }
+    catch (e) { if (e?.status) throw claudeError(e); return { ok: false, erreur: String(e.message || e).slice(0, 200) }; }
+  }
   if (!["mail", "analyse", "hebdo", "briefs", "pinterest"].includes(job)) throw new HttpsError("invalid-argument", "Agent inconnu.");
   const { runAll } = await import("./agents/main.js");
   const failed = await runAll({ forced: job });
   return { ok: !failed };
+});
+
+/* ---------- Invités : le lien pour les adresses (docs/invites-v1.md, section 4) ----------
+   Seul endroit où des personnes extérieures écrivent : jamais en direct dans Firestore, toujours par cette fonction.
+   `liens/<empreinte du jeton>` (illisible depuis l'app) → foyer ; le jeton ne donne accès qu'aux champs de son foyer. */
+
+// Créer (ou refaire) le lien d'un foyer, ou le révoquer : réservé au couple (logique dans adresse.js, testée)
+export const lienFoyer = onCall({ timeoutSeconds: 30 }, async req => {
+  const email = String(req.auth?.token?.email || "").toLowerCase();
+  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
+  const r = await gererLien(db, { foyerId: req.data?.foyerId, action: req.data?.action });
+  if (r.erreur) throw new HttpsError(r.code || "invalid-argument", r.erreur);
+  return r;
+});
+
+// Page publique : lire son foyer, ou enregistrer son adresse, son e-mail, son téléphone et les régimes
+export const adresseFoyer = onRequest({ timeoutSeconds: 20, maxInstances: 2, cors: false, invoker: "public" }, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ erreur: "méthode" });
+  const r = await traiterAdresse(db, req.body || {}, { noms: coupleNames });
+  return res.status(r.status).json(r.body);
+});
+
+/* ---------- Jour J : liens des témoins et des invités (docs/jour-j-v1.md, section 4) ----------
+   Lecture par le serveur seulement ; un témoin peut seulement décaler la suite le jour même (journalisé). */
+export const lienJourJ = onCall({ timeoutSeconds: 30 }, async req => {
+  const email = String(req.auth?.token?.email || "").toLowerCase();
+  if (!email || !req.auth.token.email_verified || !ALLOWED.includes(email)) throw new HttpsError("permission-denied", "Réservé au couple.");
+  const r = await gererLienJourJ(db, { type: req.data?.type, roleId: req.data?.roleId, action: req.data?.action });
+  if (r.erreur) throw new HttpsError(r.code || "invalid-argument", r.erreur);
+  return r;
+});
+export const jourjPublic = onRequest({ timeoutSeconds: 20, maxInstances: 3, cors: false, invoker: "public" }, async (req, res) => {
+  res.set("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ erreur: "méthode" });
+  const r = await traiterJourJ(db, req.body || {}, { noms: coupleNames });
+  return res.status(r.status).json(r.body);
 });

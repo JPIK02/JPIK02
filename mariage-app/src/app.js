@@ -1,8 +1,25 @@
 // Polices Lamaelle hébergées avec l'app (pas de Google Fonts : RGPD) : Jost pour l'interface, Cormorant Garamond italique pour les accroches
 import "@fontsource/jost/300.css";import "@fontsource/jost/400.css";import "@fontsource/jost/500.css";import "@fontsource/jost/600.css";
 import "@fontsource/cormorant-garamond/400-italic.css";import "@fontsource/cormorant-garamond/500-italic.css";
-import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow} from "./firebase.js";
-import {QCATS} from "./questions.js";
+import {db,auth,signInGoogle,sendEmailLink,completeEmailLink,signOut,ALLOWED,callAssistant,runAgentNow,lienFoyer,lienJourJ} from "./firebase.js";
+import {QCATS} from "./questions.js"; // ancien questionnaire : archive lisible (synthèse, réponses archivées)
+import {TUILES} from "../agents/lib/envies/catalogue.js";
+import {FR as FR_ENVIES} from "../agents/lib/envies/fr.js";
+import {OLD2TILE,METIER2TILE} from "../agents/lib/envies/logic.js";
+import {makeEnvies} from "./envies-ui.js";
+import {makePrest} from "./prestataires-ui.js";
+import {makeBudget,METIER_OPTIONS} from "./budget-ui.js";
+import {makePlanning} from "./planning-ui.js";
+import {makeInvites} from "./invites-ui.js";
+import {makePlan} from "./plan-ui.js";
+import {makeJourJ} from "./jourj-ui.js";
+import {nomFoyer} from "../agents/lib/invites.js";
+import {ETAPES} from "../agents/lib/planning.js";
+import {tuileDe} from "../agents/lib/prestataires.js";
+import {echeancesDe} from "../agents/lib/budget.js";
+import {etapeOf} from "../agents/lib/prestataires.js";
+import {PRIVES,fusion,estPrive,chemin,resumeSecret,questionSecrete,TUILE_SECRETE} from "../agents/lib/secret.js";
+import {levelDone as levelDoneEnvies} from "../agents/lib/envies/logic.js";
 import {PROFILES,FEATURES,USD_EUR,DEFAULT_BUDGET_EUR,monthKey} from "../agents/lib/usage.js";
 // Ne touche au DOM que si le contenu a changé : remplacer la page pendant un défilement
 // coupe l'élan sur iPhone et remet les barres horizontales au début.
@@ -35,10 +52,12 @@ const STATUS={todo:"À faire",doing:"En cours",done:"Fait"};
 const SIDES={get claire(){return P1()},get julien(){return P2()},commun:"Commun"};
 const RSVP={attente:"En attente",oui:"Présent",non:"Absent"};
 const RSVP_CLS={attente:"warn",oui:"ok",non:"bad"};
-const VSTAT={repere:"Repéré",contacte:"Contacté",devis:"Devis reçu",reserve:"Réservé",ecarte:"Écarté"};
-const VSTAT_CLS={repere:"",contacte:"acc",devis:"warn",reserve:"ok",ecarte:"bad"};
-const VSTAT_RANK={ecarte:0,repere:1,contacte:2,devis:3,reserve:4};
-const VCATS=["Lieu","Traiteur","Photographe","Vidéaste","Musique","Fleuriste","Tenues","Alliances","Coiffure & maquillage","Papeterie","Transport","Officiant","Hébergement","Animation enfants","Autre"];
+// Étapes (docs/prestataires-v1.md, 6.1) : Repéré, En discussion, Réservé, Écarté ; anciens statuts (contacte, devis) lus « En discussion »
+const VSTAT={repere:"Repéré",discussion:"En discussion",reserve:"Réservé",ecarte:"Écarté",contacte:"En discussion",devis:"En discussion"};
+const VSTAT_EDIT=["repere","discussion","reserve","ecarte"];
+const VSTAT_CLS={repere:"",discussion:"acc",contacte:"acc",devis:"acc",reserve:"ok",ecarte:"bad"};
+const VSTAT_RANK={ecarte:0,repere:1,discussion:2,contacte:2,devis:2,reserve:4};
+const VCATS=["Lieu","Traiteur","Bar","Pâtissier","Photographe","Vidéaste","Musique","Fleuriste","Tenues","Alliances","Coiffure & maquillage","Papeterie","Transport","Officiant","Hébergement","Animation enfants","Wedding planner","Agence de voyage","Autre"];
 const KEY_VCATS=["Lieu","Traiteur","Photographe","Musique","Fleuriste","Tenues"];
 const GROUPS=["Famille","Amis","Collègues","Voisins","Autre"];
 const SUGTYPE={vendor:["Nouveau prestataire","acc"],quote:["Devis reçu","gold"],task:["Tâche","claire"],payment:["Paiement","warn"],rdv:["Rendez-vous","julien"],rsvp:["Réponse d'invité","ok"]};
@@ -60,10 +79,10 @@ const PHASES=[
 const PH=Object.fromEntries(PHASES.map((p,i)=>[p.k,Object.assign({i},p)]));
 
 /* ---------- State ---------- */
-const COLS=["tasks","budget","guests","vendors","schedule","rdv","inbox","brief","inspirations"];
+const COLS=["tasks","budget","guests","foyers","tables","vendors","schedule","rdv","inbox","brief","envies","recompenses","envies_reperees","comparaisons","inspirations"];
 const S={
   db:null,dl:true,user:null,mode:"loading",canWrite:true,pending:false,
-  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
+  settings:{},agent:{},profil:{},analyse:{},planning:{},prefs:{},push:{},pushState:null,presence:{},locks:{},ia:{},briefs:{},briefPrive:null,arbitrage:{},repartition:{},relance:{},plan:{},placement:{},jourj:{},foyers:[],tables:[],pinterest:{},usage:{cur:{},prev:{}},cmp:{cat:null,ids:[],seeded:null},hebdo:{},photo:{},ui:{more:false,hebdo:false,onb:false,opts:{}},chat:{messages:[],busy:false,mode:"chat",loaded:false},tasks:[],budget:[],guests:[],inspirations:[],envies:[],recompenses:[],envies_reperees:[],comparaisons:[],secret:{},qs:null,vendors:[],schedule:[],rdv:[],inbox:[],brief:[],
   got:new Set(),stale:false,view:"apercu",selMode:false,sel:new Set(),
   f:{owner:"all",hideDone:false,gSide:"all",gRsvp:"all",gq:"",vView:"actifs",vCat:"all",bcat:"vision",overview:false}
 };
@@ -98,12 +117,59 @@ const findVendor=name=>{const n=String(name||"").trim().toLowerCase();return n?S
 const fold=s=>String(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const MOIS=["janvier","fevrier","mars","avril","mai","juin","juillet","aout","septembre","octobre","novembre","decembre"];
 // Catégorie de prestataire → poste de budget (par mots-clés du libellé du poste)
-const CAT_BUDGET={Lieu:/lieu|salle|reception|domaine/,Traiteur:/traiteur|repas|boisson/,Photographe:/photo/,"Vidéaste":/video/,Musique:/musique|dj|orchestre/,Fleuriste:/fleur|deco/,Tenues:/tenue|robe|costume|costard/,Alliances:/alliance/,"Coiffure & maquillage":/coiff|maquill/,Papeterie:/papeterie|faire.?part/,Transport:/transport/,Officiant:/ceremonie|officiant/,"Hébergement":/heberg/,"Animation enfants":/enfant|animation/};
+const CAT_BUDGET={Lieu:/lieu|salle|reception|domaine/,Traiteur:/traiteur|repas|boisson/,Photographe:/photo/,"Vidéaste":/video/,Musique:/musique|dj|orchestre/,Fleuriste:/fleur|deco/,Tenues:/tenue|robe|costume|costard/,Alliances:/alliance/,"Coiffure & maquillage":/coiff|maquill/,Papeterie:/papeterie|faire.?part/,Transport:/transport/,Officiant:/ceremonie|officiant/,"Hébergement":/heberg/,"Animation enfants":/enfant|animation/,Bar:/bar\b|boisson|vin|alcool/,"Pâtissier":/gateau|patiss|dessert/,"Wedding planner":/planner|organisat/,"Agence de voyage":/voyage|noces|lune de miel/};
 // Les notes importées d'Excel contiennent un « 20 % du budget » figé : on l'enlève, la part est calculée en direct
 const budgetNote=n=>String(n||"").replace(/\s*·?\s*\d+(?:[.,]\d+)?\s*%\s*du budget\s*·?\s*/gi," ").replace(/^\s*·\s*|\s*·\s*$/g,"").trim();
 const budgetLineFor=cat=>{const re=CAT_BUDGET[cat];return re?S.budget.find(b=>re.test(fold(b.label))):null};
-const lastBriefAt=()=>S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0);
-async function mergeDoc(path,data){try{await S.db.doc(path).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
+const lastBriefAt=()=>Math.max(S.brief.reduce((m,b)=>Math.max(m,b.updatedAt||0),0),env().lastAt());
+async function mergeDoc(path,data){if(!S.db)return false;try{await S.db.doc(routeChemin(path)).set(data,{merge:true});return true}catch(e){return writeErr(e)}}
+/* ---------- Tenue secrète (agents/lib/secret.js, firestore.rules) : mon espace privé prive/<moi>/… ---------- */
+const MOI=()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire";
+const secretLeve=()=>!!(S.secret&&S.secret[MOI()]&&S.secret[MOI()].montre);
+// document existant : dans mon espace privé s'il y est (marqué _prive à la fusion), sinon commun
+const enPrive=(col,id)=>col!=="envies"&&PRIVES.includes(col)&&(S[col]||[]).some(x=>x.id===id&&x._prive);
+const refDoc=(col,id)=>S.db.doc(enPrive(col,id)?`${chemin(MOI(),col)}/${id}`:`${col}/${id}`);
+// nouveau document : dans mon espace privé si c'est de la tenue (estPrive), sinon commun
+const refCol=(col,data)=>S.db.collection(estPrive(col,data,{montre:secretLeve()})?chemin(MOI(),col):col);
+// chemin écrit en entier (récompenses de la tuile Tenues) : privé tant que le secret n'est pas levé
+const routeChemin=path=>{const m=/^([^/]+)\/([^/]+)$/.exec(path);if(!m||!PRIVES.includes(m[1]))return path;
+  return enPrive(m[1],m[2])||(/^(recompenses|comparaisons)$/.test(m[1])&&estPrive(m[1],{id:m[2]},{montre:secretLeve()}))?`${chemin(MOI(),m[1])}/${m[2]}`:path};
+const autreKey=()=>MOI()==="claire"?"julien":"claire";
+const prenomDe2=k=>k==="claire"?P1():P2();
+// « Montrer ma tenue » : tout mon espace privé passe dans l'espace commun (rien n'est perdu), après confirmation
+function leverSecret(){
+  const a=prenomDe2(autreKey());
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Montrer ma tenue"><h3>Montrer votre tenue à ${esc(a)} ?</h3>
+    <p>Vos réponses, vos photos, vos prestataires de tenue et leurs rendez-vous deviennent visibles par ${esc(a)}. Ils ne pourront pas redevenir secrets.</p>
+    <div class="acts"><button class="btn" data-close="1">Annuler</button><button class="btn primary" id="lever-ok">Montrer ma tenue</button></div></div></div>`;
+  document.getElementById("lever-ok").onclick=async()=>{closeModal();const me=MOI(),db=S.db;if(!db)return;
+    try{
+      for(const d of SRC.p.envies||[]){const {id,...rep}=d;await db.doc(`envies/${id}`).set({p:{[me]:rep},updatedAt:Date.now()},{mergeFields:[`p.${me}`,"updatedAt"]});await db.doc(`${chemin(me,"envies")}/${id}`).delete()}
+      for(const col of PRIVES.filter(c=>c!=="envies"))for(const d of SRC.p[col]||[]){const {id,...x}=d;await db.doc(`${col}/${id}`).set(x);await db.doc(`${chemin(me,col)}/${id}`).delete()}
+      for(const r of (SRC.c.rdv||[]).filter(r=>r.secretDe===me))await db.doc(`rdv/${r.id}`).delete(); // repères remplacés par les vrais rendez-vous
+      await mergeDoc("meta/secret",{[me]:{montre:true,updatedAt:Date.now()}});toast(`Votre tenue est visible par ${a}`);
+    }catch(e){writeErr(e)}};
+}
+// Rendez-vous de tenue : le vrai dans mon espace privé, un repère commun sans lieu ni boutique (date et heure seulement)
+async function saveRdvSecret(id,out){
+  if(!S.db)return false;const me=MOI();
+  try{
+    let pid=id&&enPrive("rdv",id)?id:null;
+    if(pid)await S.db.doc(`${chemin(me,"rdv")}/${pid}`).set(out);
+    else{pid=(await S.db.collection(chemin(me,"rdv")).add(Object.assign({createdAt:Date.now()},out))).id;if(id)await S.db.doc(`rdv/${id}`).delete()}
+    const rep=(SRC.c.rdv||[]).find(r=>r.secretRef===pid),data={title:`Rendez-vous tenue de ${prenom()}`,date:out.date||"",time:out.time||"",qui:me,secretDe:me,secretRef:pid};
+    await (rep?S.db.doc(`rdv/${rep.id}`).set(data):S.db.collection("rdv").add(Object.assign({createdAt:Date.now()},data)));
+    return true;
+  }catch(e){return writeErr(e)}
+}
+// Écoutes : chaque collection commune qui a un pendant privé est fusionnée avec mon espace privé (fusion de secret.js)
+const SRC={c:{},p:{}};
+function fusionner(col){S[col]=fusion(col,SRC.c[col]||[],SRC.p[col]||[],MOI())}
+// Ce que l'autre peut savoir de ma tenue (avancement, nombre de prestataires) : écrit par mon app, jamais de contenu
+let secretT=0;
+function publierSecret(){clearTimeout(secretT);secretT=setTimeout(()=>{if(!S.db||!S.canWrite)return;const me=MOI();
+  const r=resumeSecret({envies:S.envies,vendors:S.vendors,me,levelDone:levelDoneEnvies,montre:secretLeve()}),cur=(S.secret||{})[me]||{};
+  if(JSON.stringify({...r,montre:!!cur.montre})!==JSON.stringify({niveaux:cur.niveaux,repondues:cur.repondues,prestataires:cur.prestataires,reserve:cur.reserve,montre:!!cur.montre}))mergeDoc("meta/secret",{[me]:{...r,montre:!!cur.montre,updatedAt:Date.now()}})},1500)}
 /* Points à regarder : incohérences entre date, budget, devis, capacité, et actions en attente. */
 /* Capacité d'accueil lue dans les notes (texte sans accents, en minuscules) : le plus grand nombre de personnes cité
    sur la ligne « capacité » (« 3 salles de 40 à 240 personnes » → 240 ; « jusqu'à 70 » → 70 ; « 100-200 » → 200).
@@ -118,9 +184,9 @@ function capacityFrom(n){
 }
 function alerts(){
   const out=[],d=wDate(),tot=num(S.settings.budgetTotal);
-  const prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
+  const {prevu,signe:engage}=budgetChiffres();
   // le titre dit l'écart, la phrase donne les chiffres
-  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:`${eur(engage-tot)} engagés au-delà du budget`,s:`${eur(engage)} engagés pour ${eur(tot)}.`,go:"budget"});
+  if(tot&&engage>tot)out.push({k:"budget",over:engage-tot,lvl:"bad",t:`${eur(engage-tot)} signés au-delà du budget`,s:`${eur(engage)} signés pour ${eur(tot)}.`,go:"budget"});
   else if(tot&&prevu>tot)out.push({k:"budget",over:prevu-tot,lvl:"bad",t:`${eur(prevu-tot)} au-dessus du budget`,s:`${eur(prevu)} prévus pour ${eur(tot)}.`,go:"budget"});
   const guests=S.guests.filter(g=>g.rsvp!=="non"&&g.diner!==false).length;
   S.vendors.filter(v=>v.status!=="ecarte").forEach(v=>{
@@ -141,7 +207,7 @@ function alerts(){
   const ps=pendingSugs().length;
   if(ps)out.push({k:"sugs",lvl:"info",t:`${ps} proposition${ps>1?"s":""} de l'assistant à valider`,s:"Devis, rendez-vous et tâches repérés dans vos mails.",go:"assistant"});
   const analysed=S.vendors.filter(v=>v.status!=="ecarte"&&v.fit&&v.fit.updatedAt);
-  if(analysed.length&&allProg()<.3)out.push({k:"brief",lvl:"info",t:`Nos envies rempli à ${Math.round(allProg()*100)} %`,s:"Les notes de fit des prestataires restent peu fiables tant que vos envies ne sont pas décrites.",go:"envies"});
+  if(analysed.length&&allProg()<.3)out.push({k:"brief",lvl:"info",t:allProg()?`Lamaelle vous connaît à ${Math.round(allProg()*100)} %`:"Lamaelle apprend à vous connaître",s:"Les notes de fit des prestataires restent peu fiables tant que vos envies ne sont pas décrites.",go:"envies"});
   else if(analysed.length&&lastBriefAt()>Math.min(...analysed.map(v=>v.fit.updatedAt))+60000)
     out.push({k:"refit",lvl:"info",t:"Vos envies ont changé depuis l'analyse des prestataires",s:"Relancez l'analyse dans l'Annuaire pour mettre les notes de fit à jour.",go:"prestataires"});
   S.rdv.filter(r=>r.date&&pd(r.date)>=today()&&days(today(),pd(r.date))<=14).forEach(r=>{
@@ -187,15 +253,8 @@ function coupleAvatar(){
   const ph=S.photo&&S.photo.data;
   return `<button class="ch-photo ${ph?"has":""}" data-act="couplephoto" aria-label="${ph?"Changer la photo du couple":"Ajouter une photo du couple"}" ${S.canWrite?"":"disabled"}>${ph?`<img src="data:image/jpeg;base64,${ph}" alt="${esc(COUPLE())}">`:`<span>${esc(P1().charAt(0))}&amp;${esc(P2().charAt(0))}</span><i aria-hidden="true">+</i>`}</button>`;
 }
-// Une carte « point du jour » : titre, une phrase, UN bouton principal ; les autres options à la demande
-function dayCard(id,lvl,title,text,qr){
-  const open=!!S.ui.opts[id],[first,...more]=qr;
-  return `<div class="dc ${lvl||""}"><span class="dc-dot" aria-hidden="true"></span><div class="dc-body"><b>${title}</b>${text?`<p>${text}</p>`:""}
-    ${first?`<div class="dc-acts"><button class="btn sm primary" data-act="qr" data-do="${esc(first[1])}">${esc(first[0])}</button>${more.length?`<button class="link" data-act="uiopts" data-id="${esc(id)}" aria-expanded="${open}">${open?"Moins":"Autres options"}</button>`:""}</div>
-    ${open&&more.length?`<div class="dc-more">${more.map(([l,d])=>`<button class="btn sm" data-act="qr" data-do="${esc(d)}">${esc(l)}</button>`).join("")}</div>`:""}`:""}</div></div>`;
-}
-/* ---------- Accueil (vue apercu), voir docs/accueil-coach-v1.md ----------
-   1. « À faire maintenant » (3 cartes au plus, jamais vide), 2. carte Coach, 3. « Votre mariage » (partie fixe). */
+/* ---------- Accueil (vue apercu), voir docs/accueil-v3.md (et docs/accueil-coach-v1.md pour le comportement) ----------
+   Ouverture (photo et phrase du couple), « À faire » en visuels (jamais vide), point de la semaine sur une ligne, six tuiles chiffrées. */
 const PUSH_CARD_KEY="lamaelle-push-card-off";
 const pushCardOff=()=>{try{return localStorage.getItem(PUSH_CARD_KEY)==="1"}catch(e){return false}};
 const WEEKDAYS=["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
@@ -205,38 +264,71 @@ function nextOpenTask(){
 }
 // Ordre : alertes graves, propositions des mails, visites à raconter, alertes à surveiller puis d'information, notifications, sinon la prochaine tâche
 // Un point « À faire » : id, niveau, étiquette, titre et texte (HTML échappé), réponses rapides, version courte pour les lignes
-const todoItem=(id,lvl,tag,title,text,qr,ts,ss)=>({id,lvl,tag,title,text,qr,ts,ss});
-const TODO_TAG={budget:"Budget",complet:"Prestataires",cap:"Prestataires",devis:"Prestataires",refit:"Prestataires",late:"Planning",sugs:"E-mails",brief:"Nos envies",rdv:"Agenda"};
+// Un point « À faire » : type (k), niveau, réponses rapides et données utiles au visuel et au titre court (a)
+const todoItem=(id,k,lvl,qr,a={})=>({id,k,lvl,qr,a});
 function todoCards(al){
-  const cards=[],card=(a,i)=>todoItem("al-"+(a.k||"")+"-"+(a.v?a.v.id:a.r?a.r.id:i),a.lvl,TODO_TAG[a.k]||"À voir",esc(a.t),esc(a.s),qrFor(a),a.ts&&esc(a.ts),a.ss&&esc(a.ss));
+  const cards=[],card=(a,i)=>todoItem("al-"+(a.k||"")+"-"+(a.v?a.v.id:a.r?a.r.id:i),a.k,a.lvl,qrFor(a),a);
   al.filter(a=>a.lvl==="bad").forEach((a,i)=>cards.push(card(a,i)));
   const ps=pendingSugs().length;
-  if(ps)cards.push(todoItem("sugs","sug","E-mails",`${ps} proposition${ps>1?"s":""} tirée${ps>1?"s":""} de vos mails`,"Devis, rendez-vous et tâches repérés par l'assistant e-mails : validez-les en un geste.",[["Valider en un geste","go:assistant"]],null,"Devis, rendez-vous et tâches à valider"));
-  visitsToTell().forEach(({r,v})=>cards.push(todoItem("visit-"+r.id,"info","Visite",`Comment s'est passée la visite de ${esc(v.name)} ?`,"Racontez-la en deux phrases : je mets la fiche à jour.",[["Raconter la visite",`prefill:Visite de ${v.name} : `]],`Visite de ${esc(v.name)}`,"Racontez-la en deux phrases")));
+  if(ps)cards.push(todoItem("sugs","sugs","sug",[["Valider en un geste","go:assistant"]],{n:ps}));
+  visitsToTell().forEach(({r,v})=>cards.push(todoItem("visit-"+r.id,"visit","info",[["Raconter la visite",`prefill:Visite de ${v.name} : `]],{r,v})));
   al.filter(a=>a.lvl!=="bad"&&a.k!=="sugs").forEach((a,i)=>cards.push(card(a,i)));
-  if((S.pushState==="off"||S.pushState==="install")&&!pushCardOff())cards.push(S.pushState==="off"
-    ?todoItem("push","info","Notifications","Recevoir le point de la semaine","Une notification chaque lundi, et quand l'assistant trouve un devis ou un rendez-vous dans vos mails.",[["Activer les notifications","pushon:"],["Ne plus proposer","pushhide:"]],null,"Une notification chaque lundi")
-    :todoItem("push","info","Notifications","Recevoir le point de la semaine","Sur iPhone, les notifications ne marchent que depuis l'app installée : dans Safari, Partager puis « Sur l'écran d'accueil », puis ouvrez Lamaelle depuis son icône.",[["Voir dans Réglages","go:reglages"],["Ne plus proposer","pushhide:"]],null,"Depuis l'app installée sur l'écran d'accueil"));
+  if((S.pushState==="off"||S.pushState==="install")&&!pushCardOff())cards.push(todoItem("push","push","info",S.pushState==="off"?[["Activer les notifications","pushon:"],["Ne plus proposer","pushhide:"]]:[["Voir dans Réglages","go:reglages"],["Ne plus proposer","pushhide:"]]));
   if(!cards.length){
-    const t=nextOpenTask(),due=t&&taskDue(t);
-    cards.push(t?todoItem("next-"+t.id,"next","Prochaine étape",esc(t.title),due?`À faire avant le ${esc(fmtD(due,false))}.`:esc(PH[t.phase]?.label||""),[["Voir dans le planning",`task:${t.id}`],...(S.canWrite?[["C'est fait",`taskdone:${t.id}`]]:[]),["En parler au coach",`ask:Aide-nous à avancer sur « ${t.title} » : par quoi commencer ?`]])
-      :todoItem("next","next","Prochaine étape","Rien d'urgent pour l'instant","Le coach peut vous aider à préparer la suite.",[["Par quoi continuer ?","ask:Par quoi commencer cette semaine ?"]]));
+    const t=nextOpenTask();
+    cards.push(t?todoItem("next-"+t.id,"next","next",[["Voir dans le planning",`task:${t.id}`]],{t}):todoItem("next","next","next",[["Par quoi continuer ?","ask:Par quoi commencer cette semaine ?"]]));
   }
   return cards;
 }
-// Le point le plus prioritaire : carte mise en avant, un bouton principal et « Autres options » (mécanique de dayCard)
-function leadCard(c){
-  const open=!!S.ui.opts[c.id],[first,...more]=c.qr;
-  return `<div class="dc lead ${c.lvl||""}"><div class="dc-body"><span class="dc-tag ${c.lvl||""}">${esc(c.tag)}</span><b>${c.title}</b>${c.text?`<p>${c.text}</p>`:""}
-    ${first?`<div class="dc-acts"><button class="btn sm primary" data-act="qr" data-do="${esc(first[1])}">${esc(first[0])}</button>${more.length?`<button class="link" data-act="uiopts" data-id="${esc(c.id)}" aria-expanded="${open}">${open?"Moins":"Autres options"}</button>`:""}</div>
-    ${open&&more.length?`<div class="dc-more">${more.map(([l,d])=>`<button class="btn sm" data-act="qr" data-do="${esc(d)}">${esc(l)}</button>`).join("")}</div>`:""}`:""}</div></div>`;
+// Titre court (l'écart ou l'objet) et ligne (l'action), en texte brut
+function todoShort(c){
+  const a=c.a||{},v=a.v,pl=(n,s,p)=>`${n} ${n>1?p:s}`;
+  switch(c.k){
+    case "budget":return /sign/.test(a.t||"")?[`+${eur(a.over)} signés`,"Au-delà du budget"]:[`+${eur(a.over)} sur le budget`,"À trouver ou à couper"];
+    case "complet":return [`${v.name} complet ?`,"À vérifier ou à écarter"];
+    case "cap":return [`${v.name} trop petit`,"Capacité à vérifier"];
+    case "devis":return [`Devis ${v.name} +${eur(a.px-num(a.line.prevu))}`,"À négocier ou comparer"];
+    case "late":{const n=S.tasks.filter(isLate).length;return [`${pl(n,"tâche","tâches")} en retard`,"À reprogrammer"]}
+    case "sugs":return [pl(a.n,"proposition","propositions"),"Tirées de vos mails"];
+    case "brief":return [allProg()?`Lamaelle vous connaît à ${Math.round(allProg()*100)} %`:"Racontez vos envies","À compléter"];
+    case "refit":return ["Envies modifiées","Relancer l'analyse"];
+    case "rdv":{const nq=v&&v.fit&&v.fit.questions?v.fit.questions.length:0;return [a.r.title,nq?`${nq} questions prêtes`:"Questions à préparer"]}
+    case "visit":return [`Visite ${v.name}`,"À raconter au coach"];
+    case "push":return ["Notifications","Le point du lundi"];
+    case "next":return a.t?[a.t.title,"Prochaine étape"]:["Rien d'urgent","Demander au coach"];
+  }
+  return [a.t||"",a.s||""];
 }
-// Les points suivants : une ligne compacte qui ouvre quelque chose (fiche, page, comparateur…), jamais une modification directe
+// Anneau de progression (budget) : pourcentage au centre, rouge au-delà de 100 %
+function ringV(pct,size=56,label=true){
+  const r=size/2-5,c=2*Math.PI*r,v=Math.max(0,Math.min(1,pct/100));
+  return `<svg class="ringv ${pct>100?"over":""}" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle class="rb" cx="${size/2}" cy="${size/2}" r="${r}"/><circle class="rf" cx="${size/2}" cy="${size/2}" r="${r}" stroke-dasharray="${(c*v).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 ${size/2} ${size/2})"/>${label?`<text x="50%" y="50%">${Math.round(pct)}%</text>`:""}</svg>`;
+}
+const SVG=p=>`<svg viewBox="0 0 24 24">${p}</svg>`;
+const TV_IC={mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',mail:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',star:'<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>',heart:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>',bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 20a2 2 0 0 0 4 0"/>',check:'<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>'};
+// Visuel d'un point « À faire » selon son type
+function todoVis(c){
+  const a=c.a||{};
+  if(c.k==="budget"){const tot=num(S.settings.budgetTotal),bc=budgetChiffres(),val=/sign/.test(a.t||"")?bc.signe:bc.prevu;return ringV(tot?val/tot*100:0)}
+  if(c.k==="rdv"){const d=pd(a.r.date);return `<span class="tv-cal"><small>${esc(d.toLocaleDateString("fr-FR",{month:"short"}))}</small><b class="num">${d.getDate()}</b></span>`}
+  if(c.k==="late")return `<span class="tv-num bad"><b class="num">${S.tasks.filter(isLate).length}</b></span>`;
+  if(c.k==="sugs")return `<span class="tv-num gold">${SVG(TV_IC.mail)}<b class="num">${a.n}</b></span>`;
+  const ic={visit:"mic",brief:"heart",push:"bell",next:"check"}[c.k]||"star";
+  return `<span class="tv-ic lv-${c.lvl||"info"}">${SVG(TV_IC[ic])}</span>`;
+}
+// Toucher une carte lance la première action qui ouvre quelque chose (fiche, page, comparateur…), jamais une modification directe
 const ROW_NAV=/^(go|fiche|late|task|compare|prefill|chatbrief|chat):/,ROW_WRITE=/^(vstatus|budgetset|taskdone|pushhide):/;
-function todoRow(c){
-  const q=c.qr.find(x=>ROW_NAV.test(x[1]))||c.qr.find(x=>!ROW_WRITE.test(x[1]));
-  const sub=String(c.ss||c.text||"").replace(/\.\s*$/,""); // sous-titres harmonisés : jamais de point final
-  return `<button class="td-row" ${q?`data-act="qr" data-do="${esc(q[1])}"`:"disabled"}><span class="dc-dot lv-${c.lvl||"info"}" aria-hidden="true"></span><span class="td-t"><b>${c.ts||c.title}</b>${sub?`<span>${sub}</span>`:""}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg></button>`;
+const tdAction=c=>{const q=c.qr.find(x=>ROW_NAV.test(x[1]))||c.qr.find(x=>!ROW_WRITE.test(x[1]));return q?`data-act="qr" data-do="${esc(q[1])}"`:"disabled"};
+const CHEV='<svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+// Le point le plus prioritaire : visuel à gauche, titre court, une ligne, chevron
+function leadCard(c){
+  const [t,l]=todoShort(c);
+  return `<button class="tdc lead lv-${c.lvl||"info"}" ${tdAction(c)}><span class="tv" aria-hidden="true">${todoVis(c)}</span><span class="tdc-t"><b>${esc(t)}</b><span>${esc(l)}</span></span>${CHEV}</button>`;
+}
+// Les suivants : petites cartes côte à côte, visuel et quelques mots
+function smallCard(c){
+  const [t,l]=todoShort(c);
+  return `<button class="tdc small lv-${c.lvl||"info"}" ${tdAction(c)} aria-label="${esc(t+" : "+l)}"><span class="tv" aria-hidden="true">${todoVis(c)}</span><b aria-hidden="true">${esc(t)}</b></button>`;
 }
 // Suggestions de la carte Coach, tirées de l'état de l'app (sans appel à l'IA)
 const KEY_FIND={Lieu:"un lieu",Traiteur:"un traiteur",Photographe:"un photographe",Musique:"la musique",Fleuriste:"un fleuriste",Tenues:"nos tenues"};
@@ -252,80 +344,101 @@ function coachSuggestions(al){
   for(const f of [["Par où commencer ?","ask:Par quoi commencer cette semaine ?"],["Notre budget","ask:Où en est notre budget ? Dis-nous ce qui mérite notre attention."],["À réserver","ask:Que nous reste-t-il à réserver, et dans quel ordre ?"]])if(out.length<3)out.push(f);
   return out.slice(0,3);
 }
-// Carte « Point de la semaine » : le point du coach et ses suggestions (on écrit au coach par le bouton flottant)
-function coachCard(al){
-  const hb=S.hebdo||{},fresh=hb.at&&Date.now()-hb.at<8*864e5,open=!!S.ui.hebdo;
-  const day=fresh?WEEKDAYS[new Date(hb.at).getDay()]:"";
-  const head=fresh?`<b class="cc-t">${esc(hb.titre||"")}</b><p class="cc-q">${hb.question?esc(hb.question)+" ":""}<button class="link cc-more" data-act="uihebdo" aria-expanded="${open}">${open?"Replier le point":"Lire le point"}</button></p>
-      ${open?`<div class="hb-b">${Array.isArray(hb.points)?`<ul>${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}<div class="dc-acts">${hb.question?`<button class="btn sm primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:""}<button class="link" data-act="qr" data-do="hebdo">Refaire le point</button></div></div>`:""}`
-    :`<b class="cc-t">Pas encore de point cette semaine.</b><p class="cc-q">Le coach fait le tour de vos tâches, prestataires et budget. <button class="link cc-more" data-act="qr" data-do="hebdo">Faire le point de la semaine</button></p>`;
-  return `<section class="coach-card" aria-label="Point de la semaine">
-    <div class="cc-top"><span class="cc-k"><span class="cc-ic" aria-hidden="true">${SPARK}</span>Point de la semaine</span>${day?`<span class="cc-day">${day}</span>`:""}</div>
-    ${head}
-    <div class="cc-sugg" role="list">${coachSuggestions(al).map(([l,d])=>`<button class="cc-s" role="listitem" data-act="qr" data-do="${esc(d)}"><span>${esc(l)}</span></button>`).join("")}</div></section>`;
+// Point de la semaine sur une ligne ; il ouvre le point complet (ou demande un point s'il n'y en a pas de récent)
+const hebdoFresh=()=>{const hb=S.hebdo||{};return !!(hb.at&&Date.now()-hb.at<8*864e5)};
+function pointCard(){
+  const hb=S.hebdo||{},fresh=hebdoFresh();
+  return `<button class="pw" ${fresh?'data-act="hebdoopen"':'data-act="qr" data-do="hebdo"'}><span class="pw-ic" aria-hidden="true">${SPARK}</span><span class="pw-t"><small>Point de la semaine</small><b>${fresh?esc(hb.titre||"Lire le point du coach"):"Faire le point avec le coach"}</b></span>${CHEV}</button>`;
 }
-const TILE_IC={prestataires:ICON_PRESTA(),planning:'<rect x="4" y="5" width="16" height="16" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14l2 2 4-4"/>',budget:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/>',invites:'<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c3 .2 5.5 2.5 5.5 5.8"/>',jourj:'<circle cx="9" cy="14" r="5"/><circle cx="15" cy="14" r="5"/><path d="M10 4h4l-2 3z"/>',docs:'<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>'};
-function ICON_PRESTA(){return '<path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6-.7z"/>'}
-// « Votre mariage » : toujours les mêmes éléments, à la même place ; « Commencer » quand c'est vide
-function weddingGrid(){
-  const pr=S.profil||{},fr=(S.briefs&&S.briefs.filRouge)||{};
-  const titre=fr.titre||(String(pr.resume||"").match(/^[^.!?]+[.!?]?/)||[""])[0].trim();
-  const prios=(Array.isArray(pr.priorites)?pr.priorites:[]).slice(0,3).map(p=>QC[p.cat]?QC[p.cat].label:String(p.cat||"")).filter(Boolean);
-  const div=Array.isArray(pr.divergences)?pr.divergences.length:0;
-  const envies=titre||prios.length?`<button class="wm-envies" data-go="envies"><span class="wm-k">Nos envies</span><b class="wm-title">${esc(titre||"Vos priorités")}</b>${prios.length?`<span class="wm-tags"><span class="wm-tl">Vos priorités</span>${prios.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</span>`:""}${div?`<span class="wm-s">${div} point${div>1?"s":""} dont vous reparlez</span>`:""}</button>`
-    :`<button class="wm-envies empty" data-act="qr" data-do="chatbrief"><span class="wm-k">Nos envies</span><b class="wm-title">Racontez vos envies</b><span class="wm-s">Le coach vous pose les questions une par une et en tire votre fil rouge.</span><span class="wm-go">Commencer</span></button>`;
+function openHebdo(){
+  const hb=S.hebdo||{};
+  document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Point de la semaine"><span class="cc-k">Point de la semaine${hb.at?` · ${WEEKDAYS[new Date(hb.at).getDay()]}`:""}</span><h3>${esc(hb.titre||"")}</h3>
+    ${Array.isArray(hb.points)?`<ul class="hb-pts">${hb.points.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:""}${hb.question?`<p class="ch-q">${esc(hb.question)}</p>`:""}
+    <div class="acts"><button type="button" class="btn ghost" data-act="qr" data-do="hebdo">Refaire le point</button><div>${hb.question?`<button type="button" class="btn primary" data-act="qr" data-do="prefill:">Répondre au coach</button>`:`<button type="button" class="btn" data-close="1">Fermer</button>`}</div></div></div></div>`;
+}
+// Ouverture : la photo du couple en plein cadre, sa phrase, les prénoms et le compte à rebours
+const GEAR='<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>';
+const couplePhrase=()=>{const pr=S.profil||{},fr=(S.briefs&&S.briefs.filRouge)||{};return String(fr.titre||(String(pr.resume||"").match(/^[^.!?]+[.!?]?/)||[""])[0]).trim().replace(/^[«"\s]+|[»"\s]+$/g,"")};
+function homeCover(){
+  const ph=S.photo&&S.photo.data,insp=!ph&&S.inspirations.find(i=>i.cat==="vision"&&i.thumb);
+  // grande version si elle existe (photo ajoutée depuis la correction du 22/11/2026), sinon la miniature de 320 px
+  const src=ph?`data:image/jpeg;base64,${S.photo.cover||ph}`:insp?`data:image/jpeg;base64,${insp.thumb}`:"";
+  const phrase=couplePhrase(),d=wDate(),n=d?days(today(),d):null,ind=!!S.settings.dateIndicative;
+  const logo=(document.querySelector(".brand-mark")||{}).outerHTML||"";
+  const count=d?(n>0?`<b class="num">${n}</b> jour${n>1?"s":""}${ind?"*":""}`:n===0?`<b>Jour J</b>`:`<b>Mariés</b>`):"";
+  return `<section class="cover ${src?"":"no-img"}" aria-label="${esc(COUPLE())}">
+    ${src?`<img class="cv-img" src="${src}" alt="">`:`<span class="cv-mark" aria-hidden="true">${logo}</span>`}
+    <div class="cv-top"><span class="cv-brand" aria-hidden="true">${logo}<span>Lamaelle</span></span><button class="cv-set" data-go="reglages" aria-label="Réglages">${SVG(GEAR)}</button></div>
+    <div class="cv-bot">
+      ${phrase?`<button class="cv-phrase" data-go="envies">« ${esc(phrase)} »</button>`:`<button class="cv-phrase" data-act="qr" data-do="chatbrief">Racontez-nous votre mariage</button>`}
+      <div class="cv-line"><div class="cv-who"><span class="cv-names">${esc(P1())} &amp; ${esc(P2())}</span>${!ph&&S.canWrite?`<button class="cv-add" data-act="couplephoto">Ajouter votre photo</button>`:""}</div>
+        ${d?`<button class="cv-count" data-act="showdate" aria-label="${esc(`${count.replace(/<[^>]+>/g,"").replace("*","")}, ${fmtLong(d)}${ind?", date indicative":""}`)}">${count}</button>`:`<button class="cv-count set" data-go="reglages">Fixer la date</button>`}</div>
+    </div></section>`;
+}
+// Nos envies (v1.1) : 1re ligne de l'en-tête unique de l'onglet : symbole, prénoms, jours restants (le bandeau bleu y est masqué)
+function envHeadTop(){
+  const d=wDate(),n=d?days(today(),d):null,ind=!!S.settings.dateIndicative;
+  const logo=(document.querySelector(".brand-mark")||{}).outerHTML||"";
+  const count=d?(n>0?`<b class="num">${n}</b> jour${n>1?"s":""}${ind?"*":""}`:n===0?"<b>Jour J</b>":"<b>Mariés</b>"):"";
+  return `<span class="ev-brand" aria-hidden="true">${logo}</span><span class="ev-names">${esc(P1())} &amp; ${esc(P2())}</span>${count?`<span class="ev-count">${count}</span>`:""}`;
+}
+// « Votre mariage » : six tuiles, un visuel et un chiffre ; « Commencer » quand c'est vide, jamais de « 0 » seul
+const TINTS=["accent","gold","ok","warn","bad"];
+const tintOf=s=>TINTS[[...String(s||"")].reduce((h,c)=>(h*31+c.charCodeAt(0))>>>0,7)%TINTS.length];
+const initials=s=>String(s||"").split(/[\s'’-]+/).filter(w=>/^\p{L}/u.test(w)&&!/^(de|du|des|la|le|les|au|aux|et|d|l)$/i.test(w)).slice(0,2).map(w=>w[0].toUpperCase()).join("")||"?";
+const kEur=x=>x>=1000?`${(x/1000).toLocaleString("fr-FR",{maximumFractionDigits:1})} k€`:eur(x);
+function weddingTiles(){
+  const pl=(n,s,p)=>`${n} ${n>1?p:s}`;
   const act=S.vendors.filter(v=>v.status!=="ecarte"),res=act.filter(v=>v.status==="reserve").length;
   const late=S.tasks.filter(isLate).length,t0=today();
   const nt=S.tasks.filter(t=>t.status!=="done"&&taskDue(t)&&taskDue(t)>=t0).sort((a,b)=>taskDue(a)-taskDue(b))[0];
   const nr=S.rdv.filter(r=>r.date&&pd(r.date)>=t0).sort((a,b)=>(a.date+(a.time||"")).localeCompare(b.date+(b.time||"")))[0];
   const next=[nt&&{t:nt.title,d:taskDue(nt)},nr&&{t:nr.title,d:pd(nr.date)}].filter(Boolean).sort((a,b)=>a.d-b.d)[0];
-  const tot=num(S.settings.budgetTotal),prevu=S.budget.reduce((s,b)=>s+num(b.prevu),0),engage=S.budget.reduce((s,b)=>s+num(b.engage),0);
-  const ref=tot||prevu,pct=ref?Math.round(engage/ref*100):0,over=ref&&engage>ref;
-  const g=S.guests,ans=g.filter(x=>x.rsvp==="oui"||x.rsvp==="non").length,steps=S.schedule.length;
-  const pl=(n,s,p)=>`${n} ${n>1?p:s}`;
-  // tuiles de même hauteur : icône, titre en bas, une ligne d'info ; jamais de « 0 » seul
-  const tile=(k,label,empty,go,body,badge="",extra="")=>`<button class="wm-tile ${empty?"empty":""}" ${go}><span class="wm-ic"><svg viewBox="0 0 24 24" aria-hidden="true">${TILE_IC[k]}</svg>${badge}</span><span class="wm-l">${label}</span><span class="wm-v">${empty?`<span class="wm-go">Commencer</span>`:body}</span>${extra}</button>`;
-  const {ready}=briefsState();
-  return `<div class="wm">${envies}<div class="wm-tiles">
-    ${tile("prestataires","Prestataires",!act.length,!act.length&&S.canWrite?'data-new="vendors"':'data-go="prestataires"',res?`${pl(act.length,"suivi","suivis")} · ${pl(res,"réservé","réservés")}`:`${act.length} en vue`)}
-    ${tile("planning","Planning",!S.tasks.length&&!S.rdv.length,'data-go="planning"',`${late?`<span class="over">${late} en retard</span> · `:""}${next?`${esc(next.t)} · ${esc(whenShort(next.d))}`:"Rien de daté à venir"}`)}
-    ${tile("budget","Budget",!ref,'data-go="budget"',engage?`<span class="${over?"over":""}">${pct} % engagé</span>`:prevu?`${eur(prevu)} prévus`:`${eur(tot)} de budget`,"",engage?`<span class="wm-bar ${over?"over":""}" aria-hidden="true"><i style="width:${Math.min(100,pct)}%"></i></span>`:"")}
-    ${tile("invites","Invités",!g.length,'data-go="invites"',ans?`${pl(ans,"réponse","réponses")} sur ${g.length}`:`${pl(g.length,"invité","invités")}`)}
-    ${tile("jourj","Jour J",!steps,'data-go="jour-j"',`${pl(steps,"étape","étapes")} du déroulé`)}
-    ${tile("docs","Documents",false,'data-act="docsmenu"',ready?"Briefs à envoyer":"Briefs à préparer")}
-  </div></div>`;
-}
-function vApercu(){
-  if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported"}),0);
-  const al=alerts(),cards=todoCards(al),ui=S.ui;
-  // 3 points au plus : le premier en carte mise en avant, les suivants en lignes compactes dans une seule carte
-  const [lead,...others]=cards,rows=ui.more?others:others.slice(0,2),rest=others.length-rows.length;
-  return `<div class="home">
-    <section class="home-sec" aria-labelledby="h-todo"><h3 class="home-h" id="h-todo">À faire maintenant</h3>${leadCard(lead)}
-      ${rows.length?`<div class="td-list">${rows.map(todoRow).join("")}</div>`:""}
-      ${rest>0||ui.more&&others.length>2?`<button class="link more-pts" data-act="uimore">${ui.more?"Afficher moins":`Voir les ${rest} autre${rest>1?"s":""}`}</button>`:""}</section>
-    ${coachCard(al)}
-    <section class="home-sec" aria-labelledby="h-wm"><h3 class="home-h" id="h-wm">Votre mariage</h3>${weddingGrid()}</section>
+  const tot=num(S.settings.budgetTotal),{prevu,signe:engage}=budgetChiffres();
+  const ref=tot||prevu,pct=ref?engage/ref*100:0;
+  const g=S.guests,ans=g.filter(x=>x.rsvp==="oui"||x.rsvp==="non").length,steps=S.schedule.length,{ready}=briefsState();
+  // visuels (décor, masqués aux lecteurs d'écran)
+  const avat=act.slice().sort((a,b)=>(b.status==="reserve")-(a.status==="reserve")).slice(0,3).map(v=>`<span class="av t-${tintOf(v.cat)}">${esc(initials(v.name))}</span>`).join("")+(act.length>3?`<span class="av more">+${act.length-3}</span>`:"");
+  const nd=Math.min(g.length,40),ad=g.length<=40?ans:Math.round(ans/g.length*40);
+  const dots=`<span class="dots">${Array.from({length:nd||12},(_,i)=>`<i class="${i<ad?"on":""}"></i>`).join("")}</span>`;
+  const ph=PHASES.map(p=>{const all=S.tasks.filter(t=>t.phase===p.k);return [all.length,all.filter(t=>t.status==="done").length]}),mx=Math.max(1,...ph.map(x=>x[0]));
+  const bars=`<span class="bars">${ph.map(([n,dn])=>`<i style="height:${Math.max(8,n/mx*100)}%"><b style="height:${n?dn/n*100:0}%"></b></i>`).join("")}</span>`;
+  const frise=`<span class="frise">${"<i></i>".repeat(5)}${SVG(TV_IC.star)}</span>`;
+  const sheets=`<span class="sheets"><i></i><i></i></span>`;
+  const tile=(o)=>`<button class="wt ${o.empty?"empty":""}" ${o.go} aria-label="${esc(o.aria)}"><span class="wt-vis" aria-hidden="true">${o.vis}</span><span class="wt-big" aria-hidden="true">${o.big}</span><span class="wt-line" aria-hidden="true">${o.empty?`<span class="wt-go">Commencer</span>`:o.line}</span></button>`;
+  return `<div class="wt-grid">
+    ${tile({empty:!act.length,go:!act.length&&S.canWrite?'data-new="vendors"':'data-go="prestataires"',vis:act.length?`<span class="avs">${avat}</span>`:`<span class="avs"><span class="av"></span><span class="av"></span><span class="av"></span></span>`,big:act.length?`<span class="num">${act.length}</span>`:"Prestataires",line:res?pl(res,"réservé","réservés"):"Prestataires",aria:act.length?`Prestataires : ${act.length} suivis, ${res} réservés`:"Prestataires : commencer"})}
+    ${tile({empty:!ref,go:'data-go="budget"',vis:ringV(pct,52,engage>0),big:`<span class="num">${kEur(prevu||tot)}</span>`,line:engage?`<span class="${pct>100?"over":""}">${Math.round(pct)} % signé</span>`:"Budget prévu",aria:ref?`Budget : ${eur(prevu||tot)} prévus, ${Math.round(pct)} % signé`:"Budget : commencer"})}
+    ${tile({empty:!g.length,go:'data-go="invites"',vis:dots,big:ans?`<span class="num">${ans} / ${g.length}</span>`:`<span class="num">${g.length}</span>`,line:ans?"Invités ont répondu":"Invités · réponses à venir",aria:g.length?`Invités : ${ans} réponses sur ${g.length}`:"Invités : commencer"})}
+    ${tile({empty:!S.tasks.length&&!S.rdv.length,go:'data-go="planning"',vis:bars,big:"Planning",line:late?`<span class="over">${late} en retard</span>`:next?`${esc(whenShort(next.d))} · ${esc(next.t)}`:"Rien de daté à venir",aria:`Planning : ${late?`${late} en retard`:next?`prochain, ${next.t}, ${whenShort(next.d)}`:"rien de daté à venir"}`})}
+    ${tile({empty:!steps,go:'data-go="jour-j"',vis:frise,big:"Jour J",line:pl(steps,"moment","moments"),aria:steps?`Jour J : ${pl(steps,"moment","moments")}`:"Jour J : commencer"})}
+    ${tile({empty:false,go:'data-act="docsmenu"',vis:sheets,big:"Briefs",line:ready?"À envoyer":"À préparer",aria:`Documents : briefs ${ready?"à envoyer":"à préparer"}`})}
   </div>`;
 }
-// Tâche ouverte depuis l'accueil : le planning défile jusqu'à elle et la met en évidence
+function vApercu(){
+  setTimeout(()=>jj().verifierTaches(),2500); // jour J : trous encore là un mois avant → tâches (une fois par session)
+  if(S.pushState===null)setTimeout(()=>refreshPushState().catch(()=>{S.pushState="unsupported"}),0);
+  const al=alerts(),cards=todoCards(al),ui=S.ui;
+  // la première carte en grand, puis 2 petites côte à côte, puis « + N » (ou toutes si on a déplié)
+  const [lead,...others]=cards,smalls=ui.more?others:others.slice(0,2),rest=others.length-smalls.length;
+  return `<div class="home v3">${homeCover()}
+    <section class="tdx" aria-label="À faire maintenant">${leadCard(lead)}
+      ${smalls.length?`<div class="tdc-grid">${smalls.map(smallCard).join("")}</div>`:""}
+      ${rest>0||ui.more&&others.length>2?`<button class="link more-pts" data-act="uimore">${ui.more?"Moins":`+ ${rest}`}</button>`:""}</section>
+    ${pointCard()}
+    <section aria-labelledby="h-wm"><h3 class="home-h" id="h-wm">Votre mariage</h3>${weddingTiles()}</section>
+  </div>`;
+}
+// Tâche ouverte depuis l'accueil : sa page dans le planning (docs/budget-planning-v1.md, 4.4)
 function showTask(id){
-  if(S.f.owner!=="all"){S.f.owner="all";saveF()}
-  go("planning");
-  requestAnimationFrame(()=>{const r=document.querySelector(`#main .row[data-task="${CSS.escape(id)}"]`);if(!r)return;
-    r.scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});r.classList.add("flash");setTimeout(()=>r.classList.remove("flash"),2600)});
+  if(!S.tasks.some(t=>t.id===id))return go("planning");
+  Object.assign(S.f,{plView:"tache",plId:id,plFrom:{v:"main"},plBackLabel:"Notre planning"});saveF();go("planning");
 }
 /* « Voir les retards » : le planning s'ouvre sur la première tâche en retard, mise en évidence (filtre « Tout » pour ne pas la masquer). */
 function showLate(){
-  if(S.f.owner!=="all"){S.f.owner="all";saveF()}
+  // la section « En retard » est en tête du planning (filtre « Tout » pour n'en masquer aucune)
+  if(S.f.owner!=="all")S.f.owner="all";S.f.plView="main";saveF();
   go("planning");
-  requestAnimationFrame(()=>{
-    const rows=[...document.querySelectorAll("#main .row.late")];
-    if(!rows.length)return;
-    rows[0].scrollIntoView({block:"center",behavior:matchMedia("(prefers-reduced-motion: reduce)").matches?"auto":"smooth"});
-    rows.forEach(r=>r.classList.add("flash"));
-    setTimeout(()=>rows.forEach(r=>r.classList.remove("flash")),2600);
-  });
 }
 async function runQr(dd){
   const [k,...rest]=dd.split(":"),arg=rest.join(":");
@@ -371,23 +484,23 @@ function toast(msg){const el=document.createElement("div");el.className="toast";
 
 /* ---------- Data writes ---------- */
 async function save(col,id,data){
-  if(!S.db){toast("Connectez-vous pour enregistrer");return false}
+  if(!S.db){toast(S.user?"Connexion en cours, réessayez dans un instant":"Connectez-vous pour enregistrer");return false}
   try{
-    if(id){await S.db.collection(col).doc(id).set(data)}
-    else{await S.db.collection(col).add(Object.assign({createdAt:Date.now()},data))}
+    if(id){await refDoc(col,id).set(data)}
+    else{await refCol(col,data).add(Object.assign({createdAt:Date.now()},data))}
     return true;
   }catch(e){return writeErr(e)}
 }
 async function patch(col,id,data){
   if(!S.db)return false;
-  try{await S.db.collection(col).doc(id).update(data);return true}catch(e){return writeErr(e)}
+  try{await refDoc(col,id).update(data);return true}catch(e){return writeErr(e)}
 }
 async function remove(col,id){
   if(!S.db)return false;
-  try{await S.db.collection(col).doc(id).delete();return true}catch(e){return writeErr(e)}
+  try{await refDoc(col,id).delete();return true}catch(e){return writeErr(e)}
 }
 async function setDoc(path,cur,data){
-  if(!S.db){toast("Connectez-vous pour enregistrer");return false}
+  if(!S.db){toast(S.user?"Connexion en cours, réessayez dans un instant":"Connectez-vous pour enregistrer");return false}
   try{await S.db.doc(path).set(Object.assign({},cur,data));return true}catch(e){return writeErr(e)}
 }
 function writeErr(e){
@@ -410,11 +523,6 @@ function renderHero(){
   setHTML(document.getElementById("hero-sub"),sub.join(""));
   // prénoms du couple, depuis les réglages (rien avant la connexion)
   setHTML(document.getElementById("names"),S.mode==="live"||S.mode==="demo"?`${esc(P1())}<span class="amp">&amp;</span>${esc(P2())}`:"");
-  // accueil : une seule ligne « 923 jours · samedi 26 mai 2029 (indicative) » à la place du compteur
-  const nd=d?days(today(),d):null;
-  setHTML(document.getElementById("hero-line"),S.view!=="apercu"||!(S.mode==="live"||S.mode==="demo")?""
-    :d?`<span class="hl-1"><b class="num">${nd>0?`${nd} jour${nd>1?"s":""}`:nd===0?"Jour J":"Mariés"}</b> · ${esc(d.toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"}))}</span>${st.dateIndicative?`<small class="hl-2">date indicative</small>`:""}`
-    :`<button class="link" data-go="reglages">Fixer la date</button>`);
   // photo du couple : ouvre Réglages (le changement de photo se fait dans Réglages > Général)
   const ph=S.photo&&S.photo.data,live=S.mode==="live"||S.mode==="demo";
   setHTML(document.getElementById("hero-photo"),live?`<button class="hero-photo" data-go="reglages" aria-label="Réglages">${ph?`<img src="data:image/jpeg;base64,${ph}" alt="">`:`<span>${esc(P1().charAt(0))}&amp;${esc(P2().charAt(0))}</span>`}</button>`:"");
@@ -436,15 +544,22 @@ const ICON={envies:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c
 const BNAV=[["apercu","Accueil"],["envies","Nos envies"],["prestataires","Prestataires"]];
 function renderBnav(){
   const sug=pendingSugs().length,cur=PARENT_VIEW[S.view]||S.view;
-  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
+  setHTML(document.getElementById("bnav"),BNAV.map(([k,l])=>`<button data-go="${k}" data-racine="1" ${cur===k?'aria-current="page"':""}><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${l}${k==="apercu"&&sug?`<span class="badge gold num" title="${sug} à valider">${sug}</span>`:""}</button>`).join(""));
   document.body.classList.add("compact");
   document.body.classList.toggle("on-home",S.view==="apercu");
+  // onglet Nos envies (vue principale) : un seul en-tête, celui de l'onglet (docs/nos-envies-v1-1.md, section 1)
+  document.body.classList.toggle("on-envies",S.view==="envies"&&!["tile","synth","mood","notees"].includes(S.f.envView));
+  // onglet Prestataires (docs/prestataires-v1.md) : chaque écran a son propre en-tête ; la fiche a une barre d'action (le coach remonte)
+  document.body.classList.toggle("on-prest",S.view==="prestataires"||S.view==="budget"||S.view==="planning"||(S.view==="invites"&&S.f.iView!=="liste")||(S.view==="tables"&&S.f.tView!=="liste")||S.view==="jour-j"); // Budget, Planning : même modèle de page (en-tête propre)
+  {const fv=S.view==="prestataires"&&S.f.pView==="fiche"&&S.vendors.find(x=>x.id===S.f.pFiche);document.body.classList.toggle("on-fiche-bar",!!(fv&&S.canWrite&&["repere","discussion"].includes(etapeOf(fv)))||(S.canWrite&&(pl().enTache()||(S.view==="budget"&&S.f.bView==="arbitrer")||(S.view==="jour-j"&&S.f.jView==="trame"))))}
+  if(S.view!=="tables")document.body.classList.remove("on-plan-bar");
+  if(S.view!=="jour-j")document.body.classList.remove("jj-live"); // écran du jour J (toujours sombre, sans bouton du coach) // tiroir « À placer » du plan de table
 }
 function renderTabs(){
   renderBnav();
   const late=S.tasks.filter(isLate).length,sug=pendingSugs().length;
   setHTML(document.getElementById("tabs"),VIEWS.map(([k,l])=>
-    `<button class="tab" data-go="${k}" ${(PARENT_VIEW[S.view]||S.view)===k?'aria-current="page"':""}>${l}${k==="planning"&&late?`<span class="badge num" title="En retard">${late}</span>`:""}${k==="assistant"&&sug?`<span class="badge gold num" title="À valider">${sug}</span>`:""}</button>`).join(""));
+    `<button class="tab" data-go="${k}" data-racine="1" ${(PARENT_VIEW[S.view]||S.view)===k?'aria-current="page"':""}>${l}${k==="planning"&&late?`<span class="badge num" title="En retard">${late}</span>`:""}${k==="assistant"&&sug?`<span class="badge gold num" title="À valider">${sug}</span>`:""}</button>`).join(""));
 }
 
 /* ---------- Dashboard ---------- */
@@ -459,14 +574,12 @@ function milestones(){
     ["Dossier mairie déposé",tDone("t29")],["Plan de table finalisé",tDone("t36")]
   ];
 }
+// Échéances à payer des prestataires réservés (agents/lib/budget.js, echeancesDe) : d'après le devis, sinon acompte de 30 % à la
+// signature et solde 7 jours avant le mariage, marqués « à confirmer » (docs/budget-planning-v1.md, 3.7)
 function payments(){
   const out=[];
-  S.vendors.forEach(v=>{
-    if(v.status==="ecarte")return;
-    const ac=num(v.acompte),px=num(v.prix);
-    if(ac&&!v.acomptePaye&&v.status==="reserve")out.push({v,kind:"Acompte",amount:ac,date:pd(v.dateAcompte)});
-    if(px&&!v.soldePaye&&v.status==="reserve")out.push({v,kind:"Solde",amount:Math.max(0,px-(v.acomptePaye?ac:0)-(v.acomptePaye?0:ac)),date:pd(v.dateSolde)});
-  });
+  S.vendors.filter(v=>v.status==="reserve").forEach(v=>echeancesDe(v,{date:wDate()}).filter(e=>!e.paye).forEach(e=>
+    out.push({v,kind:e.kind==="acompte"?"Acompte":"Solde",amount:e.montant,date:pd(e.date),aConfirmer:e.aConfirmer})));
   return out.sort((a,b)=>(a.date?+a.date:9e15)-(b.date?+b.date:9e15));
 }
 /* Blocs de l'ancien tableau de bord, déplacés : Jalons et Qui fait quoi dans Planning, Paiements à venir dans Budget */
@@ -504,40 +617,25 @@ function taskRow(t){
 }
 
 /* ---------- Planning ---------- */
-function vPlanning(){
-  const f=S.f;
-  let ts=S.tasks.slice().sort(byOrder);
-  if(f.owner!=="all")ts=ts.filter(t=>(t.owner||"deux")===f.owner||(f.owner!=="deux"&&(t.owner||"deux")==="deux"));
-  const d=wDate(),cur=currentPhase();
-  const groups=PHASES.map(p=>{
-    const all=ts.filter(t=>t.phase===p.k);
-    const shown=f.hideDone?all.filter(t=>t.status!=="done"):all;
-    if(!all.length)return "";
-    const done=all.filter(t=>t.status==="done").length;
-    const when=d?`avant le ${fmtD(p.due(d))}`:"";
-    return `<section class="phase ${cur&&cur.k===p.k?"current":""}"><div class="phase-h"><div><h3 style="display:inline">${p.label}</h3><span class="when">${esc([p.hint,when].filter(Boolean).join(" · "))}</span>${cur&&cur.k===p.k?' <span class="chip acc" style="margin-left:6px">En cours</span>':""}</div><span class="prog num">${done} / ${all.length}</span></div>
-      <div class="list">${shown.length?shown.map(taskRow).join(""):`<div class="empty">Tout est fait pour cette période.</div>`}</div></section>`;
-  }).join("");
+// docs/budget-planning-v1.md (lot 2) : page, étape, tâche et rendez-vous dans src/planning-ui.js, règles dans agents/lib/planning.js
+function vPlanning(){return pl().vPlanning()}
+// Doublons possibles (signalés, jamais fusionnés sans accord) : bandeau du planning
+function dupBanner(){
   const dups=S.canWrite?similarTasks():[];
-  const dupH=dups.length?`<div class="dups">${dups.slice(0,3).map(x=>`<div class="banner dup"><b>Doublon possible</b><span>« ${esc(x.a.title)} » et « ${esc(x.b.title)} »</span>
+  return dups.length?`<div class="dups">${dups.slice(0,3).map(x=>`<div class="banner dup"><b>Doublon possible</b><span>« ${esc(x.a.title)} » et « ${esc(x.b.title)} »</span>
     <div class="dup-acts"><button class="btn sm primary" data-act="dupmerge" data-a="${x.a.id}" data-b="${x.b.id}">Fusionner</button><button class="btn sm" data-act="dupkeep" data-k="${x.key}">Ce sont deux tâches</button></div></div>`).join("")}</div>`:"";
-  return `${subnav([["planning","Tâches"],["agenda","Agenda"]])}<div class="vh"><div><h2>Rétroplanning</h2><p>${d?"Les échéances se calculent à partir de la date du mariage. Une échéance précise sur une tâche prend le dessus.":"Fixez la date dans Réglages pour voir les échéances."}</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="pdfreport">Rapport PDF</button><button class="btn primary" data-new="tasks" ${S.canWrite?"":"disabled"}>Ajouter une tâche</button></div></div>
-  <div class="filters">
-    <div class="seg" role="group" aria-label="Filtrer par personne">${[["all","Tout"],["claire",P1()],["julien",P2()],["deux","Ensemble"]].map(([k,l])=>`<button data-f="owner" data-v="${k}" aria-pressed="${f.owner===k}">${l}</button>`).join("")}</div>
-    <label class="toggle"><input type="checkbox" id="hide-done" ${f.hideDone?"checked":""}> Masquer les tâches faites</label>
-  </div>
-  ${dupH}${groups||emptyBlock("Aucune tâche pour l'instant","Ajoutez la première avec le bouton ci-dessus.")}
-  <div class="plan-ov ${S.f.overview?"open":""}"><button class="ov-open" data-act="overview" aria-expanded="${!!S.f.overview}"><span><b>Vue d'ensemble</b><span>Jalons et qui fait quoi</span></span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button>
-    ${S.f.overview?`<div class="plan-ov-b">${milestonesPanel()}${whoPanel()}</div>`:""}</div>`;
 }
+let PL=null;
+const pl=()=>PL||(PL=makePlanning({S,esc,eur,BACK_SVG,CHEV,PH,OWNERS,P1,P2,pd,today,wDate,taskDue,isLate,tintOf,initials,saveF,render,go,patch,toastUndo,budgetLineFor,tuileDe,
+  moi:MOI,nomTuile:k=>(FR_ENVIES.tuiles[k]||{}).nom||"",dupH:dupBanner,milestonesPanel,whoPanel,runAgentNow,toast,openEditor,budgetDepasse:()=>budgetChiffres().depasse>0}));
 
 /* ---------- Agenda ---------- */
 function vAgenda(){
   const all=S.rdv.slice().sort((a,b)=>String((a.date||"9")+(a.time||"")).localeCompare(String((b.date||"9")+(b.time||""))));
   const t=today(),up=all.filter(r=>!r.date||pd(r.date)>=t),past=all.filter(r=>r.date&&pd(r.date)<t).reverse();
-  const row=r=>{const d=pd(r.date);return `<div class="row click" data-edit="rdv" data-id="${r.id}">${d?dateBox(d,d<t?"":"gold"):`<div class="datebox"><b>?</b><span>date</span></div>`}<div class="main"><div class="t">${esc(r.title)}</div><div class="m">${d?`<span>${esc(fmtLong(d))}</span>`:""}${r.time?`<span class="num">${esc(r.time)}</span>`:""}${r.avec?`<span>avec ${esc(r.avec)}</span>`:""}${r.lieu?`<span>${esc(r.lieu)}</span>`:""}</div></div><div class="end">${r.qui?ownerChip(r.qui):""}${r.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div></div>`};
-  return `${subnav([["planning","Tâches"],["agenda","Agenda"]])}<div class="vh"><div><h2>Agenda</h2><p>Visites de lieux, dégustations, essayages, rendez-vous mairie et notaire.</p></div>
+  const row=r=>{const d=pd(r.date);return `<div class="row click" data-act="plrdvgo" data-id="${r.id}">${d?dateBox(d,d<t?"":"gold"):`<div class="datebox"><b>?</b><span>date</span></div>`}<div class="main"><div class="t">${esc(r.title)}</div><div class="m">${d?`<span>${esc(fmtLong(d))}</span>`:""}${r.time?`<span class="num">${esc(r.time)}</span>`:""}${r.avec?`<span>avec ${esc(r.avec)}</span>`:""}${r.lieu?`<span>${esc(r.lieu)}</span>`:""}</div></div><div class="end">${r.qui&&r.qui!=="deux"?ownerChip(r.qui):""}${r.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div></div>`};
+  // plus d'onglet Agenda (docs/budget-planning-v1.md, 4.1) : tous les rendez-vous, ouverts depuis le planning en attendant la vue calendrier (lot 4)
+  return `<button class="link env-back" data-go="planning">${BACK_SVG}<span>Notre planning</span></button><div class="vh"><div><h2>Tous les rendez-vous</h2><p>Visites de lieux, dégustations, essayages, rendez-vous mairie et notaire.</p></div>
     <button class="btn primary" data-new="rdv" ${S.canWrite?"":"disabled"}>Ajouter un rendez-vous</button></div>
   <h3 class="sec">À venir · ${up.length}</h3>
   ${up.length?`<div class="list">${up.map(row).join("")}</div>`:emptyBlock("Aucun rendez-vous prévu","Ajoutez la prochaine visite ou dégustation.")}
@@ -545,39 +643,14 @@ function vAgenda(){
 }
 
 /* ---------- Budget ---------- */
-function vBudget(){
-  const tot=num(S.settings.budgetTotal);
-  const rows=S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)||String(a.label).localeCompare(b.label));
-  const sum=k=>rows.reduce((s,b)=>s+num(b[k]),0);
-  const prevu=sum("prevu"),engage=sum("engage"),paye=sum("paye");
-  const marge=tot?tot-Math.max(prevu,engage):null;
-  const resv=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
-  const strip=`<div class="strip">
-    <div class="kpi t1"><div><div class="k">Budget total</div><div class="v num">${tot?eur(tot):"—"}</div><div class="s">${S.canWrite?`<button class="chip acc" data-act="budgettot">${tot?"Modifier":"Le fixer"}</button>`:""}</div></div></div>
-    <div class="kpi t2"><div><div class="k">Prévu</div><div class="v num">${eur(prevu)}</div><div class="s">Somme des postes</div></div></div>
-    <div class="kpi t3"><div><div class="k">Engagé</div><div class="v num">${eur(engage)}</div><div class="s">Payé ${eur(paye)} · reste ${eur(Math.max(0,engage-paye))}</div></div></div>
-    <div class="kpi ${marge!==null&&marge<0?"":"t4"}" style="${marge!==null&&marge<0?"background:var(--bad-soft)":""}"><div><div class="k">Marge</div><div class="v num" style="${marge!==null&&marge<0?"color:var(--bad)":""}">${marge===null?"—":eur(marge)}</div><div class="s">${marge===null?"Selon le budget total":marge<0?"Au-dessus du budget":"Encore disponible"}</div></div></div>
-  </div>`;
-  const gap=resv-engage;
-  const ref=tot||prevu;
-  const yes=S.guests.filter(x=>x.rsvp==="oui").length,guestsBase=yes||num(S.settings.invitesCible)||S.guests.length;
-  const perGuest=guestsBase?(engage||prevu)/guestsBase:0;
-  // Liste (lisible sur téléphone) : poste, part du budget calculée en direct, prévu à droite, engagé/payé en dessous
-  const body=rows.map(b=>{
-    const p=num(b.prevu),e=num(b.engage),pa=num(b.paye),over=e>p&&p>0;
-    const note=budgetNote(b.note),share=ref&&p?`${Math.round(p/ref*100)} % du budget`:"";
-    return `<div class="brow" data-edit="budget" data-id="${b.id}" role="button" tabindex="0">
-      <div class="brow-main"><div class="brow-t">${esc(b.label)}</div>${share||note?`<div class="brow-s">${esc([share,note].filter(Boolean).join(" · "))}</div>`:""}</div>
-      <div class="brow-end"><b class="num">${p?eur(p):'<span class="na">—</span>'}</b>${e||pa?`<span class="num ${over?"over":""}">${e?"engagé "+eur(e):""}${e&&pa?" · ":""}${pa?"payé "+eur(pa):""}</span>`:""}</div></div>`;
-  }).join("");
-  return `<div class="vh"><div><h2>Budget</h2><p>Prévu = enveloppe du poste · Engagé = devis signés · Payé = acomptes et soldes versés.</p></div>
-    <button class="btn primary" data-new="budget" ${S.canWrite?"":"disabled"}>Ajouter un poste</button></div>
-  ${strip}
-  ${payments().length?paymentsPanel():""}
-  ${gap>0?`<div class="banner warn">Les prestataires réservés totalisent ${eur(resv)}, soit ${eur(gap)} de plus que l'engagé du budget. Pensez à reporter les devis signés.</div>`:""}
-  ${rows.length?`<div class="list blist2">${body}<div class="brow total"><div class="brow-main"><div class="brow-t">Total</div>${tot||perGuest?`<div class="brow-s">${[tot?`${eur(prevu)} prévus pour ${eur(tot)} de budget`:"",perGuest?`${eur(perGuest)} par invité`:""].filter(Boolean).join(" · ")}</div>`:""}</div><div class="brow-end"><b class="num ${tot&&prevu>tot?"over":""}">${eur(prevu)}</b>${engage||paye?`<span class="num">engagé ${eur(engage)} · payé ${eur(paye)}</span>`:""}</div></div></div>`
-  :emptyBlock("Aucun poste de budget","Ajoutez vos postes : lieu, traiteur, photographe…")}`;
-}
+// docs/budget-planning-v1.md (lot 1) : la page et un poste ouvert dans src/budget-ui.js, règles dans agents/lib/budget.js
+function vBudget(){return bu().vBudget()}
+let BU=null;
+const bu=()=>BU||(BU=makeBudget({S,esc,eur,tintOf,initials,BACK_SVG,CHEV,today,payments,emptyBlock,saveF,render,go,patch,toastUndo,toast,prenom,runAgentNow,addDoc,remove,openEditor,
+  vendorsVisibles:()=>S.vendors,metaTuile:k=>env().metaOf(k),
+  setLimite:v=>setDoc("meta/settings",S.settings,{budgetTotal:v==null||v===""?null:num(v),updatedAt:Date.now()})}));
+// Chiffres du budget (prévu, signé, payé, par invité) : les mêmes partout (page, accueil, alertes, rapport PDF)
+const budgetChiffres=()=>bu().chiffres();
 
 /* ---------- Guests ---------- */
 function guestFiltered(){
@@ -605,7 +678,27 @@ function guestRows(){
     <div class="selbar-row"><span class="lab">Côté</span>${Object.entries(SIDES).map(([k,l])=>`<button class="chip ${k}" data-act="gset" data-k="side" data-v="${k}">${l}</button>`).join("")}</div>`:`<p class="more-note" style="margin:6px 0 0">Touchez les invités à ranger, puis choisissez leur groupe ou leur côté.</p>`}</div>`:"";
   return body+bar;
 }
-function vInvites(){
+// docs/invites-v1.md (lot 1) : page, cercle, foyer, regroupement dans src/invites-ui.js, règles dans agents/lib/invites.js
+function vInvites(){return iv().vInvites()}
+let IV=null;
+const iv=()=>IV||(IV=makeInvites({S,esc,BACK_SVG,CHEV,initials,fold,P1,P2,saveF,render,go,patch,addDoc,remove,toast,toastUndo,openEditor,closeModal,showTask,
+  layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
+  setCible:v=>setDoc("meta/settings",S.settings,{invitesCible:v,updatedAt:Date.now()}),setSettings:o=>setDoc("meta/settings",S.settings,Object.assign({},o,{updatedAt:Date.now()})),
+  ancienneListe:()=>vInvitesListe(),lienFoyer,couple:()=>COUPLE(),wDate,today,groupes:()=>GROUPS,runAgentNow,eur,fmtD,
+  traiteur:()=>S.vendors.find(v=>v.cat==="Traiteur"&&etapeOf(v)==="reserve")||null,moi:MOI,openBulk:()=>openBulk()}));
+// docs/invites-v1.md (lot 4) : plan de table dans src/plan-ui.js, règles dans agents/lib/plan.js ; l'ancienne vue reste sous « Vue en liste »
+// Jour J v1 (src/jourj-ui.js, docs/jour-j-v1.md) : déroulé, moments, rôles ; l'ancienne vue vJourJ reste dans le code
+let JJ=null;
+const jj=()=>JJ||(JJ=makeJourJ({S,esc,BACK_SVG,CHEV,initials,tintOf,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,wDate,inspTile,makePdf,pdfFile,lienJourJ,prenom:()=>prenom(),
+  creerSiAbsent:(path,data)=>S.db?S.db.doc(path).get().then(x=>x.exists?false:S.db.doc(path).set(data).then(()=>true)).catch(()=>false):false,
+  layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
+  setMeta:(k,o)=>setDoc("meta/"+k,S[k]||{},o)}));
+let PT=null;
+const pt=()=>PT||(PT=makePlan({S,esc,BACK_SVG,CHEV,initials,saveF,render,go,patch,addDoc,remove,toast,toastUndo,closeModal,runAgentNow,makePdf,
+  layer:h=>{document.getElementById("layer").innerHTML=h},setRaw:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,
+  setMeta:(k,o)=>setDoc("meta/"+k,S[k]||{},o),ancienne:()=>vTables()}));
+// Ancienne liste détaillée (une ligne par personne, filtres, « Ranger » par groupe ou côté) : déplacée sous « Liste détaillée et rangement »
+function vInvitesListe(){
   const g=S.guests,f=S.f;
   const yes=g.filter(x=>x.rsvp==="oui").length,no=g.filter(x=>x.rsvp==="non").length;
   const cible=num(S.settings.invitesCible);
@@ -615,7 +708,7 @@ function vInvites(){
     <div class="kpi t3"><div><div class="k">Au dîner</div><div class="v num">${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length}</div><div class="s">Présents et en attente</div></div></div>
     <div class="kpi t2"><div><div class="k">${esc(P1())} · ${esc(P2())} · Commun</div><div class="v num" style="font-size:26px">${g.filter(x=>x.side==="claire").length} · ${g.filter(x=>x.side==="julien").length} · ${g.filter(x=>x.side==="commun"||!x.side).length}</div><div class="s">Répartition par côté</div></div></div>
   </div>`;
-  return `${subnav([["invites","Liste"],["tables","Plan de table"]])}<div class="vh"><div><h2>Invités</h2><p>Touchez la réponse d'un invité pour la changer. « Ranger » classe plusieurs invités d'un coup par groupe ou par côté.</p></div>
+  return `<button class="link env-back" data-act="ivview" data-v="main">${BACK_SVG}<span>Nos invités</span></button><div class="vh"><div><h2>Liste détaillée</h2><p>Touchez la réponse d'un invité pour la changer. « Ranger » classe plusieurs invités d'un coup par cercle ou par côté.</p></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">${g.length&&S.canWrite?`<button class="btn" data-act="gselstart" aria-pressed="${S.selMode}">Ranger</button>`:""}<button class="btn primary" data-new="guests" ${S.canWrite?"":"disabled"}>Ajouter</button></div></div>
   ${strip}
   <div class="filters">
@@ -652,7 +745,8 @@ const bGet=(c,q)=>S.brief.find(d=>d.id===bId(c,q))||{};
 const bMeta=c=>bGet(c,"_meta");
 const answered=a=>!!((a.commun&&String(a.commun).trim())||(a.choix&&a.choix.length)||(a.claire&&String(a.claire).trim())||(a.julien&&String(a.julien).trim()));
 const catProg=c=>{const qs=QC[c].qs;const n=qs.filter(q=>answered(bGet(c,q[0]))).length;return {n,t:qs.length,p:qs.length?n/qs.length:0}};
-const allProg=()=>{let n=0,t=0;QCATS.forEach(c=>{const p=catProg(c.k);n+=p.n;t+=p.t});return t?n/t:0};
+// « Lamaelle vous connaît à X % » (jauge de Nos envies), de 0 à 1
+const allProg=()=>(env().jaugeNow()||0)/100;
 async function saveBrief(c,q,patchObj){
   const cur=Object.assign({},bGet(c,q));delete cur.id;
   const base=q==="_meta"?{cat:c,qid:"_meta"}:{cat:c,qid:q,question:(QC[c].qs.find(x=>x[0]===q)||[])[2]||""};
@@ -736,35 +830,15 @@ function analyseBar(ctx){
 
 /* ---------- Annuaire ---------- */
 function vPrestataires(){
-  const f=S.f;
-  let vs=S.vendors.slice();
-  const vv=["actifs","reserve","ecarte","tous"].includes(f.vView)?f.vView:"actifs";
-  vs=vs.filter(v=>vv==="tous"||(vv==="actifs"?v.status!=="ecarte":v.status===vv));
-  const allCats=VCATS.filter(c=>S.vendors.some(v=>v.cat===c));
-  if(f.vCat&&f.vCat!=="all"&&allCats.includes(f.vCat))vs=vs.filter(v=>v.cat===f.vCat);
-  const cats=VCATS.filter(c=>vs.some(v=>v.cat===c));
-  const engaged=S.vendors.filter(v=>v.status==="reserve").reduce((s,v)=>s+num(v.prix),0);
-  // seulement les prestataires réservés : l'acompte d'un simple devis n'est pas encore dû
-  const toPay=S.vendors.filter(v=>v.status==="reserve"&&num(v.acompte)&&!v.acomptePaye).length;
-  const sc=v=>v.status==="ecarte"?-2:(v.fit&&v.fit.score!=null?v.fit.score:-1);
-  const groups=cats.map(c=>{
-    const list=vs.filter(v=>v.cat===c).sort((a,b)=>sc(b)-sc(a)||VSTAT_RANK[b.status]-VSTAT_RANK[a.status]);
-    const qk=VCAT2Q[c],p=qk?catProg(qk):null,m=qk?bMeta(qk):{};
-    const cmp=S.vendors.filter(v=>v.cat===c&&v.status!=="ecarte").length>=2;
-    return `<section class="phase"><div class="cat-h"><h3>${c}</h3><div class="meta">${cmp?`<button class="chip acc" data-act="compare" data-cat="${esc(c)}">Comparer</button>`:""}${m.importance?`<span class="chip acc">${IMPORT[m.importance-1]}</span>`:""}${num(m.budget)?`<span class="chip gold num">Budget ${eur(m.budget)}</span>`:""}${p?`<button class="chip ${p.p>=.7?"ok":p.p>0?"warn":""}" data-bgo="${qk}">Brief ${Math.round(p.p*100)} %</button>`:""}</div></div>
-    <div class="list">${list.map((v,i)=>{const fi=v.fit||{};const av=fi.avis||{};const sc=fi.score!=null?Math.round(fi.score):null;return `<div class="vrow" data-fiche="${v.id}" role="button" tabindex="0">
-      <div class="vr-head">${list.length>1?`<span class="rank num">${i+1}.</span>`:""}<span class="t">${esc(v.name)}</span>${sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none" title="Pas encore analysé">à analyser</span>`}</div>
-      <div class="vr-tags"><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${v.source==="mail"?'<span class="chip gold">via e-mail</span>':""}</div>
-      ${fi.verdict?`<div class="verdict">${esc(fi.verdict)}</div>`:""}
-      <div class="m">${v.prix?`<span class="num">${eur(v.prix)}</span>`:""}${av.note?`<span class="stars">★ ${esc(String(av.note).replace(".",","))}${av.nombre?` <span style="color:var(--muted);font-weight:500">(${esc(av.nombre)} avis)</span>`:""}</span>`:""}${num(v.acompte)?(v.status==="reserve"?`<span class="${v.acomptePaye?"":"over"}">Acompte ${eur(v.acompte)} ${v.acomptePaye?"versé":"à verser"}</span>`:`<span>Acompte demandé ${eur(v.acompte)}</span>`):""}${v.tel?`<span class="num">${esc(v.tel)}</span>`:""}</div></div>`}).join("")}</div></section>`;
-  }).join("");
-  return `<div class="vh"><div><h2>Annuaire des prestataires</h2><p>${S.vendors.length} prestataire${S.vendors.length>1?"s":""} · ${S.vendors.filter(v=>v.status==="reserve").length} réservé${S.vendors.filter(v=>v.status==="reserve").length>1?"s":""} pour ${eur(engaged)}${toPay?` · <span class="over">${toPay} acompte${toPay>1?"s":""} à verser</span>`:""}. Classés par note de fit dans chaque catégorie.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="briefsmenu">Briefs à envoyer</button><button class="btn" data-new="vendors" ${S.canWrite?"":"disabled"}>Ajouter un prestataire</button></div></div>
-  ${analyseBar("annuaire")}
-  <div class="filters"><div class="seg" role="group" aria-label="Afficher">${[["actifs","En cours"],["reserve","Réservés"],["ecarte","Écartés"],["tous","Tous"]].map(([k,l])=>`<button data-f="vView" data-v="${k}" aria-pressed="${vv===k}">${l}</button>`).join("")}</div>
-    ${allCats.length>1?`<div class="chip-row" role="group" aria-label="Catégorie">${[["all","Toutes"],...allCats.map(c=>[c,c])].map(([k,l])=>`<button class="chip ${(f.vCat||"all")===k?"on":""}" data-f="vCat" data-v="${esc(k)}" aria-pressed="${(f.vCat||"all")===k}">${esc(l)}</button>`).join("")}</div>`:""}</div>
-  ${groups||emptyBlock(S.vendors.length?"Aucun prestataire avec ce statut":"Aucun prestataire pour l'instant","Notez chaque piste dès le premier contact, ou laissez l'assistant e-mails les ajouter.")}`;
+  return pr().vPrest(); // docs/prestataires-v1.md : onglet, page métier, fiche, écartés, onglet vide (src/prestataires-ui.js)
 }
+// Onglet « Prestataires » v1 : écrans dans src/prestataires-ui.js, règles dans agents/lib/prestataires.js
+let PR=null;
+const pr=()=>PR||(PR=makePrest({S,esc,toast,toastUndo,go,render,saveF,CHEV,BACK_SVG,tintOf,initials,eur,pd,today,wDate,fold,env,briefFor,pdfBriefs,patch,devisSection,jourj:()=>jj(),
+  ficheDetails,pendingSugs,openEditor,closeModal,fileForAI,addVendor,kick,acceptSug,runAgentNow,openCompare,runQr,
+  addDoc,remove,phaseFor,budgetLineFor,prenom,moi:MOI,autreKey,prenomAutre:()=>prenomDe2(autreKey()),setDoc:(path,data)=>S.db?S.db.doc(path).set(data).then(()=>true,e=>writeErr(e)):false,analyseBar:()=>analyseBar("annuaire"),layer:h=>{document.getElementById("layer").innerHTML=h},
+  logo:()=>(document.querySelector(".brand-mark")||{}).outerHTML||"",userEmail:()=>String(S.user&&S.user.email||""),
+  prenomDe:by=>{const k=PARTNER[String(by||"").toLowerCase()];return k==="claire"?P1():k==="julien"?P2():""}}));
 
 /* ---------- Comparateur ---------- */
 // Valeur d'une ligne « Libellé : valeur » des notes (capacité, couchages… importés du fichier Excel)
@@ -839,31 +913,33 @@ function devisSection(v){
       return `<div class="hb-row"><span class="lab">${fmtD(pd(x.recuLe))}${x.source==="mail"?" · mail":""}${x.resume?` — ${esc(x.resume.slice(0,90))}${x.resume.length>90?"…":""}`:""}</span><span class="amt num">${eur(x.montant)}${dd?` <small class="${dd<0?"ok":"bad"}">${dd<0?"−":"+"}${eur(Math.abs(dd))}</small>`:""}</span></div>`}).join("")}</details>`:""}
     <div style="margin-top:10px">${add}</div></div>`;
 }
-function openFiche(id){
-  const v=S.vendors.find(x=>x.id===id);if(!v)return;
+// Fiche d'un prestataire : page de l'onglet Prestataires (prestataires-ui.js) ; tous les appels existants (accueil, comparateur, coach) y mènent
+function openFiche(id){closeModal();pr().openFiche(id)}
+// « Tous les détails » de la fiche : le contenu de l'ancienne fiche, gardé en entier (déplacer, jamais supprimer)
+function ficheDetails(v){
   const fi=v.fit||{},av=fi.avis||{};
-  const qk=VCAT2Q[v.cat];
+  const tk=METIER2TILE[v.cat];
   const L=(t)=>Array.isArray(t)&&t.length?`<ul class="blist">${t.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`:"";
   const crit=Array.isArray(fi.criteres)&&fi.criteres.length?`<div class="fsec"><h4>Détail de la note</h4><div class="crit">${fi.criteres.map(c=>`<div class="hb-row"><span class="lab">${esc(c.label)}</span><span class="amt num">${Math.round(num(c.note))}/100</span><div class="hb-track"><i class="eng" style="width:${Math.max(0,Math.min(100,num(c.note)))}%;background:var(--${num(c.note)>=75?"ok":num(c.note)>=55?"gold":"bad"})"></i></div>${c.pourquoi?`<div class="why">${esc(c.pourquoi)}</div>`:""}</div>`).join("")}</div></div>`:"";
   const offre=[["Montant",v.prix?eur(v.prix):""],["Acompte",num(v.acompte)?eur(v.acompte)+(v.acomptePaye?" · versé":v.dateAcompte?" · avant le "+fmtD(pd(v.dateAcompte)):""):""],["Solde avant le",v.dateSolde?fmtD(pd(v.dateSolde)):""],["Contact",v.contact||""],["Téléphone",v.tel||""]].filter(x=>x[1]);
   const srcs=Array.isArray(av.sources)?av.sources.filter(s=>s&&/^https?:\/\//.test(s.url||"")):[];
-  const layer=document.getElementById("layer");
-  layer.innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Fiche ${esc(v.name)}" style="max-width:680px">
-    <div class="fiche-top">${fitBadge(v,true)}<div style="min-width:0"><h3>${esc(v.name)}</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip">${esc(v.cat||"")}</span><span class="chip ${VSTAT_CLS[v.status]||""}">${VSTAT[v.status]||"Repéré"}</span>${fi.confiance?`<span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span>`:""}</div></div></div>
-    ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'annuaire, ou attendez le passage de demain matin.${qk&&catProg(qk).p<.5?" Remplissez aussi la partie « "+esc(QC[qk].label)+" » de Nos envies pour une note plus juste.":""}</div>`}
+  return `<div class="pr-details">
+    ${fi.confiance?`<div style="display:flex;gap:6px;flex-wrap:wrap"><span class="chip ${fi.confiance==="bonne"?"ok":fi.confiance==="moyenne"?"warn":""}">Confiance ${esc(fi.confiance)}</span></div>`:""}
+    ${fi.verdict?`<p style="font-size:16px;margin:0">${esc(fi.verdict)}</p>`:`<div class="banner" style="margin:0">Pas encore analysé. Lancez l'analyse depuis l'onglet Prestataires (Outils), ou attendez le passage de demain matin.${tk&&!env().essentielFait(tk)?" Répondez aussi à l'essentiel de « "+esc(tileName(tk))+" » dans Nos envies pour une note plus juste.":""}</div>`}
     ${offre.length?`<div class="fsec"><h4>L'offre</h4><div class="kv">${offre.map(([k,val])=>`<div><span>${k}</span><b>${esc(val)}</b></div>`).join("")}</div>${v.note?`<p style="font-size:14px;color:var(--muted);margin:10px 0 0;white-space:pre-line;overflow-wrap:anywhere">${esc(v.note)}</p>`:""}</div>`:""}
-    ${devisSection(v)}
+    ${(v.devis||[]).length?"":devisSection(v)}
     ${crit}
     ${(fi.forces&&fi.forces.length)||(fi.vigilance&&fi.vigilance.length)?`<div class="fsec two"><div class="box-ok"><h4>Points forts</h4>${L(fi.forces)||'<span style="font-size:14px">—</span>'}</div><div class="box-bad"><h4>Points de vigilance</h4>${L(fi.vigilance)||'<span style="font-size:14px">—</span>'}</div></div>`:""}
     ${av.resume||av.note?`<div class="fsec"><h4>Avis en ligne${av.note?` · <span class="stars">★ ${esc(String(av.note).replace(".",","))}/5</span>`:""}${av.nombre?` · ${esc(av.nombre)} avis`:""}</h4>${av.resume?`<p style="margin:0;font-size:14px">${esc(av.resume)}</p>`:""}${srcs.length?`<div class="srcs">${srcs.map(s=>`<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.titre||(()=>{try{return new URL(s.url).hostname}catch(e){return "source"}})())}</a>`).join("")}</div>`:""}</div>`:""}
     <div class="fsec"><h4>Notes de visite</h4>${v.visitNotes?`<p class="vnotes">${esc(v.visitNotes)}</p>`:`<p class="plan-when" style="margin:0 0 8px">Après une visite ou un échange, notez vos impressions : l'IA recalcule la note avec ces informations de première main.</p>`}
       ${(v.fitRequestedAt||0)>((fi.updatedAt)||0)?`<p class="ai-pending">Nouvelle note en cours de calcul (1 à 2 minutes).</p>`:""}
       ${S.canWrite?`<button class="btn sm" data-act="editv" data-id="${v.id}">${v.visitNotes?"Modifier les notes de visite":"Ajouter des notes de visite"}</button>`:""}</div>
-    ${fi.questions&&fi.questions.length?`<div class="fsec"><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
+    ${v.questionsAPoser&&(v.questionsAPoser.questions||[]).length?`<div class="fsec" id="pr-questions"><h4>Vos questions à poser</h4><p class="plan-when" style="margin:0 0 6px">Préparées à partir de vos réponses de Nos envies (${esc(tileName(v.questionsAPoser.tuile))}).</p>${L(v.questionsAPoser.questions)}</div>`:""}
+    ${fi.questions&&fi.questions.length?`<div class="fsec" ${v.questionsAPoser&&(v.questionsAPoser.questions||[]).length?"":'id="pr-questions"'}><h4>Questions à leur poser</h4>${L(fi.questions)}</div>`:""}
     ${fi.updatedAt?`<p style="font-size:12px;color:var(--muted);margin:16px 0 0">Analyse du ${esc(fmtD(new Date(fi.updatedAt)))}</p>`:""}
-    ${ficheBrief(qk)}
+    ${ficheBrief(tk&&briefFor(tk)||TILE2BRIEF[tk])}
     <div class="acts">${v.mailUrl&&/^https:\/\/mail\.google\.com\//.test(v.mailUrl)?`<a class="btn ghost" href="${esc(v.mailUrl)}" target="_blank" rel="noopener">Ouvrir le mail</a>`:"<div></div>"}<div>${S.vendors.filter(x=>x.cat===v.cat).length>=2?`<button type="button" class="btn" data-act="compare" data-cat="${esc(v.cat)}" data-id="${v.id}">Comparer</button>`:""}<button type="button" class="btn primary" data-act="editv" data-id="${v.id}">Modifier</button></div></div>
-  </div></div>`;
+  </div>`;
 }
 
 /* ---------- Nos envies ---------- */
@@ -875,7 +951,8 @@ function inspGallery(c){
       :`<p class="plan-when" style="margin:0">Une photo vaut mieux qu'un long discours : montrez au coach un lieu, une déco ou une tenue qui vous plaît, il en tirera vos goûts et la gardera ici.</p>`}</div>`;
 }
 /* Briefs prestataires : fil rouge commun + un brief par métier, rédigés par l'agent (meta/briefs), exportés en PDF */
-const BRIEF_LABEL={lieu:"Lieu",traiteur:"Traiteur",photo:"Photographe",video:"Vidéaste",musique:"Musique",fleurs:"Fleurs et déco",tenues:"Tenues",alliances:"Alliances",beaute:"Coiffure et maquillage",papeterie:"Papeterie",transport:"Transport",ceremonie:"Cérémonie",hebergement:"Hébergement",enfants:"Enfants"};
+// Briefs par tuile (clés de tuile, en premier) ; anciennes clés gardées pour les briefs rédigés avant le nouveau questionnaire
+const BRIEF_LABEL=Object.assign(Object.fromEntries(TUILES.filter(t=>t.metiers.length||t.k==="ceremonie").map(t=>[t.k,FR_ENVIES.tuiles[t.k].nom])),{traiteur:"Traiteur",alliances:"Alliances",transport:"Transport",hebergement:"Hébergement",enfants:"Enfants"});
 function briefsState(){
   const b=S.briefs||{},now=Date.now();
   const failed=b.status==="erreur"&&(b.failedAt||0)>=(b.requestedAt||0);
@@ -892,13 +969,18 @@ function briefsPanel(c){
     <p class="plan-when" style="margin:0 0 12px">${running?"Le coach rédige vos briefs : un fil rouge commun puis un brief par prestataire. Environ deux minutes, vous recevrez une notification."
       :ready?`${esc(b.filRouge.titre||"")}${b.filRouge.titre?" · ":""}rédigés le ${esc(when)}.${stale?" Vos réponses ou vos inspirations ont changé depuis.":""} Le même fil rouge ouvre chaque brief : tous vos prestataires partent de la même vision.`
       :"Le coach compile vos réponses et vos inspirations en un fil rouge commun (ambiance, palette, matières, ce que vous ne voulez pas), puis en un brief par prestataire, avec les questions à leur poser. À envoyer en PDF avant chaque échange."}</p>
-    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
+    ${c===null&&S.briefPrive?`<p class="plan-when" style="margin:0 0 8px"><button class="chip" data-act="briefpdf" data-c="${TUILE_SECRETE}">Ma tenue (secret)</button> Le brief de votre tenue, que ${esc(prenomDe2(autreKey()))} ne voit pas.</p>`:""}
+    <div class="briefs-acts">${ready?`<button class="btn primary" data-act="briefpdf" data-c="all">Tous les briefs (PDF)</button>${c===null?Object.keys(BRIEF_LABEL).filter(k=>b.categories[k]&&!briefPriveDe(k)).map(k=>`<button class="chip" data-act="briefpdf" data-c="${k}">${esc(BRIEF_LABEL[k])}</button>`).join(""):""}${one?`<button class="btn" data-act="briefpdf" data-c="${c}">Brief ${esc(BRIEF_LABEL[c])}</button>`:""}`:""}
       ${failed?`<p class="brief-err">La rédaction a échoué : ${esc(/credit balance/i.test(b.lastError||"")?"le crédit Claude est épuisé (à recharger sur console.anthropic.com).":b.lastError||"erreur inconnue.")} Vous pouvez réessayer.</p>`:""}
       ${S.canWrite?`<button class="${ready?"link":"btn primary"}" data-act="briefsgo" ${dis}>${running?"Rédaction en cours…":ready?"Mettre à jour les briefs":"Préparer les briefs"}</button>`:""}</div></div>`;
 }
 // Briefs là où l'on contacte les prestataires : dans la fiche (brief du métier) et en tête de la page Prestataires (tous)
 function ficheBrief(qk){
   if(!qk||!BRIEF_LABEL[qk])return "";
+  if(qk===TUILE_SECRETE&&!secretLeve()){const {b,running}=briefTenueState();
+    return `<div class="fsec fiche-brief"><h4>Brief à lui envoyer</h4>${b?`<button class="btn" data-act="briefpdf" data-c="${qk}">Brief de ma tenue (PDF)</button>`
+      :running?`<p class="plan-when" style="margin:0">Le coach rédige le brief de votre tenue : environ une minute.</p>`
+      :S.canWrite?`<p class="plan-when" style="margin:0 0 8px">Le brief résume vos envies de tenue, avec les questions à poser. ${esc(prenomDe2(autreKey()))} ne le verra pas.</p><button class="btn" data-act="brieftenue">Préparer mon brief tenue</button>`:""}</div>`}
   const {b,running,ready}=briefsState(),one=ready&&b.categories[qk];
   return `<div class="fsec fiche-brief"><h4>Brief à lui envoyer</h4>${one?`<button class="btn" data-act="briefpdf" data-c="${qk}">Brief ${esc(BRIEF_LABEL[qk])} (PDF)</button>`
     :running?`<p class="plan-when" style="margin:0">Le coach rédige vos briefs : environ deux minutes.</p>`
@@ -910,7 +992,7 @@ function openDocsMenu(){
   document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Documents à partager"><h3>Documents à partager</h3>
     ${briefsPanel(null)}
     <div class="docs-list">
-      <div class="doc-row"><div><b>Déroulé du jour J</b><span>${rows?`${rows} étape${rows>1?"s":""}, pour les témoins et les prestataires`:"Ajoutez d'abord les étapes dans Jour J"}</span></div>${rows?`<button class="btn sm" data-act="pdfjourj">PDF</button>`:`<button class="btn sm" data-go="jour-j">Ouvrir</button>`}</div>
+      <div class="doc-row"><div><b>Déroulé du jour J</b><span>${rows?`${rows} moment${rows>1?"s":""}, pour les témoins et les prestataires`:"Ajoutez d'abord les moments dans Jour J"}</span></div>${rows?`<button class="btn sm" data-act="pdfjourj">PDF</button>`:`<button class="btn sm" data-go="jour-j">Ouvrir</button>`}</div>
       <div class="doc-row"><div><b>Rapport d'organisation</b><span>Planning, budget, prestataires et invités en un document</span></div><button class="btn sm" data-act="pdfreport">PDF</button></div>
     </div>
     <div class="acts"><div></div><div><button type="button" class="btn" data-close="1">Fermer</button></div></div></div></div>`;
@@ -921,26 +1003,34 @@ function openBriefsMenu(){
 }
 const insp64=x=>x.thumb?"data:image/jpeg;base64,"+x.thumb:null;
 function briefBlocks(k){
-  const b=S.briefs,x=b.categories[k];if(!x)return [];
+  const x=briefCat(k),prive=!!briefPriveDe(k);if(!x)return [];
   // budget : seulement le « budget cible » que vous avez choisi d'indiquer dans Nos envies (jamais vos lignes de budget)
-  const m=bMeta(k),bud=num(m.budget);
+  const m=prive?{}:Object.assign({},bMeta(k),env().metaOf(OLD2TILE[k]||k)),bud=num(m.budget);
   const d=wDate(),st=S.settings;
   const list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
-  const imgs=S.inspirations.filter(i=>i.cat===k&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  // brief de ma tenue : mes seules photos, à la première personne, sans invités ni budget
+  const imgs=S.inspirations.filter(i=>(i.cat===k||inspTile(i)===(OLD2TILE[k]||k))&&i.thumb&&(!prive||i._prive)).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
+  const kd=[["Date",d?fmtD(d):"à fixer",d&&st.dateIndicative?"indicative, à confirmer":""],["Lieu",st.lieu||"à définir",st.ville||""]];
+  if(prive)return [{h2:"Brief · Tenue de "+prenom()},{kpis:kd},
+    {p:x.intention},...list("Mes essentiels",x.essentiels),...list("Ma tenue, dans le détail",x.details),...list("Ce que je ne veux pas",x.aEviter),
+    ...list("En accord avec notre mariage",x.liens),...list("Mes questions pour vous",x.questions),
+    ...(imgs.length?[{h3:"Mes inspirations"},{imgs}]:[])];
   return [{h2:"Brief · "+BRIEF_LABEL[k]},
-    {kpis:[["Date",d?fmtD(d):"à fixer",d&&st.dateIndicative?"indicative, à confirmer":""],["Lieu",st.lieu||"à définir",st.ville||""],["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
+    {kpis:[...kd,["Invités",st.invitesCible?String(st.invitesCible):"—","nombre visé"],["Budget",bud?eur(bud):"à discuter",bud?"budget cible":""]]},
     {p:x.intention},...list("Nos essentiels",x.essentiels),...list("L'ambiance, dans le détail",x.details),...list("Ce que nous ne voulons pas",x.aEviter),
     ...list("En accord avec nos autres prestataires",x.liens),...list("Nos questions pour vous",x.questions),
     ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
 }
 function filRougeBlocks(){
-  const f=S.briefs.filRouge||{},list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
+  const f=(S.briefs||{}).filRouge||{},list=(h,a)=>a&&a.length?[{h3:h},{ul:a}]:[];
   const imgs=S.inspirations.filter(i=>i.cat==="vision"&&i.thumb).slice(0,6).map(i=>({data:insp64(i),caption:i.description}));
   return [{h2:"Notre fil rouge"},...(f.titre?[{h3:f.titre}]:[]),{p:f.ambiance||""},...(f.motsCles&&f.motsCles.length?[{tags:f.motsCles}]:[]),
     ...list("Palette",f.palette),...list("Matières et textures",f.matieres),...list("L'expérience de nos invités",f.experience),...list("Ce que nous ne voulons surtout pas",f.aEviter),
     ...(imgs.length?[{h3:"Nos inspirations"},{imgs}]:[])];
 }
 function pdfBriefs(k){
+  if(briefPriveDe(k)){const fr=(S.briefs||{}).filRouge?filRougeBlocks():[];if(fr.length)fr[0]={h2:"Notre vision d'ensemble du mariage"};
+    return makePdf(`Brief tenue - ${prenom()}.pdf`,{docTitle:"Brief · Tenue de "+prenom(),blocks:[...briefBlocks(k).slice(1),...fr]})}
   const b=S.briefs;if(!b||!b.categories)return;
   if(k==="all"){const ks=Object.keys(BRIEF_LABEL).filter(x=>b.categories[x]);
     return makePdf(`Briefs prestataires - ${COUPLE()}.pdf`,{docTitle:"Nos briefs prestataires",blocks:[...filRougeBlocks(),...ks.flatMap(x=>[{page:true},...briefBlocks(x)])]})}
@@ -948,77 +1038,85 @@ function pdfBriefs(k){
   const fr=filRougeBlocks();fr[0]={h2:"Notre vision d'ensemble (commune à tous nos prestataires)"};
   makePdf(`Brief ${BRIEF_LABEL[k]} - ${COUPLE()}.pdf`,{docTitle:"Brief · "+BRIEF_LABEL[k],blocks:[...briefBlocks(k).slice(1),...fr]});
 }
-function vEnvies(){
-  const c=QC[S.f.bcat]?S.f.bcat:"vision",cat=QC[c],m=bMeta(c),dis=S.canWrite?"":"disabled";
+/* Onglet « Nos envies » : écrans dans src/envies-ui.js, catalogue et règles dans agents/lib/envies (docs/nos-envies-v1.md) */
+let ENV=null;
+const env=()=>ENV||(ENV=makeEnvies({S,esc,toast,headTop:envHeadTop,secretLeve,leverSecret,autreKey,prenomAutre:()=>prenomDe2(autreKey()),meKey:()=>PARTNER[String(S.user&&S.user.email||"").toLowerCase()]||"claire",prenom,tintOf,wDate,today,couplePhrase,
+  briefTenue:()=>briefTenueState(),briefsReadyCount:()=>{const {b,ready}=briefsState();return ready?Object.keys(b.categories).length:0},briefFor,fitPill,synthHtml,archivedAnswers,moodboard,
+  pickPhoto:pickEnviePhoto,dictate,saveEnvie,render,go,saveF,SR,CHEV,BACK_SVG,runReward,saveDoc:(path,data)=>mergeDoc(path,data)}));
+// Récompense de fin de niveau (agent « recompense » côté serveur) ; si l'appel échoue, le passage suivant des agents la reprend
+async function runReward(tuile,niveau){
+  if(!S.canWrite)return;
+  await mergeDoc(`recompenses/${tuile}.${niveau}`,{tuile,niveau,status:"demandee",requestedAt:Date.now(),erreur:null});
+  // tuile Tenues : la récompense est rédigée dans mon espace privé, à partir de mes seules réponses
+  const pour=tuile===TUILE_SECRETE&&(!secretLeve()||niveau==="details")?MOI():undefined; // le brief tenue reste toujours privé
+  runAgentNow("recompense",{tuile,niveau,...(pour?{pour}:{})}).catch(()=>{});
+}
+function vEnvies(){return env().vEnvies()}
+// Brief déjà rédigé (catégories de l'agent briefs) correspondant à une tuile
+const TILE2BRIEF={lieu:"lieu",repas:"traiteur",cocktail:"traiteur",photo:"photo",video:"video",musique:"musique",fleurs:"fleurs",papeterie:"papeterie",tenues:"tenues",beaute:"beaute",ceremonie:"ceremonie",officiant:"ceremonie",invites:"hebergement"};
+function briefFor(k){if((TILE2BRIEF[k]||k)===TUILE_SECRETE&&S.briefPrive)return TUILE_SECRETE;
+  const {b,ready}=briefsState();if(!ready)return null;if(b.categories[k])return k;const c=TILE2BRIEF[k];return c&&b.categories[c]?c:null}
+// tenue secrète : brief de mon espace privé (jamais celui de l'autre, jamais dans meta/briefs)
+const briefPriveDe=k=>k===TUILE_SECRETE&&S.briefPrive?S.briefPrive:null;
+const briefCat=k=>briefPriveDe(k)||(S.briefs&&S.briefs.categories||{})[k];
+function briefTenueState(){const b=S.briefPrive,now=Date.now(),r=+S.ui.briefTenueAt||0;return {b,running:r>(b&&b.updatedAt||0)&&now-r<10*60000}}
+async function demanderBriefTenue(){if(!S.canWrite||briefTenueState().running)return;S.ui.briefTenueAt=Date.now();render();
+  toast(`Le coach rédige le brief de votre tenue : environ une minute. ${prenomDe2(autreKey())} ne le verra pas.`);
+  try{const r=await runAgentNow("brieftenue");if(r&&r.ok===false)throw new Error(r.erreur)}catch(e){S.ui.briefTenueAt=0;toast("Le brief n'a pas pu être rédigé : "+(e.message||"erreur"));render()}}
+function fitPill(v){const fi=v.fit||{},sc=fi.score!=null?Math.round(fi.score):null;return sc!=null?`<span class="fit-pill ${fitCls(sc)} num" title="Note de fit sur 100">${sc}<small>/100</small></span>`:`<span class="fit-pill none">à analyser</span>`}
+// Réponses des questions archivées lors du passage au nouveau questionnaire (docs/nos-envies-correspondance.md)
+const ARCHIVED=["vision--invites","vision--periode","vision--craintes","traiteur--budgetpp","tenues--budget","alliances--artisan"];
+function archivedAnswers(){return ARCHIVED.map(id=>{const d=S.brief.find(x=>x.id===id);if(!d)return null;const [c,q]=id.split("--"),Q=(QC[c]?.qs||[]).find(x=>x[0]===q);
+  const r=[Array.isArray(d.choix)?d.choix.join(", "):"",d.commun,d.claire,d.julien].filter(x=>x&&String(x).trim()).join(" · ");return r&&Q?{q:Q[2],r}:null}).filter(Boolean)}
+// Enregistre une réponse de « Nos envies » (fields : champs remplacés en entier, le reste du document est gardé)
+async function saveEnvie(id,data,fields){
+  if(!S.db||!S.canWrite)return false;
+  // question secrète (tenue) : ma réponse va dans mon espace privé, jamais dans le document commun
+  if(questionSecrete(id)&&!secretLeve()){
+    const me=MOI(),mine=Object.assign({},(data.p&&data.p[me])||{},data.extra?{extra:data.extra}:{});
+    try{await S.db.doc(`${chemin(me,"envies")}/${id}`).set(Object.assign(mine,{updatedAt:Date.now()}),{merge:true});return true}catch(e){return writeErr(e)}
+  }
+  try{await S.db.collection("envies").doc(id).set(Object.assign({},data,{by:String(S.user&&S.user.email||""),updatedAt:Date.now()}),{mergeFields:fields});
+    // la synthèse du coach se refait après quelques minutes de calme (profilDue), pas à chaque réponse
+    clearTimeout(saveEnvie.t);saveEnvie.t=setTimeout(()=>mergeDoc("meta/analyse",{profilRequestedAt:Date.now()}),4000);return true}catch(e){return writeErr(e)}
+}
+// Photo ajoutée depuis une tuile ou une question : rangée dans les inspirations de la tuile
+function pickEnviePhoto(k,label){
+  const inp=document.createElement("input");inp.type="file";inp.accept="image/*";
+  inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;try{const img=await loadImage(f),th=await resizeJpeg(img,480,.72);
+    if(await save("inspirations",null,{cat:k,description:label||"",thumb:await b64Of(th),by:prenom()||"",source:"envies"}))toast("Photo ajoutée à vos inspirations")}catch(e){toast("Photo illisible")}};
+  inp.click();
+}
+// Dictée dans un champ texte (même principe que la dictée du coach)
+function dictate(btn,ta){
+  if(!SR)return;if(btn._rec){btn._rec.stop();return}
+  const base=ta.value.trim(),r=new SR();r.lang="fr-FR";r.interimResults=true;r.continuous=false;
+  r.onresult=e=>{let t="";for(const x of e.results)t+=x[0].transcript;ta.value=(base?base+" ":"")+t;ta.dispatchEvent(new Event("input",{bubbles:true}))};
+  r.onend=()=>{btn._rec=null;btn.classList.remove("rec")};r.onerror=e=>{if(e.error==="not-allowed")toast("Autorisez le micro pour dicter")};
+  btn._rec=r;btn.classList.add("rec");r.start();
+}
+function synthHtml(){
   const pr=S.profil||{};
-  const qhtml=cat.qs.map(([id,type,q,opts],i)=>{
-    const a=bGet(c,id),done=answered(a),base=`search-q-${c}-${id}`;
-    const choix=Array.isArray(a.choix)?a.choix:[];
-    const chips=opts?`<div class="opts" role="group" aria-label="${esc(q)}">${opts.map(o=>`<button class="opt" data-bchip="${c}|${id}|${type}" data-o="${esc(o)}" aria-pressed="${choix.includes(o)}" ${dis}>${esc(o)}</button>`).join("")}</div>`:"";
-    const main=`<textarea autocomplete="off" name="search_text" id="${base}-commun" data-bq="${c}|${id}|commun" placeholder="${opts?"Une précision ?":"Votre réponse commune…"}" ${opts?'style="min-height:44px"':""} ${dis}>${esc(a.commun||"")}</textarea>`;
-    const duo=a.desaccord?`<div class="duo"><div class="field"><span style="color:var(--claire)">${esc(P1())}</span><textarea autocomplete="off" name="search_text" id="${base}-claire" data-bq="${c}|${id}|claire" ${dis}>${esc(a.claire||"")}</textarea></div><div class="field"><span style="color:var(--julien)">${esc(P2())}</span><textarea autocomplete="off" name="search_text" id="${base}-julien" data-bq="${c}|${id}|julien" ${dis}>${esc(a.julien||"")}</textarea></div></div>`:"";
-    return `<div class="q ${done?"done":""}"><label class="ql" for="${base}-commun"><span class="n">${i+1}.</span><span>${esc(q)}</span></label>${chips}${main}
-      <label class="diff"><input type="checkbox" id="${base}-dz" data-bq="${c}|${id}|desaccord" ${a.desaccord?"checked":""} ${dis}> Nos avis diffèrent</label>${duo}</div>`;
-  }).join("");
-  const metaH=c==="vision"?"":`<div class="q"><div class="ql" style="font-weight:500">Pour conclure sur ${esc(cat.label.toLowerCase())}</div>
-    <div class="field"><span class="lab">Importance pour vous</span><div class="seg" role="group">${IMPORT.map((l,i)=>`<button data-bimp="${c}|${i+1}" aria-pressed="${m.importance===i+1}" ${dis}>${l}</button>`).join("")}</div></div>
-    <div class="duo"><div class="field"><label for="search-q-${c}-_m-budget" class="lab">Budget cible (€)</label><input type="number" min="0" step="50" inputmode="numeric" id="search-q-${c}-_m-budget" data-bm="${c}|budget" value="${esc(m.budget??"")}" ${dis}></div><div></div></div>
-    <div class="field"><label for="search-q-${c}-_m-reussite" class="lab">Ce qui en fera une vraie réussite</label><textarea autocomplete="off" name="search_text" id="search-q-${c}-_m-reussite" data-bm="${c}|reussite" ${dis}>${esc(m.reussite||"")}</textarea></div>
-    <div class="field"><label for="search-q-${c}-_m-redhibitoire" class="lab">Ce qui serait rédhibitoire</label><textarea autocomplete="off" name="search_text" id="search-q-${c}-_m-redhibitoire" data-bm="${c}|redhibitoire" ${dis}>${esc(m.redhibitoire||"")}</textarea></div></div>`;
   const synth=pr.resume?`<div class="synth"><div class="panel-h"><h3>Ce que nous retenons de vous</h3>${pr.completude!=null?`<span class="chip ${pr.completude>=70?"ok":"warn"} num">Brief complet à ${Math.round(pr.completude)} %</span>`:""}</div>
     <p>${esc(pr.resume)}</p>
     ${Array.isArray(pr.divergences)&&pr.divergences.length?`<h3 class="sec" style="margin-top:14px">Points à aligner entre vous</h3>${pr.divergences.map(d=>`<div class="dv"><b>${esc(d.sujet||"")}</b>${d.claire?`<div><span style="color:var(--claire);font-weight:500">${esc(P1())} :</span> ${esc(d.claire)}</div>`:""}${d.julien?`<div><span style="color:var(--julien);font-weight:500">${esc(P2())} :</span> ${esc(d.julien)}</div>`:""}${d.conseil?`<div style="color:var(--muted)">${esc(d.conseil)}</div>`:""}</div>`).join("")}`:""}
     ${Array.isArray(pr.questionsOuvertes)&&pr.questionsOuvertes.length?`<h3 class="sec" style="margin-top:14px">Ce qu'il nous manque pour bien choisir</h3><ul class="blist">${pr.questionsOuvertes.map(q=>`<li>${esc(q)}</li>`).join("")}</ul>`:""}</div>`:"";
-  const tot=allProg(),tab=["mood","quest","synth"].includes(S.f.envTab)?S.f.envTab:(S.inspirations.length?"mood":"quest");
-  const fr=(S.briefs||{}).filRouge||{},anyAns=S.brief.some(d=>answered(d));
-  const firstSentence=t=>String(t||"").split(/(?<=[.!?])\s/)[0];
-  const hero=`<div class="env-hero"><div class="eh-top"><div style="min-width:0"><span class="eh-k">Nos envies</span><h2>${esc(fr.titre||"Votre mariage, en images et en mots")}</h2>
-      ${fr.motsCles&&fr.motsCles.length?`<div class="eh-tags">${fr.motsCles.slice(0,5).map(x=>`<span>${esc(x)}</span>`).join("")}</div>`:`<p>${esc(pr.resume?firstSentence(pr.resume):"Tout ce qui fait votre mariage au même endroit : vos photos coup de cœur, vos réponses au coach et ce qu'il en retient pour vos prestataires.")}</p>`}</div>
-      <div class="eh-ring" title="Questionnaire rempli à ${Math.round(tot*100)} %">${ring(tot,"var(--gold)")}</div></div>
-    ${S.canWrite?`<div class="eh-acts"><button class="btn eh-main" data-act="chatcat" data-c="">${anyAns?"Continuer avec le coach":"Parler au coach"}</button><button class="btn eh-ghost" data-act="inspadd">+ Photo</button></div>`:""}</div>`;
-  const nI=S.inspirations.length;
-  const tabs=`<div class="seg env-tabs" role="tablist" aria-label="Nos envies">${[["mood",`Moodboard${nI?` <span class="num">${nI}</span>`:""}`],["quest",`Questions <span class="num">${Math.round(tot*100)} %</span>`],["synth","Synthèse"]].map(([k,l])=>`<button role="tab" data-act="envtab" data-v="${k}" aria-selected="${tab===k}" aria-pressed="${tab===k}">${l}</button>`).join("")}</div>`;
-  let body="";
-  if(tab==="mood")body=moodboard();
-  else if(tab==="synth")body=`${analyseBar("envies")}${synth||`<div class="synth"><p class="plan-when" style="margin:0">La synthèse du coach apparaîtra ici dès que vous aurez répondu à quelques questions : vos priorités, vos points d'accord et ce qu'il reste à trancher.</p></div>`}${briefsPanel(null)}`;
-  else if(!S.f.bcatOpen)body=questGrid();
-  else{
-    const i=QCATS.findIndex(x=>x.k===c),p=catProg(c);
-    body=`<div class="env-detail"><button class="link env-back" data-act="envgrid">${BACK_SVG}<span>Toutes les catégories</span></button>
-      <div class="env-head"><h3>${esc(cat.label)}</h3><p>${esc(cat.intro)}</p><div class="eh-prog"><span class="pbar"><i style="width:${p.p*100}%"></i></span><span>${p.n}/${p.t} réponses</span></div></div>
-      ${inspStrip(c)}
-      ${briefsState().ready&&S.briefs.categories[c]?`<div class="env-brief"><span>Le brief « ${esc(BRIEF_LABEL[c])} » est prêt à envoyer à vos prestataires.</span><button class="btn sm" data-act="briefpdf" data-c="${c}">Brief PDF</button></div>`:""}
-      ${S.canWrite?`<div class="chat-cta"><div><b>Plus simple : en discutant</b><span>Le coach vous pose les questions de « ${esc(cat.label)} » une par une et remplit pour vous.</span></div><button class="btn primary" data-act="chatcat" data-c="${c}">Remplir avec le coach</button></div>`:""}
-      <div class="qs">${qhtml}${metaH}</div>
-      <div class="env-pn">${i>0?`<button class="btn" data-bcat="${QCATS[i-1].k}">← ${esc(QCATS[i-1].label)}</button>`:"<span></span>"}${i<QCATS.length-1?`<button class="btn primary" data-bcat="${QCATS[i+1].k}">${esc(QCATS[i+1].label)} →</button>`:""}</div></div>`;
-  }
-  return `${hero}${tabs}<div class="env-body">${body}</div>`;
+  return `${analyseBar("envies")}${synth||`<div class="synth"><p class="plan-when" style="margin:0">La synthèse du coach apparaîtra ici dès que vous aurez répondu à quelques questions : vos priorités, vos points d'accord et ce qu'il reste à trancher.</p></div>`}${briefsPanel(null)}`;
 }
 /* Moodboard : toutes les inspirations en mur de photos, filtrables par catégorie ; un toucher ouvre la photo en grand */
 const inspSorted=()=>S.inspirations.slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-const moodList=()=>{const f=S.f.moodCat||"all";return inspSorted().filter(x=>f==="all"||x.cat===f)};
+// Les inspirations sont rangées par tuile de « Nos envies » (anciennes catégories traduites à l'affichage)
+const inspTile=x=>env().inspTile(x),tileName=k=>env().tName(k);
+const moodList=()=>{const f=S.f.moodCat||"all";return inspSorted().filter(x=>f==="all"||inspTile(x)===f)};
 function moodboard(){
-  const all=inspSorted(),f=QC[S.f.moodCat]?S.f.moodCat:"all",list=moodList();
+  const all=inspSorted(),f=TUILES.some(t=>t.k===S.f.moodCat)?S.f.moodCat:"all",list=moodList();
   if(!all.length)return `<div class="mood-empty"><b>Votre moodboard est vide</b><p>Ajoutez une photo de lieu, de déco, de tenue ou de fleurs qui vous plaît : le coach la décrit, en tire vos goûts et la range ici. Vous pouvez aussi relier un tableau Pinterest.</p>
     ${S.canWrite?`<div class="eh-acts"><button class="btn primary" data-act="inspadd">Ajouter une photo</button><button class="btn" data-go="reglages-ia">Relier Pinterest</button></div>`:""}</div>`;
-  const cats=QCATS.filter(q=>all.some(x=>x.cat===q.k));
-  const chips=`<div class="mood-f" role="group" aria-label="Filtrer par catégorie"><button class="chip" data-act="moodcat" data-v="all" aria-pressed="${f==="all"}">Tout · ${all.length}</button>${cats.map(q=>`<button class="chip" data-act="moodcat" data-v="${q.k}" aria-pressed="${f===q.k}">${esc(q.label)} · ${all.filter(x=>x.cat===q.k).length}</button>`).join("")}</div>`;
-  const tiles=list.map(x=>`<button class="mood-i" data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"><span class="mood-c">${esc((QC[x.cat]||{}).label||"")}${x.source==="pinterest"?" · Pinterest":""}</span></button>`).join("");
+  const cats=TUILES.filter(t=>all.some(x=>inspTile(x)===t.k));
+  const chips=`<div class="mood-f" role="group" aria-label="Filtrer par tuile"><button class="chip" data-act="moodcat" data-v="all" aria-pressed="${f==="all"}">Tout · ${all.length}</button>${cats.map(t=>`<button class="chip" data-act="moodcat" data-v="${t.k}" aria-pressed="${f===t.k}">${esc(tileName(t.k))} · ${all.filter(x=>inspTile(x)===t.k).length}</button>`).join("")}</div>`;
+  const tiles=list.map(x=>`<button class="mood-i" data-act="inspopen" data-id="${x.id}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"><span class="mood-c">${esc(tileName(inspTile(x)))}${x.source==="pinterest"?" · Pinterest":""}</span></button>`).join("");
   return `${chips}<div class="mood">${S.canWrite?`<button class="mood-add" data-act="inspadd"><span aria-hidden="true">+</span>Ajouter une photo</button>`:""}${tiles}</div>
     <p class="plan-when mood-n">Touchez une photo pour la voir en grand, la changer de catégorie ou en parler au coach.${S.pinterest&&(S.pinterest.boards||[]).length?"":` <button class="link" data-go="reglages-ia">Relier un tableau Pinterest</button>`}</p>`;
-}
-function inspStrip(c){
-  const list=inspSorted().filter(x=>x.cat===c);
-  if(!list.length&&!S.canWrite)return "";
-  return `<div class="strip-insp"><div class="insp-h"><h3>Inspirations${list.length?` · ${list.length}`:""}</h3></div><div class="strip-row">
-    ${S.canWrite?`<button class="mood-add sm" data-act="inspadd"><span aria-hidden="true">+</span>Photo</button>`:""}
-    ${list.map(x=>`<button class="strip-i" data-act="inspopen" data-id="${x.id}" data-scope="${c}" aria-label="${esc(x.description||"Inspiration")}"><img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy"></button>`).join("")}
-    ${!list.length?`<p class="plan-when" style="margin:0;align-self:center">Une photo vaut mieux qu'un long discours : montrez au coach ce qui vous plaît.</p>`:""}</div></div>`;
-}
-function questGrid(){
-  return `<div class="qcats">${QCATS.map(q=>{const p=catProg(q.k),m=bMeta(q.k),th=inspSorted().filter(x=>x.cat===q.k).slice(0,3);
-    return `<button class="qcat ${p.p>=1?"done":""}" data-bcat="${q.k}"><span class="qcat-img ${th.length?"":"none"}">${th.length?th.map(x=>`<img src="data:image/jpeg;base64,${x.thumb}" alt="" loading="lazy">`).join(""):`<span>${esc(q.label.charAt(0))}</span>`}</span>
-      <span class="qcat-b"><b>${esc(q.label)}</b><span class="qcat-s">${p.p>=1?"Complet":`${p.n}/${p.t} réponses`}${m.importance>=4?` · ${esc(IMPORT[m.importance-1])}`:""}</span><span class="pbar"><i style="width:${p.p*100}%"></i></span></span></button>`}).join("")}</div>`;
 }
 /* Visionneuse d'une inspiration : grande photo, description, catégorie, source, en parler au coach */
 function openInsp(id,scope){
@@ -1028,7 +1126,7 @@ function openInsp(id,scope){
     <div class="lb-img"><img src="data:image/jpeg;base64,${x.thumb}" alt="${esc(x.description||"")}">${nav(-1,"Photo précédente")}${nav(1,"Photo suivante")}</div>
     <p class="lb-n">${i+1} / ${list.length}${x.by?` · ${esc(x.by)}`:""}${x.pinUrl?` · <a href="${esc(x.pinUrl)}" target="_blank" rel="noopener noreferrer">Voir sur Pinterest</a>`:""}</p>
     <p class="lb-d">${esc(x.description||"")}</p>
-    ${S.canWrite?`<div class="field"><label for="search-insp-cat">Catégorie</label><select id="search-insp-cat" data-inspcat="${x.id}">${QCATS.map(q=>`<option value="${q.k}" ${q.k===x.cat?"selected":""}>${esc(q.label)}</option>`).join("")}</select></div>
+    ${S.canWrite?`<div class="field"><label for="search-insp-cat">Tuile</label><select id="search-insp-cat" data-inspcat="${x.id}">${TUILES.map(t=>`<option value="${t.k}" ${t.k===inspTile(x)?"selected":""}>${esc(tileName(t.k))}</option>`).join("")}</select></div>
     <div class="lb-acts"><button class="btn primary" data-act="inspask" data-id="${x.id}">En parler au coach</button><button class="link" data-act="inspdel" data-id="${x.id}">Retirer</button></div>`:""}</div></div>`;
 }
 /* ---------- Day-of ---------- */
@@ -1129,9 +1227,9 @@ async function acceptSug(id,quiet){
     if(p.prix!=null)data.prix=num(p.prix);if(p.acompte!=null)data.acompte=num(p.acompte);if(p.dateAcompte)data.dateAcompte=p.dateAcompte;if(p.dateSolde)data.dateSolde=p.dateSolde;
     // un devis reçu rejoint l'historique des devis de la fiche (le plus récent en premier)
     const entry=s.type==="quote"&&p.prix!=null?devisFromMail(s,p):null;
-    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&VSTAT_RANK[v.status]<3)upd.status="devis";
+    if(v){const upd={};Object.keys(data).forEach(k=>{if(data[k]!==""&&data[k]!=null)upd[k]=data[k]});if(s.type==="quote"&&etapeOf(v)==="repere")upd.status="discussion"; // un devis reçu : « En discussion »
       if(entry){upd.devis=[entry,...(v.devis||[]).filter(d=>d.id!==entry.id)].slice(0,12);upd.updatedAt=Date.now()}ok=await patch("vendors",v.id,upd)}
-    else ok=await save("vendors",null,Object.assign({status:s.type==="quote"?"devis":"contacte",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,entry?{devis:[entry]}:{},stamp));
+    else ok=await save("vendors",null,Object.assign({status:"discussion",acomptePaye:false,note:s.summary||"",mailUrl:s.threadUrl||""},data,entry?{devis:[entry]}:{},stamp));
   }else if(s.type==="task"){
     ok=await save("tasks",null,Object.assign({title:p.title||s.subject||"Tâche",phase:PH[p.phase]?p.phase:(currentPhase()||PHASES[0]).k,owner:OWNERS[p.owner]?p.owner:"deux",status:"todo",due:p.due||"",note:p.note||s.summary||"",order:999},stamp));
   }else if(s.type==="payment"){
@@ -1144,6 +1242,7 @@ async function acceptSug(id,quiet){
     const g=findGuest(p.name);
     const upd={};if(p.rsvp)upd.rsvp=p.rsvp;if(p.regime)upd.regime=p.regime;
     ok=g?await patch("guests",g.id,upd):await save("guests",null,Object.assign({name:p.name||s.from||"Invité",side:"commun",group:"",rsvp:p.rsvp||"attente",regime:p.regime||"",ceremonie:true,vin:true,diner:true,enfant:false},stamp));
+    if(ok&&g&&p.rsvp)iv().apresReponse(g.id,p.rsvp); // réponse rattachée au foyer : son étape suit (docs/invites-v1.md, 6)
   }
   if(ok){await patch("inbox",id,{status:"accepted",decidedAt:Date.now()});if(!quiet)toast("Ajouté")}
   return ok;
@@ -1182,7 +1281,7 @@ function pinterestPanel(){
   const m=S.pinterest||{},boards=m.boards||[],dis=S.canWrite?"":"disabled",running=(S.locks.pinterest||0)>Date.now()||((m.requestedAt||0)>(m.lastSyncAt||0)&&Date.now()-(m.requestedAt||0)<10*60000);
   const n=S.inspirations.filter(x=>x.source==="pinterest").length;
   const last=m.lastSyncAt?`Dernière synchronisation ${relDay(new Date(m.lastSyncAt))} à ${new Date(m.lastSyncAt).toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"})}${m.lastImported!=null?` · ${m.lastImported} nouvelle${m.lastImported>1?"s":""} épingle${m.lastImported>1?"s":""}`:""}${m.remaining?` · ${m.remaining} en attente (prochain passage)`:""}.`:"Jamais synchronisé.";
-  const opts=c=>`<option value="auto" ${!c||c==="auto"?"selected":""}>Rangement automatique</option>${QCATS.map(q=>`<option value="${q.k}" ${c===q.k?"selected":""}>${esc(q.label)}</option>`).join("")}`;
+  const opts=c=>{const t=c&&c!=="auto"?(OLD2TILE[c]||c):"auto";return `<option value="auto" ${t==="auto"?"selected":""}>Rangement automatique</option>${TUILES.map(x=>`<option value="${x.k}" ${t===x.k?"selected":""}>${esc(tileName(x.k))}</option>`).join("")}`};
   return `<div class="formpanel" style="margin-top:8px" id="pinterest"><div class="panel-h" style="margin-bottom:6px"><h3>Tableaux Pinterest</h3>${n?`<span class="chip ok">${n} épingle${n>1?"s":""} importée${n>1?"s":""}</span>`:""}</div>
     <p class="plan-when" style="margin:0 0 12px">Sur Pinterest, ouvrez un tableau <b>public</b>, touchez « Partager » puis « Copier le lien » et collez-le ici. Ses nouvelles épingles arrivent dans vos inspirations (Nos envies), décrites et rangées par catégorie par le coach, puis nourrissent votre fil rouge et vos briefs. Synchronisation chaque jour, 12 épingles au plus par passage.</p>
     ${boards.length?`<div class="pin-list">${boards.map((b,i)=>`<div class="pin-row"><div class="pin-t"><a href="${esc(b.url)}" target="_blank" rel="noopener noreferrer">${esc(pinName(b.url))}</a></div>
@@ -1244,15 +1343,17 @@ function vReglages(){
 
 /* ---------- Documents PDF (impression du navigateur : « Enregistrer en PDF » ou partager) ---------- */
 // Fabrique un vrai PDF (module chargé à la demande) puis propose de le partager / l'enregistrer.
+// Le fichier PDF seul (sans fenêtre), pour le joindre à un partage (fiches prestataires du jour J)
+async function pdfFile(name,spec){
+  const {buildPdf}=await import("./pdf.js");
+  const st=S.settings,d=wDate();
+  const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase())+(st.dateIndicative?" (date indicative, à confirmer)":""):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
+    footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
+  return new File([blob],name,{type:"application/pdf"});
+}
 async function makePdf(name,spec){
   toast("Préparation du PDF…");
-  try{
-    const {buildPdf}=await import("./pdf.js");
-    const st=S.settings,d=wDate();
-    const blob=await buildPdf(Object.assign({title:COUPLE(" & "),subtitle:[d?fmtLong(d).replace(/^./,c=>c.toUpperCase())+(st.dateIndicative?" (date indicative, à confirmer)":""):"",[st.lieu,st.ville].filter(Boolean).join(", ")].filter(Boolean).join(" · "),
-      footer:`Généré le ${new Date().toLocaleDateString("fr-FR",{day:"numeric",month:"long",year:"numeric"})} depuis Lamaelle, l'app du mariage de ${COUPLE(" & ")}`},spec));
-    showPdf(new File([blob],name,{type:"application/pdf"}));
-  }catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
+  try{showPdf(await pdfFile(name,spec))}catch(e){console.error(e);toast("Le PDF n'a pas pu être créé")}
 }
 function showPdf(file){
   S.pdfFile=file;const url=URL.createObjectURL(file);
@@ -1273,7 +1374,7 @@ function pdfJourJ(){
 }
 function pdfReport(){
   const st=S.settings,d=wDate(),tot=num(st.budgetTotal),pr=S.profil||{};
-  const sum=k=>S.budget.reduce((a,b)=>a+num(b[k]),0),prevu=sum("prevu"),engage=sum("engage"),paye=sum("paye");
+  const BC=budgetChiffres(),prevu=BC.prevu,engage=BC.signe,paye=BC.paye;
   const done=S.tasks.filter(t=>t.status==="done").length,late=S.tasks.filter(isLate);
   const next=S.tasks.filter(t=>t.status!=="done").sort((a,b)=>{const da=taskDue(a),db=taskDue(b);return (da?+da:9e15)-(db?+db:9e15)||byOrder(a,b)}).slice(0,12);
   const g=S.guests,yes=g.filter(x=>x.rsvp==="oui").length,no=g.filter(x=>x.rsvp==="non").length;
@@ -1282,13 +1383,13 @@ function pdfReport(){
   const al=alerts(),rdv=S.rdv.filter(r=>r.date&&pd(r.date)>=today()).sort((a,b)=>a.date.localeCompare(b.date));
   const n=d?days(today(),d):null;
   const blocks=[
-    {kpis:[["Jour J",n!=null?`J-${n}`:"—",d?fmtD(d):"date à fixer"],["Préparation",`${done}/${S.tasks.length}`,late.length?`${late.length} en retard`:"rien en retard"],["Budget",tot?eur(tot):"—",`${eur(prevu)} prévus · ${eur(engage)} engagés`],["Invités",String(g.length),`${yes} présents · ${g.length-yes-no} en attente`]]},
+    {kpis:[["Jour J",n!=null?`J-${n}`:"—",d?fmtD(d):"date à fixer"],["Préparation",`${done}/${S.tasks.length}`,late.length?`${late.length} en retard`:"rien en retard"],["Budget",tot?eur(tot):"—",`${eur(prevu)} prévus · ${eur(engage)} signés`],["Invités",String(g.length),`${yes} présents · ${g.length-yes-no} en attente`]]},
   ];
   if(pr.resume){blocks.push({h2:"La synthèse du coach"},{p:pr.resume});if(Array.isArray(pr.priorites)&&pr.priorites.length)blocks.push({ul:pr.priorites.slice(0,6).map(x=>x.phrase||"")});
     if(Array.isArray(pr.divergences)&&pr.divergences.length)blocks.push({h3:"Points à aligner entre vous"},{ul:pr.divergences.map(x=>(x.sujet||"")+(x.conseil?" : "+x.conseil:""))})}
   if(al.length)blocks.push({h2:"À regarder"},{alerts:al.map(a=>[a.lvl,a.t,a.s])});
   blocks.push({h2:"Prochaines tâches"},{table:{head:["Tâche","Échéance","Qui"],widths:[null,28,24],body:next.map(t=>{const du=taskDue(t);return [t.title+(t.status==="doing"?" (en cours)":"")+(isLate(t)?" — en retard":""),du?fmtD(du):"—",OWNERS[t.owner||"deux"]]})}});
-  blocks.push({h2:"Budget"},{table:{head:["Poste","Prévu","Engagé","Payé"],widths:[null,26,26,26],right:[1,2,3],body:S.budget.slice().sort((a,b)=>(a.order??999)-(b.order??999)).map(b=>[b.label+((tot||prevu)&&num(b.prevu)?` (${Math.round(num(b.prevu)/(tot||prevu)*100)} %)`:""),b.prevu?eur(b.prevu):"—",b.engage?eur(b.engage):"—",b.paye?eur(b.paye):"—"]),
+  blocks.push({h2:"Budget"},{table:{head:["Poste","Prévu","Signé","Payé"],widths:[null,26,26,26],right:[1,2,3],body:BC.postes.slice().sort((a,b)=>b.prevu-a.prevu).map(p=>[p.b.label+((tot||prevu)&&p.prevu?` (${Math.round(p.prevu/(tot||prevu)*100)} %)`:""),p.prevu?eur(p.prevu):"—",p.signe?eur(p.signe):"—",p.paye?eur(p.paye):"—"]),
     foot:[`Total${tot?` (budget ${eur(tot)}, marge ${eur(tot-Math.max(prevu,engage))})`:""}`,eur(prevu),eur(engage),eur(paye)]}});
   blocks.push({h2:"Prestataires"});
   cats.forEach(c=>{blocks.push({h3:c},{table:{head:["Prestataire","Note","Avis du coach"],widths:[52,16,null],boldFirst:true,body:S.vendors.filter(v=>v.cat===c).sort((a,b)=>((b.fit&&b.fit.score)||-1)-((a.fit&&a.fit.score)||-1)).map(v=>{const f=v.fit||{};
@@ -1296,7 +1397,7 @@ function pdfReport(){
   if(rdv.length)blocks.push({h2:"Rendez-vous à venir"},{ul:rdv.map(r=>`${fmtD(pd(r.date))}${r.time?" "+r.time:""} — ${r.title}${r.lieu?" ("+r.lieu+")":""}`)});
   blocks.push({h2:"Invités"},{p:`${g.length} invités dont ${g.filter(x=>x.enfant).length} enfants · ${yes} présents, ${no} absents, ${g.length-yes-no} en attente · ${g.filter(x=>x.rsvp!=="non"&&x.diner!==false).length} au dîner.`},
     {note:"Par groupe : "+groups.map(([k,v])=>`${k} ${v}`).join(" · ")+(g.some(x=>x.regime)?"\nRégimes : "+g.filter(x=>x.regime).map(x=>x.name+" ("+x.regime+")").join(", "):"")});
-  blocks.push({h2:"Nos envies"},{note:`Rempli à ${Math.round(allProg()*100)} % · `+QCATS.map(c=>{const p=catProg(c.k);return `${c.label} ${p.n}/${p.t}`}).join(" · ")});
+  blocks.push({h2:"Nos envies"},{note:`Lamaelle vous connaît à ${Math.round(allProg()*100)} % · `+TUILES.map(t=>`${tileName(t.k)} : ${env().etat(env().stateOf(t.k)).toLowerCase()}`).join(" · ")});
   makePdf(`Rapport - ${COUPLE()} - ${isoD(today())}.pdf`,{docTitle:"Rapport d'organisation · "+fmtD(today()),blocks});
 }
 
@@ -1310,8 +1411,8 @@ function mdLite(t){
   String(t||"").split(/\n/).forEach(l=>{const m=l.match(/^\s*(?:[-•*]|\d+[.)])\s+(.*)/);if(m)list.push(m[1]);else{flush();if(l.trim())out.push(`<p>${inline(l)}</p>`)}});
   flush();return out.join("");
 }
-const CHAT_SUGG={chat:["Que devons-nous faire cette semaine ?","Compare nos lieux et dis-moi lequel te semble le meilleur","Rédige un mail pour négocier le devis du lieu","Mets Alex et Chloé dans le groupe Amis"],
-  brief:["Commençons le questionnaire Nos envies","Reprenons là où on s'était arrêtés"]};
+// Suggestions de la conversation : en mode chat, celles de coachSuggestions (tirées de l'état de l'app)
+const CHAT_SUGG={brief:["Commençons le questionnaire Nos envies","Reprenons là où on s'était arrêtés"]};
 // Un mail rédigé par le coach commence par « Objet : … »
 function mailOf(t){const m=String(t||"").match(/(?:^|\n)\s*\**Objet\s*:\**\s*(.+)\n([\s\S]+)/i);return m?{subject:m[1].replace(/\*+/g,"").trim(),body:m[2].replace(/\*\*/g,"").trim()}:null}
 const mailHref=m=>`mailto:?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
@@ -1335,7 +1436,7 @@ function chatItems(){
   const msgs=c.messages.map((m,i)=>m.role==="user"?`<div class="cm u">${(m.thumbs||[]).length?`<div class="cm-thumbs">${m.thumbs.map(u=>`<img src="${u}" alt="Photo envoyée">`).join("")}</div>`:""}<div class="bub">${esc(m.text)}</div></div>`
     :`<div class="cm a"><div class="bub">${mdLite(m.text)}${(m.sources||[]).length?`<div class="srcs"><span>Sources</span>${m.sources.map(x=>`<a href="${esc(x.url)}" target="_blank" rel="noopener noreferrer">${esc(x.title||x.url)}</a>`).join("")}</div>`:""}</div>${webAsk(m,i)}${openBtns(m)}${mailOf(m.text)?`<div class="mail-acts"><button class="link" data-act="mailcopy" data-i="${i}">Copier le mail</button><a class="link" href="${mailHref(mailOf(m.text))}">Ouvrir dans Mail</a></div>`:""}${(m.actions||[]).filter(a=>!a.web&&!a.open).length?`<div class="acts-done">${m.actions.filter(a=>!a.web&&!a.open).map(a=>`<span class="adone ${m.undone?"undone":""}">✓ ${esc(a.label)}</span>`).join("")}
       ${m.undone?'<span class="undone-l">Annulé</span>':(m.actions.some(a=>a.ops&&a.ops.length)&&S.canWrite?`<button class="link" data-act="chatundo" data-i="${i}">Annuler</button>`:"")}</div>`:""}</div>`);
-  const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${CHAT_SUGG[c.mode].map(x=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(x)}</button>`).join("")}</div>`
+  const sugg=!c.busy&&(!c.messages.length||c.mode==="brief"&&c.messages.length<2)?`<div class="chat-sugg">${(c.mode==="chat"?coachSuggestions(alerts()).map(([l,d])=>[l,d.replace(/^ask:/,"")]):CHAT_SUGG[c.mode].map(x=>[x,x])).map(([l,x])=>`<button class="chip" data-act="chatsugg" data-t="${esc(x)}">${esc(l)}</button>`).join("")}</div>`
     :!c.busy&&c.mode==="brief"&&S.canWrite?`<div class="chat-sugg"><button class="chip" data-act="chatfile">Montrer une photo au coach</button></div>`:"";
   const intro=!c.messages.length?`<div class="chat-intro"><b>${c.mode==="brief"?"Entretien « Nos envies »":"Bonjour, je suis votre coach mariage"}</b><p>${c.mode==="brief"?"Je vous pose les questions du questionnaire une par une, en langage naturel, et je note vos réponses au fur et à mesure.":"Comme un wedding planner : je connais votre date, votre budget, vos envies et vos prestataires. Posez-moi une question ou demandez-moi d'agir (ajouter une tâche, ranger des invités, noter un devis, préparer une visite). Chaque action s'annule d'un toucher."}</p></div>`:"";
   return [["intro",intro],...msgs.map((h,i)=>["m"+i,h]),["busy",c.busy?`<div class="cm a"><div class="bub typing" role="status"><i></i><i></i><i></i><span class="typing-l">${esc(c.busyLabel||"Je regarde vos données…")}</span></div></div>`:""],["sugg",sugg]].filter(x=>x[1]);
@@ -1405,6 +1506,23 @@ function toggleMic(btn){
 const b64Of=blob=>new Promise((ok,ko)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(",")[1]);fr.onerror=ko;fr.readAsDataURL(blob)});
 async function loadImage(file){const url=URL.createObjectURL(file);try{return await new Promise((ok,ko)=>{const i=new Image();i.onload=()=>ok(i);i.onerror=ko;i.src=url})}finally{setTimeout(()=>URL.revokeObjectURL(url),1000)}}
 async function resizeJpeg(img,max,q){const k=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));const cv=document.createElement("canvas");cv.width=Math.round(img.naturalWidth*k);cv.height=Math.round(img.naturalHeight*k);cv.getContext("2d").drawImage(img,0,0,cv.width,cv.height);return new Promise(ok=>cv.toBlob(ok,"image/jpeg",q))}
+// Photo (réduite à 1600 px) ou PDF, prêt à être lu par l'IA (fiche préremplie de Prestataires)
+async function fileForAI(file){
+  if(file.type==="application/pdf"){if(file.size>4.5e6)throw new Error("PDF trop lourd (4,5 Mo au plus)");return {media_type:"application/pdf",data:await b64Of(file)}}
+  if(/^image\//.test(file.type)){const img=await loadImage(file);return {media_type:"image/jpeg",data:await b64Of(await resizeJpeg(img,1600,.82))}}
+  throw new Error("Photo ou PDF uniquement");
+}
+// Réservation (Prestataires, lot 3) : création d'un document avec son id (annulable), période d'une tâche selon son échéance
+async function addDoc(col,data){
+  if(!S.db)return null;
+  try{const ref=await refCol(col,data).add(Object.assign({createdAt:Date.now()},data));return ref.id}catch(e){writeErr(e);return null}
+}
+const phaseFor=due=>{const d=wDate(),x=due?pd(due):null;if(!d||!x)return (currentPhase()||PHASES[0]).k;return (PHASES.find(p=>p.due(d)>=x)||PHASES[PHASES.length-1]).k};
+// Nouveau prestataire : rend son id (pour ouvrir sa fiche)
+async function addVendor(data){
+  if(!S.db){toast("Connexion en cours, réessayez dans un instant");return null}
+  try{const ref=await refCol("vendors",data).add(Object.assign({createdAt:Date.now(),updatedAt:Date.now(),by:String(S.user&&S.user.email||""),acomptePaye:false},data));return ref.id}catch(e){writeErr(e);return null}
+}
 async function pickFiles(files){
   const c=S.chat;c.atts=c.atts||[];
   for(const file of [...(files||[])]){
@@ -1478,7 +1596,12 @@ async function setCouplePhoto(file){
     const cv=document.createElement("canvas");cv.width=cv.height=S0;
     cv.getContext("2d").drawImage(img,(img.naturalWidth-side)/2,(img.naturalHeight-side)/2,side,side,0,0,S0,S0);
     const blob=await new Promise(ok=>cv.toBlob(ok,"image/jpeg",.85));
-    if(await setDoc("meta/photo",{},{data:await b64Of(blob),updatedAt:Date.now()}))toast("Photo du couple enregistrée");
+    // grande version pour l'ouverture de l'accueil (plein écran, écrans haute densité) : cadrage d'origine, 1600 px au plus,
+    // réduite si besoin pour rester loin de la limite d'un document Firestore (1 Mo)
+    let cover="";
+    for(const [max,q] of [[1600,.84],[1400,.8],[1200,.76],[1000,.72]]){cover=await b64Of(await resizeJpeg(img,max,q));if(cover.length<650000)break}
+    if(cover.length>=650000)cover="";
+    if(await setDoc("meta/photo",{},{data:await b64Of(blob),cover,updatedAt:Date.now()}))toast("Photo du couple enregistrée");
   }catch(e){toast("Impossible de lire cette photo")}
 }
 function pickCouplePhoto(){let i=document.getElementById("couple-file");if(!i){i=document.createElement("input");i.type="file";i.accept="image/*";i.id="couple-file";i.hidden=true;document.body.appendChild(i);i.addEventListener("change",()=>{setCouplePhoto(i.files&&i.files[0]);i.value=""})}i.click()}
@@ -1532,12 +1655,14 @@ function applyTheme(t){
 function emptyBlock(t,s){return `<div class="list"><div class="empty"><b>${esc(t)}</b>${esc(s)}</div></div>`}
 
 /* ---------- Render ---------- */
-const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:vTables,envies:vEnvies,prestataires:vPrestataires,"jour-j":vJourJ,assistant:vAssistant,reglages:vReglages};
+const VIEWFN={"reglages-ia":vReglagesIA,apercu:vApercu,planning:vPlanning,agenda:vAgenda,budget:vBudget,invites:vInvites,tables:()=>pt().vPlan(),envies:vEnvies,prestataires:vPrestataires,"jour-j":()=>jj().vJourJ(),assistant:vAssistant,reglages:vReglages};
 function render(){
   renderHero();renderTabs();queueTop();
+  // écran de fin de niveau ouvert : il se met à jour quand la récompense arrive (sauf pendant la correction de la phrase)
+  if(env().finOpen()&&!(document.activeElement&&document.activeElement.id==="search-qs-phrase"))env().renderQ();
   const main=document.getElementById("main");
   const ae=document.activeElement,aid=ae&&main.contains(ae)?ae.id:null,sel=aid&&ae.selectionStart!=null?[ae.selectionStart,ae.selectionEnd]:null;
-  if(aid&&aid!=="gq"&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&/^(text|number|email|date|time|search)$/.test(ae.type)))){S.pending=true;return}
+  if(aid&&aid!=="gq"&&aid!=="iv-q"&&(ae.tagName==="TEXTAREA"||(ae.tagName==="INPUT"&&/^(text|number|email|date|time|search)$/.test(ae.type)))){S.pending=true;return}
   S.pending=false;
   let pre="";
   document.body.classList.toggle("noauth",S.mode==="login"||S.mode==="locked");
@@ -1564,7 +1689,7 @@ function syncTop(){
 const queueTop=()=>{if(!topRaf)topRaf=requestAnimationFrame(syncTop)};
 addEventListener("scroll",queueTop,{passive:true,capture:true});
 addEventListener("resize",queueTop);
-function go(v){closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);syncTop()}
+function go(v){if(S.view==="envies"&&v!=="envies")env().leaveTile();closeModal();if(!VIEWFN[v])v="apercu";S.view=v;if(location.hash!=="#"+v){try{history.replaceState(null,"","#"+v)}catch(e){}}render();window.scrollTo(0,0);syncTop()}
 
 /* ---------- Modal editor ---------- */
 const SCHEMAS={
@@ -1572,7 +1697,7 @@ const SCHEMAS={
     {k:"title",label:"Intitulé",type:"text",req:1},
     {k:"owner",label:"Qui s'en occupe",type:"seg",options:Object.entries(OWNERS),def:"deux"},
     {k:"status",label:"Statut",type:"seg",options:Object.entries(STATUS),def:"todo"},
-    {row:[{k:"phase",label:"Période",type:"select",options:PHASES.map(p=>[p.k,p.label]),def:()=>(currentPhase()||PHASES[0]).k},
+    {row:[{k:"phase",label:"Étape",type:"select",options:ETAPES.map((e,i)=>[e.k,`${i+1} · ${e.nom}`]),def:()=>(currentPhase()||PHASES[0]).k},
           {k:"due",label:"Échéance précise",type:"date"}]},
     {k:"note",label:"Notes",type:"textarea"}]},
   rdv:{one:"le rendez-vous",fields:[
@@ -1580,10 +1705,12 @@ const SCHEMAS={
     {row:[{k:"date",label:"Date",type:"date"},{k:"time",label:"Heure",type:"time"}]},
     {row:[{k:"avec",label:"Avec",type:"text"},{k:"lieu",label:"Lieu",type:"text"}]},
     {k:"qui",label:"Qui y va",type:"seg",options:Object.entries(OWNERS),def:"deux"},
-    {k:"note",label:"Notes",type:"textarea"}]},
+    {k:"note",label:"Notes",type:"textarea"},
+    {k:"tenue",label:"Rendez-vous de tenue (secret : l'autre ne voit que « Rendez-vous tenue », la date et l'heure)",type:"check"}]},
   budget:{one:"le poste",fields:[
     {k:"label",label:"Poste",type:"text",req:1},
-    {row:[{k:"prevu",label:"Prévu (€)",type:"number"},{k:"engage",label:"Engagé (€)",type:"number"}]},
+    {k:"metier",label:"Métier (relie le poste à ses prestataires)",type:"select",options:METIER_OPTIONS,def:""},
+    {row:[{k:"prevu",label:"Enveloppe prévue (€)",type:"number"},{k:"engage",label:"Signé (€)",type:"number"}]},
     {row:[{k:"paye",label:"Déjà payé (€)",type:"number"},{k:"order",label:"Ordre d'affichage",type:"number"}]},
     {k:"note",label:"Notes",type:"textarea"}]},
   guests:{one:"l'invité",fields:[
@@ -1598,12 +1725,14 @@ const SCHEMAS={
   vendors:{one:"le prestataire",fields:[
     {k:"name",label:"Nom",type:"text",req:1},
     {row:[{k:"cat",label:"Catégorie",type:"select",options:VCATS.map(c=>[c,c]),def:"Lieu"},
-          {k:"status",label:"Statut",type:"select",options:Object.entries(VSTAT),def:"repere"}]},
+          {k:"status",label:"Étape",type:"select",options:VSTAT_EDIT.map(k=>[k,VSTAT[k]]),def:"repere"}]},
+    {row:[{k:"ville",label:"Ville",type:"text"},{k:"email",label:"E-mail",type:"text"}]},
+    {row:[{k:"site",label:"Site",type:"text"},{k:"instagram",label:"Instagram",type:"text"}]},
     {row:[{k:"prix",label:"Montant du devis (€)",type:"number"},{k:"acompte",label:"Acompte (€)",type:"number"}]},
     {row:[{k:"dateAcompte",label:"Acompte à verser avant le",type:"date"},{k:"dateSolde",label:"Solde à verser avant le",type:"date"}]},
     {k:"acomptePaye",label:"Acompte versé",type:"check"},
     {k:"soldePaye",label:"Solde versé",type:"check"},
-    {row:[{k:"contact",label:"Contact (nom, e-mail, site)",type:"text"},{k:"tel",label:"Téléphone",type:"text"}]},
+    {row:[{k:"contact",label:"Contact (nom, autres infos)",type:"text"},{k:"tel",label:"Téléphone",type:"text"}]},
     {k:"note",label:"Notes",type:"textarea"},
     {k:"visitNotes",label:"Notes de visite ou d'échange (l'IA en tient compte et recalcule la note)",type:"textarea"}]},
   schedule:{one:"le moment",fields:[
@@ -1625,9 +1754,9 @@ function fieldHTML(f,v){
   return `<div class="field"><label for="${id}">${f.label}</label><input ${t} ${f.type==="email"?"":'autocomplete="off"'} id="${id}" name="${f.k}" value="${esc(v??"")}" ${f.req?"required":""} ${f.list?`list="${id}-l"`:""} ${dis}>${f.list?`<datalist id="${id}-l">${f.list.map(o=>`<option value="${esc(o)}">`).join("")}</datalist>`:""}</div>`;
 }
 
-function openEditor(col,id){
+function openEditor(col,id,preset){
   const sc=SCHEMAS[col];if(!sc)return;
-  const cur=id?(S[col].find(x=>x.id===id)||{}):{};
+  const cur=id?(S[col].find(x=>x.id===id)||{}):Object.assign({},preset||{}); // preset : valeurs d'un nouvel élément (ex. métier d'une page Prestataires)
   const isNew=!id;
   const evObj={ceremonie:cur.ceremonie,vin:cur.vin,diner:cur.diner};
   const body=sc.fields.map(f=>f.row?`<div class="cols2">${f.row.map(x=>fieldHTML(x,cur[x.k])).join("")}</div>`:fieldHTML(f,f.k==="_ev"?evObj:cur[f.k])).join("");
@@ -1653,10 +1782,11 @@ function openEditor(col,id){
     delete out._ev;delete out.template;
     if(col==="tasks"&&isNew){const same=S.tasks.filter(t=>t.phase===out.phase);out.order=same.reduce((m,t)=>Math.max(m,t.order||0),0)+1}
     if(col==="vendors")out.updatedAt=Date.now();
-    if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim())out.fitRequestedAt=Date.now();
+    if(col==="vendors"&&(out.visitNotes||"")!==(cur.visitNotes||"")&&String(out.visitNotes||"").trim()){out.fitRequestedAt=Date.now();out.visitNotesAt=Date.now()}
+    if(col==="vendors"&&isNew&&!out.by)out.by=String(S.user&&S.user.email||"");
     if(col==="budget"&&isNew&&out.order==null)out.order=S.budget.reduce((m,b)=>Math.max(m,b.order||0),0)+1;
     const btn=form.querySelector("button[type=submit]");btn.disabled=true;
-    const ok=await save(col,id,out);
+    const ok=col==="rdv"&&out.tenue&&!secretLeve()?await saveRdvSecret(id,out):await save(col,id,out);
     const refit=out.fitRequestedAt&&out.fitRequestedAt>Date.now()-5000;
     if(ok){closeModal();if(refit)kick("analyse");toast(refit?"Enregistré : la note est recalculée (1 à 2 minutes)":isNew?"Ajouté":"Enregistré")}else btn.disabled=false;
   });
@@ -1708,8 +1838,9 @@ function openBulk(){
 }
 
 async function exportCSV(){
-  const cols=[["name","Nom"],["side","Côté"],["group","Groupe"],["rsvp","Réponse"],["ceremonie","Cérémonie"],["vin","Vin d'honneur"],["diner","Dîner"],["enfant","Enfant"],["table","Table"],["regime","Régime"],["contact","Contact"],["note","Notes"]];
-  const val=(g,k)=>k==="side"?SIDES[g.side]||"":k==="rsvp"?RSVP[g.rsvp||"attente"]:["ceremonie","vin","diner"].includes(k)?(g[k]===false?"non":"oui"):k==="enfant"?(g.enfant?"oui":""):(g[k]??"");
+  const fy=Object.fromEntries(iv().foyers().flatMap(f=>f.personnes.map(g=>[g.id,f.personnes.length>1||f.nom?nomFoyer(f):""])));
+  const cols=[["name","Nom"],["_foyer","Foyer"],["side","Côté"],["group","Cercle"],["rsvp","Réponse"],["ceremonie","Cérémonie"],["vin","Vin d'honneur"],["diner","Dîner"],["enfant","Enfant"],["table","Table"],["regime","Régime"],["contact","Contact"],["note","Notes"]];
+  const val=(g,k)=>k==="_foyer"?fy[g.id]||"":k==="side"?SIDES[g.side]||"":k==="rsvp"?RSVP[g.rsvp||"attente"]:["ceremonie","vin","diner"].includes(k)?(g[k]===false?"non":"oui"):k==="enfant"?(g.enfant?"oui":""):(g[k]??"");
   const q=s=>`"${String(s).replace(/"/g,'""')}"`;
   const csv="﻿"+[cols.map(c=>q(c[1])).join(";"),...S.guests.slice().sort((a,b)=>String(a.name).localeCompare(b.name)).map(g=>cols.map(([k])=>q(val(g,k))).join(";"))].join("\r\n");
   const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));a.download="invites-mariage.csv";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);
@@ -1720,20 +1851,34 @@ document.addEventListener("click",async e=>{
   const t=e.target.closest("[data-go],[data-new],[data-edit],[data-act],[data-f],[data-close],[data-who],[data-fiche],[data-bgo],[data-bcat],[data-bchip],[data-bimp]");
   if(!t)return;
   if(t.dataset.close){if(e.target===t||t.tagName==="BUTTON")closeModal();return}
-  if(t.dataset.go){go(t.dataset.go);return}
+  // onglet de la barre (bas ou haut) : retour à la première page de l'onglet (Nos envies : l'onglet ; Prestataires : l'onglet, pas une fiche)
+  if(t.dataset.go&&t.dataset.racine){const k=t.dataset.go;
+    if(k==="envies"){env().leaveTile();S.f.envView="main"}
+    if(k==="prestataires"){S.f.pView="main";S.f.pSearch=false;S.f.pq=""}
+    if(k==="budget")S.f.bView="main";
+    if(k==="planning")S.f.plView="main";
+    if(k==="invites")S.f.iView="main";
+    saveF();go(k);window.scrollTo(0,0);return}
+  if(t.dataset.go){if(t.dataset.go==="budget"&&S.view!=="budget")S.f.bView="main";if(t.dataset.go==="invites"&&S.view!=="invites")S.f.iView="main";if(t.dataset.go==="planning"&&S.view!=="planning"&&S.view!=="agenda")S.f.plView="main";go(t.dataset.go);return}
   if(t.dataset.fiche){openFiche(t.dataset.fiche);return}
-  if(t.dataset.bgo){S.f.bcat=t.dataset.bgo;S.f.envTab="quest";S.f.bcatOpen=true;saveF();go("envies");return}
-  if(t.dataset.bcat){S.f.bcat=t.dataset.bcat;S.f.envTab="quest";S.f.bcatOpen=true;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView({behavior:"smooth"});return}
-  if(t.dataset.bchip){if(!S.canWrite)return;const [c,q,type]=t.dataset.bchip.split("|"),o=t.dataset.o;const cur=Array.isArray(bGet(c,q).choix)?bGet(c,q).choix.slice():[];let next;if(type==="c")next=cur.includes(o)?[]:[o];else next=cur.includes(o)?cur.filter(x=>x!==o):cur.concat(o);t.setAttribute("aria-pressed",next.includes(o));await saveBrief(c,q,{choix:next});return}
-  if(t.dataset.bimp){if(!S.canWrite)return;const [c,n]=t.dataset.bimp.split("|");await saveBrief(c,"_meta",{importance:+n});return}
+  // ouvre la page d'une tuile de « Nos envies » (data-bgo : clé de tuile)
+  if(t.dataset.bgo||t.dataset.bcat){S.f.envView="tile";S.f.envTile=t.dataset.bgo||t.dataset.bcat;saveF();go("envies");return}
   if(t.dataset.who){S.f.owner=t.dataset.who;S.f.hideDone=true;saveF();go("planning");return}
   if(t.dataset.new){if(S.canWrite)openEditor(t.dataset.new,null);return}
   if(t.dataset.edit){openEditor(t.dataset.edit,t.dataset.id);return}
   if(t.dataset.f){S.f[t.dataset.f]=t.dataset.v;saveF();if(t.dataset.f.startsWith("g")){renderInvitesPart()}else render();return}
   const a=t.dataset.act,id=t.dataset.id;
-  if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;await patch("tasks",id,{status:k.status==="done"?"todo":"done"});return}
+  if(a&&pr().act(a,t))return; // gestes de « Prestataires » (src/prestataires-ui.js)
+  if(a&&bu().act(a,t))return; // gestes du « Budget » (src/budget-ui.js)
+  if(a&&iv().act(a,t))return; // gestes des « Invités » (src/invites-ui.js)
+  if(a&&pt().act(a,t))return; // plan de table (src/plan-ui.js)
+  if(a&&jj().act(a,t))return; // jour J (src/jourj-ui.js)
+  if(a==="plrdvgo"){S.f.plView="rdv";S.f.plId=t.dataset.id;S.f.plFrom={v:"main"};S.f.plBackLabel="Notre planning";saveF();go("planning");return}
+  if(a&&pl().act(a,t))return; // gestes du « Planning » (src/planning-ui.js)
+  if(a&&env().act(a,t))return; // gestes de « Nos envies » (src/envies-ui.js)
+  if(a==="cycle"){if(!S.canWrite)return;const k=S.tasks.find(x=>x.id===id);if(!k)return;const nx=k.status==="done"?"todo":"done";await patch("tasks",id,{status:nx,doneAt:nx==="done"?Date.now():null});return}
   if(a==="rsvp"){if(S.canWrite)openRsvp(id);return}
-  if(a==="setrsvp"){if(!S.canWrite)return;closeModal();const g=S.guests.find(x=>x.id===id);if(g&&(g.rsvp||"attente")!==t.dataset.v&&await patch("guests",id,{rsvp:t.dataset.v}))toast(`${g.name} : ${RSVP[t.dataset.v]}`);return}
+  if(a==="setrsvp"){if(!S.canWrite)return;closeModal();const g=S.guests.find(x=>x.id===id);if(g&&(g.rsvp||"attente")!==t.dataset.v&&await patch("guests",id,{rsvp:t.dataset.v})){toast(`${g.name} : ${RSVP[t.dataset.v]}`);iv().apresReponse(id,t.dataset.v)}return}
   if(a==="gselstart"){S.selMode=!S.selMode;S.sel.clear();render();return}
   if(a==="gselend"){S.selMode=false;S.sel.clear();render();return}
   if(a==="gsel"){S.sel.has(id)?S.sel.delete(id):S.sel.add(id);renderInvitesPart();return}
@@ -1746,8 +1891,6 @@ document.addEventListener("click",async e=>{
     if(await patch("tasks",A.id,{status:st,note,due:A.due||B.due||null})&&await remove("tasks",B.id))toast("Tâches fusionnées");return}
   if(a==="dupkeep"){if(S.canWrite&&await mergeDoc("meta/prefs",{notDupes:[...(S.prefs.notDupes||[]),t.dataset.k]}))toast("C'est noté");return}
   if(a==="overview"){S.f.overview=!S.f.overview;saveF();render();return}
-  if(a==="envtab"){S.f.envTab=t.dataset.v;if(t.dataset.v==="quest")S.f.bcatOpen=false;saveF();render();return}
-  if(a==="envgrid"){S.f.bcatOpen=false;saveF();render();const n=document.querySelector(".env-tabs");if(n&&n.getBoundingClientRect().top<0)n.scrollIntoView();return}
   if(a==="moodcat"){S.f.moodCat=t.dataset.v;saveF();render();return}
   if(a==="devisadd"){const v=S.vendors.find(x=>x.id===t.dataset.id);if(!v||!S.canWrite)return;closeModal();S.chat.mode="chat";
     await openChat(undefined,`Voici le devis de ${v.name} (id ${v.id}) : lis-le et enregistre-le sur sa fiche. `);setTimeout(()=>document.getElementById("chat-file")?.click(),60);return}
@@ -1760,7 +1903,10 @@ document.addEventListener("click",async e=>{
     S.chat.mode="brief";await openChat();sendChat(`Continuons avec la catégorie « ${QC[c].label} ».`);return}
   if(a==="briefpdf"){pdfBriefs(t.dataset.c);return}
   if(a==="briefsmenu"){openBriefsMenu();return}
+  if(a==="brieftenue"){demanderBriefTenue();return}
   if(a==="docsmenu"){openDocsMenu();return}
+  if(a==="hebdoopen"){openHebdo();return}
+  if(a==="showdate"){const d=wDate();if(d)toast(`${fmtLong(d).replace(/^./,c=>c.toUpperCase())}${S.settings.dateIndicative?" · date indicative":""}`);return}
   if(a==="briefsgo"){if(!S.canWrite||briefsState().running)return;t.disabled=true;t.textContent="Rédaction en cours…";if(await mergeDoc("meta/briefs",{requestedAt:Date.now()})){kick("briefs");toast("Le coach rédige vos briefs : environ deux minutes");render()}return}
   if(a==="budgettot"){const tot=num(S.settings.budgetTotal);
     document.getElementById("layer").innerHTML=`<div class="ov" data-close="1"><div class="modal" role="dialog" aria-modal="true" aria-label="Budget total"><h3>Budget total</h3>
@@ -1779,11 +1925,9 @@ document.addEventListener("click",async e=>{
   if(a==="bulk"){if(S.canWrite)openBulk();return}
   if(a==="csv"){exportCSV();return}
   if(a==="qr"){await runQr(t.dataset.do);return}
-  if(a==="uiopts"){const k=t.dataset.id;S.ui.opts[k]=!S.ui.opts[k];render();return}
   if(a==="uimore"){S.ui.more=!S.ui.more;render();return}
-  if(a==="uihebdo"){S.ui.hebdo=!S.ui.hebdo;render();return}
   if(a==="couplephoto"){if(S.canWrite)pickCouplePhoto();return}
-  if(a==="couplephotox"){if(S.canWrite&&await setDoc("meta/photo",{},{data:"",updatedAt:Date.now()}))toast("Photo retirée");return}
+  if(a==="couplephotox"){if(S.canWrite&&await setDoc("meta/photo",{},{data:"",cover:"",updatedAt:Date.now()}))toast("Photo retirée");return}
   if(a==="cmpnone"){S.cmp.ids=[];openCompare(S.cmp.cat);return}
   if(a==="homephoto"){openChat("chat");setTimeout(()=>document.getElementById("chat-file")?.click(),50);return}
   if(a==="chatfile"){document.getElementById("chat-file")?.click();return}
@@ -1821,7 +1965,7 @@ document.addEventListener("click",async e=>{
   if(a==="fire"){t.disabled=true;await fireAnalysis();render();return}
   if(a==="runnow"){t.disabled=true;await runNow(t.dataset.job);render();return}
   if(a==="editv"){openEditor("vendors",id);return}
-  if(a==="logout"){await signOut();return}
+  if(a==="logout"){dropBoot();await signOut();return}
   if(a==="google"){try{await signInGoogle()}catch(err){toast(authErr(err))}return}
 });
 function renderInvitesPart(){
@@ -1830,11 +1974,16 @@ function renderInvitesPart(){
   document.querySelectorAll('[data-f^="g"]').forEach(b=>b.setAttribute("aria-pressed",S.f[b.dataset.f]===b.dataset.v));
   if(gl){gl.innerHTML=guestRows();document.getElementById("main")._h=null}
 }
-document.addEventListener("input",e=>{if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
+document.addEventListener("input",e=>{if(pr().input(e.target))return;if(jj().input(e.target))return;if(iv().input(e.target))return;if(env().input(e.target))return;if(e.target.id==="gq"){S.f.gq=e.target.value;renderInvitesPart()}
   if(e.target.id==="chat-text"){const ta=e.target;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,180,Math.round((window.visualViewport?.height||innerHeight)*.3))+"px"}});
 document.addEventListener("keydown",e=>{if(e.target.id==="chat-text"&&e.key==="Enter"&&!e.shiftKey&&!e.isComposing&&window.matchMedia("(hover:hover)").matches){e.preventDefault();document.getElementById("chat-form").requestSubmit()}});
 document.addEventListener("change",async e=>{
   const el=e.target;
+  if(bu().change(el))return; // enveloppe d'un poste saisie directement
+  if(pl().change(el))return; // champs d'une tâche (échéance, étape, thème, note)
+  if(iv().change(el))return; // champs d'un foyer, cible, regroupement
+  if(pt().change(el))return; // nom d'une table
+  if(jj().change(el))return; // champs d'un moment, rôles (jour J)
   if(el.dataset.inspcat){if(!S.canWrite)return;if(await patch("inspirations",el.dataset.inspcat,{cat:el.value}))toast("Catégorie changée");return}
   if(el.dataset.pincat!=null){if(!S.canWrite)return;const b=(S.pinterest.boards||[]).map((x,i)=>i===+el.dataset.pincat?{...x,cat:el.value}:x);if(await mergeDoc("meta/pinterest",{boards:b}))toast("Catégorie enregistrée (pour les prochaines épingles)");return}
   if(el.id==="chat-file"){await pickFiles(el.files);el.value="";
@@ -1848,6 +1997,9 @@ document.addEventListener("focusout",()=>{setTimeout(()=>{if(S.pending&&!(docume
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.dataset&&e.target.dataset.fiche){e.preventDefault();openFiche(e.target.dataset.fiche)}});
 document.addEventListener("submit",async e=>{
   const f=e.target;
+  if(env().submit(f)){e.preventDefault();return}
+  if(f.dataset.budep){e.preventDefault();bu().submit(f);return} // dépense hors prestataire d'un poste
+  if(f.dataset.ivnf){e.preventDefault();iv().submit(f);return} // nouveau foyer
   if(f.id==="chat-form"){e.preventDefault();const ta=document.getElementById("chat-text");const v=ta.value;ta.value="";ta.style.height="";if(window.matchMedia("(pointer:coarse)").matches)ta.blur();await sendChat(v);if(!window.matchMedia("(pointer:coarse)").matches)ta.focus();return}
   if(f.id==="budget-total-form"){e.preventDefault();const v=f.elements.budgetTotal.value;
     if(await setDoc("meta/settings",S.settings,{budgetTotal:v===""?null:num(v),updatedAt:Date.now()})){closeModal();toast("Budget total enregistré");render()}return}
@@ -1907,6 +2059,17 @@ function loginView(){
 
 /* ---------- Boot ---------- */
 const h=location.hash.slice(1);if(VIEWFN[h])S.view=h;
+// Démarrage instantané : la dernière copie des données (gardée sur cet appareil) s'affiche tout de suite,
+// pendant que la connexion et la base se confirment ; les écritures attendent que la base soit prête (S.db).
+const BOOT_KEY="lamaelle-demarrage",BOOT_FIELDS=[...COLS,"settings","agent","profil","analyse","planning","prefs","hebdo","photo","briefs","pinterest","ia","usage","secret"];
+let bootUid=null;
+try{const b=JSON.parse(localStorage.getItem(BOOT_KEY)||"null");if(b&&b.uid&&b.d){Object.assign(S,b.d);S.user={email:b.email,uid:b.uid};bootUid=b.uid;S.mode="live"}}catch(e){}
+let bootT=0;const saveBoot=()=>{clearTimeout(bootT);bootT=setTimeout(()=>{if(S.mode!=="live"||!S.db||!S.user)return;
+  try{const d={};for(const k of BOOT_FIELDS)d[k]=S[k];localStorage.setItem(BOOT_KEY,JSON.stringify({uid:S.user.uid,email:S.user.email,at:Date.now(),d}))}
+  catch(e){try{localStorage.removeItem(BOOT_KEY)}catch(_){}}},3000)};
+const dropBoot=()=>{try{localStorage.removeItem(BOOT_KEY)}catch(e){}};
+// L'app elle-même est gardée sur l'appareil par le service worker (public/sw.js) : ouverture sans attendre le réseau
+if(import.meta.env.PROD&&"serviceWorker" in navigator)navigator.serviceWorker.register("/sw.js").catch(()=>{});
 render();
 
 let unsubs=[];
@@ -1915,10 +2078,13 @@ function boot(){
   completeEmailLink().catch(e=>toast(authErr(e)));
   auth.onAuthStateChanged(user=>{
     stopListeners();
+    // autre compte (ou déconnexion) que celui de la copie affichée : on l'oublie et on repart de zéro
+    if(bootUid&&(!user||user.uid!==bootUid)){dropBoot();location.reload();return}
+    bootUid=null;
     S.user=user;S.db=null;S.got=new Set();
     if(!user){S.mode="login";render();return}
     const email=String(user.email||"").toLowerCase();
-    if(!ALLOWED.includes(email)){S.mode="locked";S.canWrite=false;render();return}
+    if(!ALLOWED.includes(email)){dropBoot();S.mode="locked";S.canWrite=false;render();return}
     S.canWrite=true;S.linkSent=null;S.db=db;S.mode="live";render();
     // includeMetadataChanges : sans lui, Firestore ne prévient pas quand le serveur confirme que la copie
     // locale est déjà à jour (rien n'a changé) ; on croyait alors la base injoignable (faux bandeau).
@@ -1926,7 +2092,7 @@ function boot(){
     const need=["settings","agent",...COLS];
     const timer=setTimeout(()=>{if(need.some(k=>!S.got.has(k))){S.stale=true;render()}},10000);
     const mark=(k,snap)=>{if(!snap.metadata.fromCache){S.got.add(k);if(need.every(x=>S.got.has(x))){clearTimeout(timer);S.stale=false}}};
-    let raf=0;const later=()=>{if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
+    let raf=0;const later=()=>{saveBoot();if(raf||S.mode!=="live")return;const run=()=>{if(Date.now()-lastScroll<350){raf=setTimeout(run,150);return}raf=0;render()};raf=setTimeout(run,16)};
     const onErr=e=>{if(e&&e.code==="permission-denied"){S.mode="locked";S.canWrite=false;render();return}S.stale=true;later()};
     const meta=(id,key,track)=>unsubs.push(db.doc("meta/"+id).onSnapshot(LIVE,s=>{S[key]=s.exists?Object.assign({},s.data()):{};if(track)mark(key,s);later()},track?onErr:()=>{}));
     meta("settings","settings",true);meta("agent","agent",true);meta("profil","profil");meta("analyse","analyse");meta("planning","planning");meta("prefs","prefs");meta("push","push");meta("presence","presence");meta("hebdo","hebdo");meta("photo","photo");meta("locks","locks");meta("ia","ia");meta("briefs","briefs");meta("pinterest","pinterest");
@@ -1934,8 +2100,21 @@ function boot(){
       for(const [k,m] of [["cur",monthKey(d)],["prev",prev]])unsubs.push(db.doc("usage/"+m).onSnapshot(LIVE,x=>{S.usage[k]=x.exists?x.data():{};later()},()=>{})); }
     db.doc("meta/presence").set({[presKey()]:Date.now()},{merge:true}).catch(()=>{});
     COLS.forEach(c=>{
-      unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{S[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));mark(c,s);later()},onErr));
+      unsubs.push(db.collection(c).onSnapshot(LIVE,s=>{const docs=s.docs.map(d=>Object.assign({id:d.id},d.data()));
+        if(PRIVES.includes(c)){SRC.c[c]=docs;fusionner(c)}else S[c]=docs;mark(c,s);later()},onErr));
     });
+    // mon espace privé (tenue secrète) : lisible par moi seul (firestore.rules)
+    const me=PARTNER[email]||"claire";
+    PRIVES.forEach(c=>unsubs.push(db.collection(chemin(me,c)).onSnapshot(s=>{SRC.p[c]=s.docs.map(d=>Object.assign({id:d.id},d.data()));fusionner(c);
+      if(c==="envies"||c==="vendors")publierSecret();later()},()=>{})));
+    meta("secret","secret");
+    meta("arbitrage","arbitrage"); // pistes du coach pour revenir sous la limite (docs/budget-planning-v1.md, 3.3)
+    meta("repartition","repartition"); // répartition proposée par le coach pour un budget vide (3.6)
+    meta("relance","relance"); // message de relance des invités (docs/invites-v1.md, 3.3.2)
+    meta("plan","plan"); meta("placement","placement"); meta("jourj","jourj"); // jour J : rôles, ville du coucher du soleil, accès, fiches envoyées
+    unsubs.push(db.doc("meta/jourj").onSnapshot(LIVE,s=>{if(!s.metadata.fromCache)S.jourjLu=true},()=>{})); // lu du serveur : les tâches « un mois avant » peuvent être créées // plan de table : personnes à séparer, proposition du coach (3.4)
+    // brief de ma tenue secrète (agent briefs, runBriefTenue) : lu par moi seul
+    unsubs.push(db.doc(chemin(me,"briefs")+"/"+TUILE_SECRETE).onSnapshot(LIVE,s=>{S.briefPrive=s.exists?s.data():null;later()},()=>{}));
   });
 }
 boot();
